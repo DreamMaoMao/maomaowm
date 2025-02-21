@@ -60,6 +60,7 @@
 #include <wlr/types/wlr_xdg_foreign_registry.h>
 #include <wlr/types/wlr_xdg_foreign_v1.h>
 #include <wlr/types/wlr_xdg_foreign_v2.h>
+#include <wlr/types/wlr_keyboard_group.h>
 #include <wlr/types/wlr_xdg_output_v1.h>
 #include <wlr/types/wlr_xdg_shell.h>
 #include <wlr/util/log.h>
@@ -265,6 +266,21 @@ typedef struct {
   struct wl_listener key;
   struct wl_listener destroy;
 } Keyboard;
+
+
+typedef struct {
+	struct wl_list link;
+	struct wlr_keyboard_group *wlr_group;
+
+	int nsyms;
+	const xkb_keysym_t *keysyms; /* invalid if nsyms == 0 */
+	uint32_t mods; /* invalid if nsyms == 0 */
+	struct wl_event_source *key_repeat_source;
+
+	struct wl_listener modifiers;
+	struct wl_listener key;
+	struct wl_listener destroy;
+} KeyboardGroup;
 
 typedef struct {
   /* Must keep these three elements in this order */
@@ -565,6 +581,7 @@ static struct wl_display *dpy;
 static struct wlr_relative_pointer_manager_v1 *pointer_manager;
 static struct wlr_foreign_toplevel_manager_v1 *foreign_toplevel_manager;
 static struct wlr_backend *backend;
+static struct wl_event_loop *event_loop;
 static struct wlr_scene *scene;
 static struct wlr_scene_tree *layers[NUM_LAYERS];
 static struct wlr_renderer *drw;
@@ -602,6 +619,7 @@ static struct wlr_relative_pointer_manager_v1 *relative_pointer_mgr;
 static struct wlr_pointer_constraint_v1 *active_constraint;
 
 static struct wlr_seat *seat;
+static KeyboardGroup *kb_group;
 static struct wl_list keyboards;
 static unsigned int cursor_mode;
 static Client *grabc;
@@ -1574,51 +1592,51 @@ axisnotify(struct wl_listener *listener, void *data) {
 
   /* This event is forwarded by the cursor when a pointer emits an axis event,
    * for example when you move the scroll wheel. */
-  struct wlr_pointer_axis_event *event = data;
-  struct wlr_keyboard *keyboard;
-  uint32_t mods;
-  AxisBinding *a;
-  int ji;
-  unsigned int adir;
-  // IDLE_NOTIFY_ACTIVITY;
-  wlr_idle_notifier_v1_notify_activity(idle_notifier, seat);
-  keyboard = wlr_seat_get_keyboard(seat);
+  // struct wlr_pointer_axis_event *event = data;
+  // struct wlr_keyboard *keyboard;
+  // uint32_t mods;
+  // AxisBinding *a;
+  // int ji;
+  // unsigned int adir;
+  // // IDLE_NOTIFY_ACTIVITY;
+  // wlr_idle_notifier_v1_notify_activity(idle_notifier, seat);
+  // keyboard = wlr_seat_get_keyboard(seat);
 
-  // 获取当前按键的mask,比如alt+super或者alt+ctrl
-  mods = keyboard ? wlr_keyboard_get_modifiers(keyboard) : 0;
+  // // 获取当前按键的mask,比如alt+super或者alt+ctrl
+  // mods = keyboard ? wlr_keyboard_get_modifiers(keyboard) : 0;
 
-  if (event->orientation == WLR_AXIS_ORIENTATION_VERTICAL)
-    adir = event->delta > 0 ? AxisDown : AxisUp;
-  else
-    adir = event->delta > 0 ? AxisRight : AxisLeft;
+  // if (event->orientation == WLR_AXIS_ORIENTATION_VERTICAL)
+  //   adir = event->delta > 0 ? AxisDown : AxisUp;
+  // else
+  //   adir = event->delta > 0 ? AxisRight : AxisLeft;
 
-  for (ji = 0; ji < config.axis_bindings_count; ji++) {
-    if (config.axis_bindings_count < 1)
-      break;
-    a = &config.axis_bindings[ji];
-    if (CLEANMASK(mods) == CLEANMASK(a->mod) && // 按键一致
-        adir == a->dir && a->func) { // 滚轮方向判断一致且处理函数存在
-      if (event->time_msec - axis_apply_time > axis_bind_apply_timeout ||
-        axis_apply_dir * event->delta < 0) {
-        a->func(&a->arg);
-        axis_apply_time = event->time_msec;
-        axis_apply_dir = event->delta > 0 ? 1 : -1;
-        return; // 如果成功匹配就不把这个滚轮事件传送给客户端了
-      } else {
-        axis_apply_dir = event->delta > 0 ? 1 : -1;
-        axis_apply_time = event->time_msec;
-        return;
-      }
-    }
-  }
+  // for (ji = 0; ji < config.axis_bindings_count; ji++) {
+  //   if (config.axis_bindings_count < 1)
+  //     break;
+  //   a = &config.axis_bindings[ji];
+  //   if (CLEANMASK(mods) == CLEANMASK(a->mod) && // 按键一致
+  //       adir == a->dir && a->func) { // 滚轮方向判断一致且处理函数存在
+  //     if (event->time_msec - axis_apply_time > axis_bind_apply_timeout ||
+  //       axis_apply_dir * event->delta < 0) {
+  //       a->func(&a->arg);
+  //       axis_apply_time = event->time_msec;
+  //       axis_apply_dir = event->delta > 0 ? 1 : -1;
+  //       return; // 如果成功匹配就不把这个滚轮事件传送给客户端了
+  //     } else {
+  //       axis_apply_dir = event->delta > 0 ? 1 : -1;
+  //       axis_apply_time = event->time_msec;
+  //       return;
+  //     }
+  //   }
+  // }
 
-  /* TODO: allow usage of scroll whell for mousebindings, it can be implemented
-   * checking the event's orientation and the delta of the event */
-  /* Notify the client with pointer focus of the axis event. */
-  wlr_seat_pointer_notify_axis(seat, // 滚轮事件发送给客户端也就是窗口
-                               event->time_msec, event->orientation,
-                               event->delta, event->delta_discrete,
-                               event->source);
+  // /* TODO: allow usage of scroll whell for mousebindings, it can be implemented
+  //  * checking the event's orientation and the delta of the event */
+  // /* Notify the client with pointer focus of the axis event. */
+  // wlr_seat_pointer_notify_axis(seat, // 滚轮事件发送给客户端也就是窗口
+  //                              event->time_msec, event->orientation,
+  //                              event->delta, event->delta_discrete,
+  //                              event->source);
 }
 
 void // 鼠标按键事件
@@ -1941,51 +1959,53 @@ createidleinhibitor(struct wl_listener *listener, void *data) {
   checkidleinhibitor(NULL);
 }
 
-void // 17
-createkeyboard(struct wlr_keyboard *keyboard) {
-  struct xkb_context *context;
-  struct xkb_keymap *keymap;
-  Keyboard *kb = keyboard->data = ecalloc(1, sizeof(*kb));
-  kb->wlr_keyboard = keyboard;
+void
+createkeyboard(struct wlr_keyboard *keyboard)
+{
+	/* Set the keymap to match the group keymap */
+	wlr_keyboard_set_keymap(keyboard, kb_group->wlr_group->keyboard.keymap);
 
-  /* Prepare an XKB keymap and assign it to the keyboard. */
-  context = xkb_context_new(XKB_CONTEXT_NO_FLAGS);
-  keymap = xkb_keymap_new_from_names(context, &xkb_rules,
-                                     XKB_KEYMAP_COMPILE_NO_FLAGS);
-
-  wlr_keyboard_set_keymap(keyboard, keymap);
-  xkb_keymap_unref(keymap);
-  xkb_context_unref(context);
-  wlr_keyboard_set_repeat_info(keyboard, repeat_rate, repeat_delay);
-
-  if (numlockon == 1) {
-    uint32_t leds = 0;
-    xkb_mod_mask_t locked_mods = 0;
-    leds = leds | WLR_LED_NUM_LOCK;
-    // 获取numlock所在的位置
-    xkb_mod_index_t mod_index = xkb_map_mod_get_index(keymap, XKB_MOD_NAME_NUM);
-    if (mod_index != XKB_MOD_INVALID) {
-      locked_mods |= (uint32_t)1
-                     << mod_index; // 将该位置设置为1,默认为0表示锁住小键盘
-    }
-    // 设置numlock为on
-    xkb_state_update_mask(keyboard->xkb_state, 0, 0, locked_mods, 0, 0, 0);
-    wlr_keyboard_led_update(keyboard, leds); // 将表示numlockon的灯打开
-  }
-
-  /* Here we set up listeners for keyboard events. */
-  LISTEN(&keyboard->events.modifiers, &kb->modifiers, keypressmod);
-  LISTEN(&keyboard->events.key, &kb->key, keypress);
-  LISTEN(&keyboard->base.events.destroy, &kb->destroy, cleanupkeyboard);
-
-  wlr_seat_set_keyboard(seat, keyboard);
-
-  kb->key_repeat_source =
-      wl_event_loop_add_timer(wl_display_get_event_loop(dpy), keyrepeat, kb);
-
-  /* And add the keyboard to our list of keyboards */
-  wl_list_insert(&keyboards, &kb->link);
+	/* Add the new keyboard to the group */
+	wlr_keyboard_group_add_keyboard(kb_group->wlr_group, keyboard);
 }
+
+KeyboardGroup *
+createkeyboardgroup(void)
+{
+	KeyboardGroup *group = ecalloc(1, sizeof(*group));
+	struct xkb_context *context;
+	struct xkb_keymap *keymap;
+
+	group->wlr_group = wlr_keyboard_group_create();
+	group->wlr_group->data = group;
+
+	/* Prepare an XKB keymap and assign it to the keyboard group. */
+	context = xkb_context_new(XKB_CONTEXT_NO_FLAGS);
+	if (!(keymap = xkb_keymap_new_from_names(context, &xkb_rules,
+				XKB_KEYMAP_COMPILE_NO_FLAGS)))
+		die("failed to compile keymap");
+
+	wlr_keyboard_set_keymap(&group->wlr_group->keyboard, keymap);
+	xkb_keymap_unref(keymap);
+	xkb_context_unref(context);
+
+	wlr_keyboard_set_repeat_info(&group->wlr_group->keyboard, repeat_rate, repeat_delay);
+
+	/* Set up listeners for keyboard events */
+	LISTEN(&group->wlr_group->keyboard.events.key, &group->key, keypress);
+	LISTEN(&group->wlr_group->keyboard.events.modifiers, &group->modifiers, keypressmod);
+
+	group->key_repeat_source = wl_event_loop_add_timer(event_loop, keyrepeat, group);
+
+	/* A seat can only have one keyboard, but this is a limitation of the
+	 * Wayland protocol - not wlroots. We assign all connected keyboards to the
+	 * same wlr_keyboard_group, which provides a single wlr_keyboard interface for
+	 * all of them. Set this combined wlr_keyboard as the seat keyboard.
+	 */
+	wlr_seat_set_keyboard(seat, &group->wlr_group->keyboard);
+	return group;
+}
+
 
 void // 0.5
 createlayersurface(struct wl_listener *listener, void *data) {
@@ -2053,24 +2073,30 @@ createlocksurface(struct wl_listener *listener, void *data) {
     client_notify_enter(lock_surface->surface, wlr_seat_get_keyboard(seat));
 }
 
-void // 17  need fix 0.5
-createmon(struct wl_listener *listener, void *data) {
-  /* This event is raised by the backend when a new output (aka a display or
-   * monitor) becomes available. */
-  struct wlr_output *wlr_output = data;
+
+void
+createmon(struct wl_listener *listener, void *data)
+{
+	/* This event is raised by the backend when a new output (aka a display or
+	 * monitor) becomes available. */
+	struct wlr_output *wlr_output = data;
   const ConfigMonitorRule *r;
   size_t i;
-  int ji, jk;
-  Monitor *m = wlr_output->data = ecalloc(1, sizeof(*m));
-  m->wlr_output = wlr_output;
+  int ji,jk;
+	struct wlr_output_state state;
+	Monitor *m;
 
-  wl_list_init(&m->dwl_ipc_outputs);
-  wlr_output_init_render(wlr_output, alloc, drw);
+	if (!wlr_output_init_render(wlr_output, alloc, drw))
+		return;
 
-  /* Initialize monitor state using configured rules */
-  for (i = 0; i < LENGTH(m->layers); i++)
-    wl_list_init(&m->layers[i]);
+	m = wlr_output->data = ecalloc(1, sizeof(*m));
+	m->wlr_output = wlr_output;
 
+	for (i = 0; i < LENGTH(m->layers); i++)
+		wl_list_init(&m->layers[i]);
+
+	wlr_output_state_init(&state);
+	/* Initialize monitor state using configured rules */
   m->gappih = gappih;
   m->gappiv = gappiv;
   m->gappoh = gappoh;
@@ -2085,7 +2111,6 @@ createmon(struct wl_listener *listener, void *data) {
   enum wl_output_transform rr = WL_OUTPUT_TRANSFORM_NORMAL;
 
   m->lt = &layouts[0];
-
   for (ji = 0; ji < config.monitor_rules_count; ji++) {
     if (config.monitor_rules_count < 1)
       break;
@@ -2109,31 +2134,22 @@ createmon(struct wl_listener *listener, void *data) {
     }
   }
 
-  wlr_output_set_scale(wlr_output, scale);
-  wlr_xcursor_manager_load(cursor_mgr, scale);
-  wlr_output_set_transform(wlr_output, rr);
-  /* The mode is a tuple of (width, height, refresh rate), and each
-   * monitor supports only a specific set of modes. We just pick the
-   * monitor's preferred mode; a more sophisticated compositor would let
-   * the user configure it. */
-  wlr_output_set_mode(wlr_output, wlr_output_preferred_mode(wlr_output));
+	/* The mode is a tuple of (width, height, refresh rate), and each
+	 * monitor supports only a specific set of modes. We just pick the
+	 * monitor's preferred mode; a more sophisticated compositor would let
+	 * the user configure it. */
+	wlr_output_state_set_mode(&state, wlr_output_preferred_mode(wlr_output));
 
-  /* Set up event listeners */
-  LISTEN(&wlr_output->events.frame, &m->frame, rendermon);
-  LISTEN(&wlr_output->events.destroy, &m->destroy, cleanupmon);
-  LISTEN(&wlr_output->events.request_state, &m->request_state, requestmonstate);
+	/* Set up event listeners */
+	LISTEN(&wlr_output->events.frame, &m->frame, rendermon);
+	LISTEN(&wlr_output->events.destroy, &m->destroy, cleanupmon);
+	LISTEN(&wlr_output->events.request_state, &m->request_state, requestmonstate);
 
-  wlr_output_enable(wlr_output, 1);
-  if (!wlr_output_commit(wlr_output))
-    return;
+	wlr_output_state_set_enabled(&state, 1);
+	wlr_output_commit_state(wlr_output, &state);
+	wlr_output_state_finish(&state);
 
-  /* Try to enable adaptive sync, note that not all monitors support it.
-   * wlr_output_commit() will deactivate it in case it cannot be enabled */
-  wlr_output_enable_adaptive_sync(wlr_output, 1);
-  wlr_output_commit(wlr_output);
-
-  wl_list_insert(&mons, &m->link);
-
+	wl_list_insert(&mons, &m->link);
   m->pertag = calloc(1, sizeof(Pertag));
   m->pertag->curtag = m->pertag->prevtag = 1;
 
@@ -2152,32 +2168,158 @@ createmon(struct wl_listener *listener, void *data) {
     }
   }
 
-  printstatus();
+	printstatus();
 
-  /* The xdg-protocol specifies:
-   *
-   * If the fullscreened surface is not opaque, the compositor must make
-   * sure that other screen content not part of the same surface tree (made
-   * up of subsurfaces, popups or similarly coupled surfaces) are not
-   * visible below the fullscreened surface.
-   *
-   */
-  /* updatemons() will resize and set correct position */
-  // m->fullscreen_bg = wlr_scene_rect_create(layers[LyrFS], 0, 0,
-  // fullscreen_bg); wlr_scene_node_set_enabled(&m->fullscreen_bg->node, 0);
+	/* The xdg-protocol specifies:
+	 *
+	 * If the fullscreened surface is not opaque, the compositor must make
+	 * sure that other screen content not part of the same surface tree (made
+	 * up of subsurfaces, popups or similarly coupled surfaces) are not
+	 * visible below the fullscreened surface.
+	 *
+	 */
+	/* updatemons() will resize and set correct position */
+	// m->fullscreen_bg = wlr_scene_rect_create(layers[LyrFS], 0, 0, fullscreen_bg);
+	// wlr_scene_node_set_enabled(&m->fullscreen_bg->node, 0);
 
-  /* Adds this to the output layout in the order it was configured in.
-   *
-   * The output layout utility automatically adds a wl_output global to the
-   * display, which Wayland clients can see to find out information about the
-   * output (such as DPI, scale factor, manufacturer, etc).
-   */
-  m->scene_output = wlr_scene_output_create(scene, wlr_output);
-  if (m->m.x < 0 || m->m.y < 0)
-    wlr_output_layout_add_auto(output_layout, wlr_output);
-  else
-    wlr_output_layout_add(output_layout, wlr_output, m->m.x, m->m.y);
+	/* Adds this to the output layout in the order it was configured.
+	 *
+	 * The output layout utility automatically adds a wl_output global to the
+	 * display, which Wayland clients can see to find out information about the
+	 * output (such as DPI, scale factor, manufacturer, etc).
+	 */
+	m->scene_output = wlr_scene_output_create(scene, wlr_output);
+	if (m->m.x == -1 && m->m.y == -1)
+		wlr_output_layout_add_auto(output_layout, wlr_output);
+	else
+		wlr_output_layout_add(output_layout, wlr_output, m->m.x, m->m.y);
 }
+
+// void // 17  need fix 0.5
+// createmon(struct wl_listener *listener, void *data) {
+//   /* This event is raised by the backend when a new output (aka a display or
+//    * monitor) becomes available. */
+//   struct wlr_output *wlr_output = data;
+//   const ConfigMonitorRule *r;
+//   size_t i;
+//   int ji, jk;
+//   Monitor *m = wlr_output->data = ecalloc(1, sizeof(*m));
+//   m->wlr_output = wlr_output;
+
+//   wl_list_init(&m->dwl_ipc_outputs);
+//   wlr_output_init_render(wlr_output, alloc, drw);
+
+//   /* Initialize monitor state using configured rules */
+//   for (i = 0; i < LENGTH(m->layers); i++)
+//     wl_list_init(&m->layers[i]);
+
+//   m->gappih = gappih;
+//   m->gappiv = gappiv;
+//   m->gappoh = gappoh;
+//   m->gappov = gappov;
+//   m->isoverview = 0;
+//   m->sel = NULL;
+//   m->is_in_hotarea = 0;
+//   m->tagset[0] = m->tagset[1] = 1;
+//   float scale = 1;
+//   m->mfact = default_mfact;
+//   m->nmaster = default_nmaster;
+//   enum wl_output_transform rr = WL_OUTPUT_TRANSFORM_NORMAL;
+
+//   m->lt = &layouts[0];
+
+//   for (ji = 0; ji < config.monitor_rules_count; ji++) {
+//     if (config.monitor_rules_count < 1)
+//       break;
+
+//     r = &config.monitor_rules[ji];
+//     if (!r->name || strstr(wlr_output->name, r->name)) {
+//       m->mfact = r->mfact;
+//       m->nmaster = r->nmaster;
+//       m->m.x = r->x;
+//       m->m.y = r->y;
+//       if (r->layout) {
+//         for (jk = 0; jk < LENGTH(layouts); jk++) {
+//           if (strcmp(layouts[jk].name, r->layout) == 0) {
+//             m->lt = &layouts[jk];
+//           }
+//         }
+//       }
+//       scale = r->scale;
+//       rr = r->rr;
+//       break;
+//     }
+//   }
+
+//   wlr_output_set_scale(wlr_output, scale);
+//   wlr_xcursor_manager_load(cursor_mgr, scale);
+//   wlr_output_set_transform(wlr_output, rr);
+//   /* The mode is a tuple of (width, height, refresh rate), and each
+//    * monitor supports only a specific set of modes. We just pick the
+//    * monitor's preferred mode; a more sophisticated compositor would let
+//    * the user configure it. */
+//   wlr_output_set_mode(wlr_output, wlr_output_preferred_mode(wlr_output));
+
+//   /* Set up event listeners */
+//   LISTEN(&wlr_output->events.frame, &m->frame, rendermon);
+//   LISTEN(&wlr_output->events.destroy, &m->destroy, cleanupmon);
+//   LISTEN(&wlr_output->events.request_state, &m->request_state, requestmonstate);
+
+//   wlr_output_enable(wlr_output, 1);
+//   if (!wlr_output_commit(wlr_output))
+//     return;
+
+//   /* Try to enable adaptive sync, note that not all monitors support it.
+//    * wlr_output_commit() will deactivate it in case it cannot be enabled */
+//   wlr_output_enable_adaptive_sync(wlr_output, 1);
+//   wlr_output_commit(wlr_output);
+
+//   wl_list_insert(&mons, &m->link);
+
+//   m->pertag = calloc(1, sizeof(Pertag));
+//   m->pertag->curtag = m->pertag->prevtag = 1;
+
+//   for (i = 0; i <= LENGTH(tags); i++) {
+//     m->pertag->nmasters[i] = m->nmaster;
+//     m->pertag->mfacts[i] = m->mfact;
+
+//     m->pertag->ltidxs[i] = m->lt;
+
+//     if (i > 0 && strlen(config.tags[i - 1].layout_name) > 0) {
+//       for (jk = 0; jk < LENGTH(layouts); jk++) {
+//         if (strcmp(layouts[jk].name, config.tags[i - 1].layout_name) == 0) {
+//           m->pertag->ltidxs[i] = &layouts[jk];
+//         }
+//       }
+//     }
+//   }
+
+//   printstatus();
+
+//   /* The xdg-protocol specifies:
+//    *
+//    * If the fullscreened surface is not opaque, the compositor must make
+//    * sure that other screen content not part of the same surface tree (made
+//    * up of subsurfaces, popups or similarly coupled surfaces) are not
+//    * visible below the fullscreened surface.
+//    *
+//    */
+//   /* updatemons() will resize and set correct position */
+//   // m->fullscreen_bg = wlr_scene_rect_create(layers[LyrFS], 0, 0,
+//   // fullscreen_bg); wlr_scene_node_set_enabled(&m->fullscreen_bg->node, 0);
+
+//   /* Adds this to the output layout in the order it was configured in.
+//    *
+//    * The output layout utility automatically adds a wl_output global to the
+//    * display, which Wayland clients can see to find out information about the
+//    * output (such as DPI, scale factor, manufacturer, etc).
+//    */
+//   m->scene_output = wlr_scene_output_create(scene, wlr_output);
+//   if (m->m.x < 0 || m->m.y < 0)
+//     wlr_output_layout_add_auto(output_layout, wlr_output);
+//   else
+//     wlr_output_layout_add(output_layout, wlr_output, m->m.x, m->m.y);
+// }
 
 void // fix for 0.5
 createnotify(struct wl_listener *listener, void *data) {
@@ -2478,45 +2620,41 @@ dirtomon(enum wlr_direction dir) {
   return selmon;
 }
 
-void dwl_ipc_manager_bind(struct wl_client *client, void *data,
-                          uint32_t version, uint32_t id) {
-  struct wl_resource *manager_resource =
-      wl_resource_create(client, &zdwl_ipc_manager_v2_interface, version, id);
-  if (!manager_resource) {
-    wl_client_post_no_memory(client);
-    return;
-  }
-  wl_resource_set_implementation(manager_resource, &dwl_manager_implementation,
-                                 NULL, dwl_ipc_manager_destroy);
+void
+dwl_ipc_manager_bind(struct wl_client *client, void *data, uint32_t version, uint32_t id)
+{
+	struct wl_resource *manager_resource = wl_resource_create(client, &zdwl_ipc_manager_v2_interface, version, id);
+	if (!manager_resource) {
+		wl_client_post_no_memory(client);
+		return;
+	}
+	wl_resource_set_implementation(manager_resource, &dwl_manager_implementation, NULL, dwl_ipc_manager_destroy);
 
-  zdwl_ipc_manager_v2_send_tags(manager_resource, LENGTH(tags));
+	zdwl_ipc_manager_v2_send_tags(manager_resource, LENGTH(tags));
 
-  for (int i = 0; i < LENGTH(layouts); i++)
-    zdwl_ipc_manager_v2_send_layout(manager_resource, layouts[i].symbol);
+	for (unsigned int i = 0; i < LENGTH(layouts); i++)
+		zdwl_ipc_manager_v2_send_layout(manager_resource, layouts[i].symbol);
 }
 
 void dwl_ipc_manager_destroy(struct wl_resource *resource) {
   /* No state to destroy */
 }
 
-void dwl_ipc_manager_get_output(struct wl_client *client,
-                                struct wl_resource *resource, uint32_t id,
-                                struct wl_resource *output) {
-  DwlIpcOutput *ipc_output;
-  Monitor *monitor = wlr_output_from_resource(output)->data;
-  struct wl_resource *output_resource =
-      wl_resource_create(client, &zdwl_ipc_output_v2_interface,
-                         wl_resource_get_version(resource), id);
-  if (!output_resource)
-    return;
+void
+dwl_ipc_manager_get_output(struct wl_client *client, struct wl_resource *resource, uint32_t id, struct wl_resource *output)
+{
+	DwlIpcOutput *ipc_output;
+	Monitor *monitor = wlr_output_from_resource(output)->data;
+	struct wl_resource *output_resource = wl_resource_create(client, &zdwl_ipc_output_v2_interface, wl_resource_get_version(resource), id);
+	if (!output_resource)
+		return;
 
-  ipc_output = ecalloc(1, sizeof(*ipc_output));
-  ipc_output->resource = output_resource;
-  ipc_output->monitor = monitor;
-  wl_resource_set_implementation(output_resource, &dwl_output_implementation,
-                                 ipc_output, dwl_ipc_output_destroy);
-  wl_list_insert(&monitor->dwl_ipc_outputs, &ipc_output->link);
-  dwl_ipc_output_printstatus_to(ipc_output);
+	ipc_output = ecalloc(1, sizeof(*ipc_output));
+	ipc_output->resource = output_resource;
+	ipc_output->monitor = monitor;
+	wl_resource_set_implementation(output_resource, &dwl_output_implementation, ipc_output, dwl_ipc_output_destroy);
+	wl_list_insert(&monitor->dwl_ipc_outputs, &ipc_output->link);
+	dwl_ipc_output_printstatus_to(ipc_output);
 }
 
 void dwl_ipc_manager_release(struct wl_client *client,
@@ -2531,82 +2669,130 @@ static void dwl_ipc_output_destroy(struct wl_resource *resource) {
   free(ipc_output);
 }
 
-void dwl_ipc_output_printstatus(Monitor *monitor) {
-  DwlIpcOutput *ipc_output;
-  wl_list_for_each(ipc_output, &monitor->dwl_ipc_outputs, link)
-      dwl_ipc_output_printstatus_to(ipc_output);
+void
+dwl_ipc_output_printstatus(Monitor *monitor)
+{
+	DwlIpcOutput *ipc_output;
+	wl_list_for_each(ipc_output, &monitor->dwl_ipc_outputs, link)
+		dwl_ipc_output_printstatus_to(ipc_output);
 }
 
-void dwl_ipc_output_printstatus_to(DwlIpcOutput *ipc_output) {
-  Monitor *monitor = ipc_output->monitor;
-  Client *c, *focused;
-  int tagmask, state, numclients, focused_client, tag;
-  const char *title, *appid, *symbol;
-  focused = focustop(monitor);
-  zdwl_ipc_output_v2_send_active(ipc_output->resource, monitor == selmon);
+void
+dwl_ipc_output_printstatus_to(DwlIpcOutput *ipc_output)
+{
+	Monitor *monitor = ipc_output->monitor;
+	Client *c, *focused;
+	int tagmask, state, numclients, focused_client, tag;
+	const char *title, *appid;
+	focused = focustop(monitor);
+	zdwl_ipc_output_v2_send_active(ipc_output->resource, monitor == selmon);
 
-  if ((monitor->tagset[monitor->seltags] & TAGMASK) == TAGMASK) {
-    state = 0;
-    state |= ZDWL_IPC_OUTPUT_V2_TAG_STATE_ACTIVE;
-    zdwl_ipc_output_v2_send_tag(ipc_output->resource, 888, state, 1, 1);
-  } else {
-    for (tag = 0; tag < LENGTH(tags); tag++) {
-      numclients = state = focused_client = 0;
-      tagmask = 1 << tag;
-      if ((tagmask & monitor->tagset[monitor->seltags]) != 0)
-        state |= ZDWL_IPC_OUTPUT_V2_TAG_STATE_ACTIVE;
+	for (tag = 0 ; tag < LENGTH(tags); tag++) {
+		numclients = state = focused_client = 0;
+		tagmask = 1 << tag;
+		if ((tagmask & monitor->tagset[monitor->seltags]) != 0)
+			state |= ZDWL_IPC_OUTPUT_V2_TAG_STATE_ACTIVE;
 
-      wl_list_for_each(c, &clients, link) {
-        if (c->iskilling)
-          continue;
-        if (c->mon != monitor)
-          continue;
-        if (!(c->tags & tagmask))
-          continue;
-        if (c == focused)
-          focused_client = 1;
-        if (c->isurgent)
-          state |= ZDWL_IPC_OUTPUT_V2_TAG_STATE_URGENT;
+		wl_list_for_each(c, &clients, link) {
+			if (c->mon != monitor)
+				continue;
+			if (!(c->tags & tagmask))
+				continue;
+			if (c == focused)
+				focused_client = 1;
+			if (c->isurgent)
+				state |= ZDWL_IPC_OUTPUT_V2_TAG_STATE_URGENT;
 
-        numclients++;
-      }
-      zdwl_ipc_output_v2_send_tag(ipc_output->resource, tag, state, numclients,
-                                  focused_client);
-    }
-  }
+			numclients++;
+		}
+		zdwl_ipc_output_v2_send_tag(ipc_output->resource, tag, state, numclients, focused_client);
+	}
+	title = focused ? client_get_title(focused) : "";
+	appid = focused ? client_get_appid(focused) : "";
 
-  // for ( tag = 0 ; tag < LENGTH(tags); tag++) {
-  //     numclients = state = focused_client = 0;
-  //     tagmask = 1 << tag;
-  //     if ((tagmask & monitor->tagset[monitor->seltags]) != 0)
-  //         state |= ZDWL_IPC_OUTPUT_V2_TAG_STATE_ACTIVE;
-  //     wl_list_for_each(c, &clients, link) {
-  //         if (c->mon != monitor)
-  //             continue;
-  //         if (!(c->tags & tagmask))
-  //             continue;
-  //         if (c == focused)
-  //             focused_client = 1;
-  //         if (c->isurgent)
-  //             state |= ZDWL_IPC_OUTPUT_V2_TAG_STATE_URGENT;
-  //         numclients++;
-  //     }
-  //     zdwl_ipc_output_v2_send_tag(ipc_output->resource, tag, state,
-  //     numclients, focused_client);
-  // }
-
-  title = focused ? client_get_title(focused) : "";
-  appid = focused ? client_get_appid(focused) : "";
-  symbol = monitor->pertag->ltidxs[monitor->pertag->curtag]->symbol;
-
-  zdwl_ipc_output_v2_send_layout(
-      ipc_output->resource,
-      monitor->pertag->ltidxs[monitor->pertag->curtag] - layouts);
-  zdwl_ipc_output_v2_send_title(ipc_output->resource, title ? title : broken);
-  zdwl_ipc_output_v2_send_appid(ipc_output->resource, appid ? appid : broken);
-  zdwl_ipc_output_v2_send_layout_symbol(ipc_output->resource, symbol);
-  zdwl_ipc_output_v2_send_frame(ipc_output->resource);
+	// zdwl_ipc_output_v2_send_layout(ipc_output->resource, monitor->lt[monitor->sellt] - layouts);
+	zdwl_ipc_output_v2_send_title(ipc_output->resource, title);
+	zdwl_ipc_output_v2_send_appid(ipc_output->resource, appid);
+	// zdwl_ipc_output_v2_send_layout_symbol(ipc_output->resource, monitor->ltsymbol);
+	// if (wl_resource_get_version(ipc_output->resource) >= ZDWL_IPC_OUTPUT_V2_FULLSCREEN_SINCE_VERSION) {
+	// 	zdwl_ipc_output_v2_send_fullscreen(ipc_output->resource, focused ? focused->isfullscreen : 0);
+	// }
+	// if (wl_resource_get_version(ipc_output->resource) >= ZDWL_IPC_OUTPUT_V2_FLOATING_SINCE_VERSION) {
+	// 	zdwl_ipc_output_v2_send_floating(ipc_output->resource, focused ? focused->isfloating : 0);
+	// }
+	zdwl_ipc_output_v2_send_frame(ipc_output->resource);
 }
+
+// void dwl_ipc_output_printstatus_to(DwlIpcOutput *ipc_output) {
+//   Monitor *monitor = ipc_output->monitor;
+//   Client *c, *focused;
+//   int tagmask, state, numclients, focused_client, tag;
+//   const char *title, *appid, *symbol;
+//   focused = focustop(monitor);
+//   zdwl_ipc_output_v2_send_active(ipc_output->resource, monitor == selmon);
+
+//   if ((monitor->tagset[monitor->seltags] & TAGMASK) == TAGMASK) {
+//     state = 0;
+//     state |= ZDWL_IPC_OUTPUT_V2_TAG_STATE_ACTIVE;
+//     zdwl_ipc_output_v2_send_tag(ipc_output->resource, 888, state, 1, 1);
+//   } else {
+//     for (tag = 0; tag < LENGTH(tags); tag++) {
+//       numclients = state = focused_client = 0;
+//       tagmask = 1 << tag;
+//       if ((tagmask & monitor->tagset[monitor->seltags]) != 0)
+//         state |= ZDWL_IPC_OUTPUT_V2_TAG_STATE_ACTIVE;
+
+//       wl_list_for_each(c, &clients, link) {
+//         if (c->iskilling)
+//           continue;
+//         if (c->mon != monitor)
+//           continue;
+//         if (!(c->tags & tagmask))
+//           continue;
+//         if (c == focused)
+//           focused_client = 1;
+//         if (c->isurgent)
+//           state |= ZDWL_IPC_OUTPUT_V2_TAG_STATE_URGENT;
+
+//         numclients++;
+//       }
+//       zdwl_ipc_output_v2_send_tag(ipc_output->resource, tag, state, numclients,
+//                                   focused_client);
+//     }
+//   }
+
+//   // for ( tag = 0 ; tag < LENGTH(tags); tag++) {
+//   //     numclients = state = focused_client = 0;
+//   //     tagmask = 1 << tag;
+//   //     if ((tagmask & monitor->tagset[monitor->seltags]) != 0)
+//   //         state |= ZDWL_IPC_OUTPUT_V2_TAG_STATE_ACTIVE;
+//   //     wl_list_for_each(c, &clients, link) {
+//   //         if (c->mon != monitor)
+//   //             continue;
+//   //         if (!(c->tags & tagmask))
+//   //             continue;
+//   //         if (c == focused)
+//   //             focused_client = 1;
+//   //         if (c->isurgent)
+//   //             state |= ZDWL_IPC_OUTPUT_V2_TAG_STATE_URGENT;
+//   //         numclients++;
+//   //     }
+//   //     zdwl_ipc_output_v2_send_tag(ipc_output->resource, tag, state,
+//   //     numclients, focused_client);
+//   // }
+
+//   title = focused ? client_get_title(focused) : "";
+//   appid = focused ? client_get_appid(focused) : "";
+//   symbol = monitor->pertag->ltidxs[monitor->pertag->curtag]->symbol;
+
+//   zdwl_ipc_output_v2_send_layout(
+//       ipc_output->resource,
+//       monitor->pertag->ltidxs[monitor->pertag->curtag] - layouts);
+//   zdwl_ipc_output_v2_send_title(ipc_output->resource, title ? title : broken);
+//   zdwl_ipc_output_v2_send_appid(ipc_output->resource, appid ? appid : broken);
+//   zdwl_ipc_output_v2_send_layout_symbol(ipc_output->resource, symbol);
+//   zdwl_ipc_output_v2_send_frame(ipc_output->resource);
+// }
 
 void dwl_ipc_output_set_client_tags(struct wl_client *client,
                                     struct wl_resource *resource,
@@ -3588,6 +3774,7 @@ pointerfocus(Client *c, struct wlr_surface *surface, double sx, double sy,
 
 void // 17
 printstatus(void) {
+  return;
   Monitor *m = NULL;
   Client *c;
   uint32_t occ, urg, sel;
@@ -4407,206 +4594,456 @@ int timer_tick_action(void *data) {
   return 0;
 }
 
-void setup(void) {
+// void setup(void) {
 
+//   signal(SIGSEGV, signalhandler);
+
+//   parse_config();
+
+//   init_baked_points();
+
+//   int i, sig[] = {SIGCHLD, SIGINT, SIGTERM, SIGPIPE};
+//   struct sigaction sa = {.sa_flags = SA_RESTART, .sa_handler = handlesig};
+//   sigemptyset(&sa.sa_mask);
+
+//   for (i = 0; i < LENGTH(sig); i++)
+//     sigaction(sig[i], &sa, NULL);
+
+//   wlr_log_init(log_level, NULL);
+
+//   /* The Wayland display is managed by libwayland. It handles accepting
+//    * clients from the Unix socket, manging Wayland globals, and so on. */
+//   dpy = wl_display_create();
+// 	event_loop = wl_display_get_event_loop(dpy);
+//   pointer_manager = wlr_relative_pointer_manager_v1_create(dpy);
+//   /* The backend is a wlroots feature which abstracts the underlying input and
+//    * output hardware. The autocreate option will choose the most suitable
+//    * backend based on the current environment, such as opening an X11 window
+//    * if an X11 server is running. The NULL argument here optionally allows you
+//    * to pass in a custom renderer if wlr_renderer doesn't meet your needs. The
+//    * backend uses the renderer, for example, to fall back to software cursors
+//    * if the backend does not support hardware cursors (some older GPUs
+//    * don't). */
+// 	if (!(backend = wlr_backend_autocreate(event_loop, &session)))
+// 		die("couldn't create backend");
+
+//   /* Initialize the scene graph used to lay out windows */
+//   scene = wlr_scene_create();
+//   for (i = 0; i < NUM_LAYERS; i++)
+//     layers[i] = wlr_scene_tree_create(&scene->tree);
+//   drag_icon = wlr_scene_tree_create(&scene->tree);
+//   wlr_scene_node_place_below(&drag_icon->node, &layers[LyrBlock]->node);
+
+//   /* Create a renderer with the default implementation */
+//   if (!(drw = wlr_renderer_autocreate(backend)))
+//     die("couldn't create renderer");
+
+//   /* Create shm, drm and linux_dmabuf interfaces by ourselves.
+//    * The simplest way is call:
+//    *      wlr_renderer_init_wl_display(drw);
+//    * but we need to create manually the linux_dmabuf interface to integrate it
+//    * with wlr_scene. */
+//   wlr_renderer_init_wl_shm(drw, dpy);
+
+// 	if (wlr_renderer_get_texture_formats(drw, WLR_BUFFER_CAP_DMABUF)) {
+// 		wlr_drm_create(dpy, drw);
+// 		wlr_scene_set_linux_dmabuf_v1(scene,
+// 				wlr_linux_dmabuf_v1_create_with_renderer(dpy, 5, drw));
+// 	}
+
+// 	/* Autocreates an allocator for us.
+// 	 * The allocator is the bridge between the renderer and the backend. It
+// 	 * handles the buffer creation, allowing wlroots to render onto the
+// 	 * screen */
+// 	if (!(alloc = wlr_allocator_autocreate(backend, drw)))
+// 		die("couldn't create allocator");
+
+//   /* This creates some hands-off wlroots interfaces. The compositor is
+//    * necessary for clients to allocate surfaces and the data device manager
+//    * handles the clipboard. Each of these wlroots interfaces has room for you
+//    * to dig your fingers in and play with their behavior if you want. Note that
+//    * the clients cannot set the selection directly without compositor approval,
+//    * see the setsel() function. */
+//   compositor = wlr_compositor_create(dpy, 6, drw);
+//   wlr_export_dmabuf_manager_v1_create(dpy);
+//   wlr_screencopy_manager_v1_create(dpy);
+//   wlr_data_control_manager_v1_create(dpy);
+//   wlr_data_device_manager_create(dpy);
+//   wlr_primary_selection_v1_device_manager_create(dpy);
+//   wlr_viewporter_create(dpy);
+//   wlr_single_pixel_buffer_manager_v1_create(dpy);
+//   wlr_fractional_scale_manager_v1_create(dpy, 1);
+//   wlr_subcompositor_create(dpy);
+
+//   /* Initializes the interface used to implement urgency hints */
+//   activation = wlr_xdg_activation_v1_create(dpy);
+//   LISTEN_STATIC(&activation->events.request_activate, urgent);
+
+//   gamma_control_mgr = wlr_gamma_control_manager_v1_create(dpy);
+//   LISTEN_STATIC(&gamma_control_mgr->events.set_gamma, setgamma);
+
+//   /* Creates an output layout, which a wlroots utility for working with an
+//    * arrangement of screens in a physical layout. */
+// 	output_layout = wlr_output_layout_create(dpy);
+// 	LISTEN_STATIC(&output_layout->events.change, updatemons);
+// 	wlr_xdg_output_manager_v1_create(dpy, output_layout);
+
+//   /* Configure a listener to be notified when new outputs are available on the
+//    * backend. */
+//   wl_list_init(&mons);
+//   LISTEN_STATIC(&backend->events.new_output, createmon);
+
+//   /* Set up our client lists and the xdg-shell. The xdg-shell is a
+//    * Wayland protocol which is used for application windows. For more
+//    * detail on shells, refer to the article:
+//    *
+//    * https://drewdevault.com/2018/07/29/Wayland-shells.html
+//    */
+//   wl_list_init(&clients);
+//   wl_list_init(&fstack);
+
+//   idle_notifier = wlr_idle_notifier_v1_create(dpy);
+
+//   idle_inhibit_mgr = wlr_idle_inhibit_v1_create(dpy);
+//   LISTEN_STATIC(&idle_inhibit_mgr->events.new_inhibitor, createidleinhibitor);
+
+//   layer_shell = wlr_layer_shell_v1_create(dpy, 3);
+//   LISTEN_STATIC(&layer_shell->events.new_surface, createlayersurface);
+
+//   xdg_shell = wlr_xdg_shell_create(dpy, 6);
+//   LISTEN_STATIC(&xdg_shell->events.new_surface, createnotify);
+
+//   session_lock_mgr = wlr_session_lock_manager_v1_create(dpy);
+//   wl_signal_add(&session_lock_mgr->events.new_lock, &lock_listener);
+//   LISTEN_STATIC(&session_lock_mgr->events.destroy, destroysessionmgr);
+//   locked_bg = wlr_scene_rect_create(layers[LyrBlock], sgeom.width, sgeom.height,
+//                                     (float[4]){0.1, 0.1, 0.1, 1.0});
+//   wlr_scene_node_set_enabled(&locked_bg->node, 0);
+
+//   /* Use decoration protocols to negotiate server-side decorations */
+//   wlr_server_decoration_manager_set_default_mode(
+//       wlr_server_decoration_manager_create(dpy),
+//       WLR_SERVER_DECORATION_MANAGER_MODE_SERVER);
+//   xdg_decoration_mgr = wlr_xdg_decoration_manager_v1_create(dpy);
+//   LISTEN_STATIC(&xdg_decoration_mgr->events.new_toplevel_decoration,
+//                 createdecoration);
+//   pointer_constraints = wlr_pointer_constraints_v1_create(dpy);
+//   LISTEN_STATIC(&pointer_constraints->events.new_constraint,
+//                 createpointerconstraint);
+
+//   relative_pointer_mgr = wlr_relative_pointer_manager_v1_create(dpy);
+
+//   /*
+//    * Creates a cursor, which is a wlroots utility for tracking the cursor
+//    * image shown on screen.
+//    */
+//   cursor = wlr_cursor_create();
+//   wlr_cursor_attach_output_layout(cursor, output_layout);
+
+//   /* Creates an xcursor manager, another wlroots utility which loads up
+//    * Xcursor themes to source cursor images from and makes sure that cursor
+//    * images are available at all scale factors on the screen (necessary for
+//    * HiDPI support). Scaled cursors will be loaded with each output. */
+//   // cursor_mgr = wlr_xcursor_manager_create(cursor_theme, 24);
+//   cursor_mgr = wlr_xcursor_manager_create(NULL, 24);
+//   setenv("XCURSOR_SIZE", "24", 1);
+
+//   /*
+//    * wlr_cursor *only* displays an image on screen. It does not move around
+//    * when the pointer moves. However, we can attach input devices to it, and
+//    * it will generate aggregate events for all of them. In these events, we
+//    * can choose how we want to process them, forwarding them to clients and
+//    * moving the cursor around. More detail on this process is described in my
+//    * input handling blog post:
+//    *
+//    * https://drewdevault.com/2018/07/17/Input-handling-in-wlroots.html
+//    *
+//    * And more comments are sprinkled throughout the notify functions above.
+//    */
+//   LISTEN_STATIC(&cursor->events.motion, motionrelative);
+//   LISTEN_STATIC(&cursor->events.motion_absolute, motionabsolute);
+//   LISTEN_STATIC(&cursor->events.button, buttonpress);
+//   LISTEN_STATIC(&cursor->events.axis, axisnotify);
+//   LISTEN_STATIC(&cursor->events.frame, cursorframe);
+
+//   // 这两句代码会造成obs窗口里的鼠标光标消失,不知道注释有什么影响
+//   cursor_shape_mgr = wlr_cursor_shape_manager_v1_create(dpy, 1);
+//   LISTEN_STATIC(&cursor_shape_mgr->events.request_set_shape, setcursorshape);
+
+//   /*
+//    * Configures a seat, which is a single "seat" at which a user sits and
+//    * operates the computer. This conceptually includes up to one keyboard,
+//    * pointer, touch, and drawing tablet device. We also rig up a listener to
+//    * let us know when new input devices are available on the backend.
+//    */
+//   wl_list_init(&keyboards);
+//   LISTEN_STATIC(&backend->events.new_input, inputdevice);
+//   virtual_keyboard_mgr = wlr_virtual_keyboard_manager_v1_create(dpy);
+//   LISTEN_STATIC(&virtual_keyboard_mgr->events.new_virtual_keyboard,
+//                 virtualkeyboard);
+//   virtual_pointer_mgr = wlr_virtual_pointer_manager_v1_create(dpy);
+//   LISTEN_STATIC(&virtual_pointer_mgr->events.new_virtual_pointer,
+//                 virtualpointer);
+
+//   seat = wlr_seat_create(dpy, "seat0");
+//   LISTEN_STATIC(&seat->events.request_set_cursor, setcursor);
+//   LISTEN_STATIC(&seat->events.request_set_selection, setsel);
+//   LISTEN_STATIC(&seat->events.request_set_primary_selection, setpsel);
+//   LISTEN_STATIC(&seat->events.request_start_drag, requeststartdrag);
+//   LISTEN_STATIC(&seat->events.start_drag, startdrag);
+
+//   output_mgr = wlr_output_manager_v1_create(dpy);
+//   LISTEN_STATIC(&output_mgr->events.apply, outputmgrapply);
+//   LISTEN_STATIC(&output_mgr->events.test, outputmgrtest);
+
+//   // wlr_scene_set_presentation(scene, wlr_presentation_create(dpy, backend));
+// #ifdef IM
+//   /* create text_input-, and input_method-protocol relevant globals */
+//   input_method_manager = wlr_input_method_manager_v2_create(dpy);
+//   text_input_manager = wlr_text_input_manager_v3_create(dpy);
+
+//   input_relay = calloc(1, sizeof(*input_relay));
+//   dwl_input_method_relay_init(input_relay);
+// #endif
+//   wl_global_create(dpy, &zdwl_ipc_manager_v2_interface, 1, NULL,
+//                    dwl_ipc_manager_bind);
+
+//   // 创建顶层管理句柄
+//   foreign_toplevel_manager = wlr_foreign_toplevel_manager_v1_create(dpy);
+//   struct wlr_xdg_foreign_registry *foreign_registry =
+//       wlr_xdg_foreign_registry_create(dpy);
+//   wlr_xdg_foreign_v1_create(dpy, foreign_registry);
+//   wlr_xdg_foreign_v2_create(dpy, foreign_registry);
+// #ifdef XWAYLAND
+//   /*
+//    * Initialise the XWayland X server.
+//    * It will be started when the first X client is started.
+//    */
+//   xwayland = wlr_xwayland_create(dpy, compositor, 1);
+//   if (xwayland) {
+//     LISTEN_STATIC(&xwayland->events.ready, xwaylandready);
+//     LISTEN_STATIC(&xwayland->events.new_surface, createnotifyx11);
+
+//     setenv("DISPLAY", xwayland->display_name, 1);
+//   } else {
+//     fprintf(stderr,
+//             "failed to setup XWayland X server, continuing without it\n");
+//   }
+// #endif
+// }
+
+void
+setup(void)
+{
   signal(SIGSEGV, signalhandler);
 
   parse_config();
 
   init_baked_points();
 
-  int i, sig[] = {SIGCHLD, SIGINT, SIGTERM, SIGPIPE};
-  struct sigaction sa = {.sa_flags = SA_RESTART, .sa_handler = handlesig};
-  sigemptyset(&sa.sa_mask);
 
-  for (i = 0; i < LENGTH(sig); i++)
-    sigaction(sig[i], &sa, NULL);
+	int i, sig[] = {SIGCHLD, SIGINT, SIGTERM, SIGPIPE};
+	struct sigaction sa = {.sa_flags = SA_RESTART, .sa_handler = handlesig};
+	sigemptyset(&sa.sa_mask);
 
-  wlr_log_init(log_level, NULL);
+	for (i = 0; i < (int)LENGTH(sig); i++)
+		sigaction(sig[i], &sa, NULL);
 
-  /* The Wayland display is managed by libwayland. It handles accepting
-   * clients from the Unix socket, manging Wayland globals, and so on. */
-  dpy = wl_display_create();
-  pointer_manager = wlr_relative_pointer_manager_v1_create(dpy);
-  /* The backend is a wlroots feature which abstracts the underlying input and
-   * output hardware. The autocreate option will choose the most suitable
-   * backend based on the current environment, such as opening an X11 window
-   * if an X11 server is running. The NULL argument here optionally allows you
-   * to pass in a custom renderer if wlr_renderer doesn't meet your needs. The
-   * backend uses the renderer, for example, to fall back to software cursors
-   * if the backend does not support hardware cursors (some older GPUs
-   * don't). */
-  if (!(backend = wlr_backend_autocreate(dpy, &session)))
-    die("couldn't create backend");
+	wlr_log_init(log_level, NULL);
 
-  /* Initialize the scene graph used to lay out windows */
-  scene = wlr_scene_create();
-  for (i = 0; i < NUM_LAYERS; i++)
-    layers[i] = wlr_scene_tree_create(&scene->tree);
-  drag_icon = wlr_scene_tree_create(&scene->tree);
-  wlr_scene_node_place_below(&drag_icon->node, &layers[LyrBlock]->node);
+	/* The Wayland display is managed by libwayland. It handles accepting
+	 * clients from the Unix socket, manging Wayland globals, and so on. */
+	dpy = wl_display_create();
+	event_loop = wl_display_get_event_loop(dpy);
 
-  /* Create a renderer with the default implementation */
-  if (!(drw = wlr_renderer_autocreate(backend)))
-    die("couldn't create renderer");
+	/* The backend is a wlroots feature which abstracts the underlying input and
+	 * output hardware. The autocreate option will choose the most suitable
+	 * backend based on the current environment, such as opening an X11 window
+	 * if an X11 server is running. */
+	if (!(backend = wlr_backend_autocreate(event_loop, &session)))
+		die("couldn't create backend");
 
-  /* Create shm, drm and linux_dmabuf interfaces by ourselves.
-   * The simplest way is call:
-   *      wlr_renderer_init_wl_display(drw);
-   * but we need to create manually the linux_dmabuf interface to integrate it
-   * with wlr_scene. */
-  wlr_renderer_init_wl_shm(drw, dpy);
+	/* Initialize the scene graph used to lay out windows */
+	scene = wlr_scene_create();
+	// root_bg = wlr_scene_rect_create(&scene->tree, 0, 0, rootcolor);
+	for (i = 0; i < NUM_LAYERS; i++)
+		layers[i] = wlr_scene_tree_create(&scene->tree);
+	drag_icon = wlr_scene_tree_create(&scene->tree);
+	wlr_scene_node_place_below(&drag_icon->node, &layers[LyrBlock]->node);
 
-  if (wlr_renderer_get_dmabuf_texture_formats(drw)) {
-    wlr_drm_create(dpy, drw);
-    wlr_scene_set_linux_dmabuf_v1(
-        scene, wlr_linux_dmabuf_v1_create_with_renderer(dpy, 4, drw));
-  }
+	/* Autocreates a renderer, either Pixman, GLES2 or Vulkan for us. The user
+	 * can also specify a renderer using the WLR_RENDERER env var.
+	 * The renderer is responsible for defining the various pixel formats it
+	 * supports for shared memory, this configures that for clients. */
+	if (!(drw = wlr_renderer_autocreate(backend)))
+		die("couldn't create renderer");
+	// LISTEN_STATIC(&drw->events.lost, gpureset);
 
-  /* Create a default allocator */
-  if (!(alloc = wlr_allocator_autocreate(backend, drw)))
-    die("couldn't create allocator");
+	/* Create shm, drm and linux_dmabuf interfaces by ourselves.
+	 * The simplest way is call:
+	 *      wlr_renderer_init_wl_display(drw);
+	 * but we need to create manually the linux_dmabuf interface to integrate it
+	 * with wlr_scene. */
+	wlr_renderer_init_wl_shm(drw, dpy);
 
-  /* This creates some hands-off wlroots interfaces. The compositor is
-   * necessary for clients to allocate surfaces and the data device manager
-   * handles the clipboard. Each of these wlroots interfaces has room for you
-   * to dig your fingers in and play with their behavior if you want. Note that
-   * the clients cannot set the selection directly without compositor approval,
-   * see the setsel() function. */
-  compositor = wlr_compositor_create(dpy, 6, drw);
-  wlr_export_dmabuf_manager_v1_create(dpy);
-  wlr_screencopy_manager_v1_create(dpy);
-  wlr_data_control_manager_v1_create(dpy);
-  wlr_data_device_manager_create(dpy);
-  wlr_primary_selection_v1_device_manager_create(dpy);
-  wlr_viewporter_create(dpy);
-  wlr_single_pixel_buffer_manager_v1_create(dpy);
-  wlr_fractional_scale_manager_v1_create(dpy, 1);
-  wlr_subcompositor_create(dpy);
+	if (wlr_renderer_get_texture_formats(drw, WLR_BUFFER_CAP_DMABUF)) {
+		wlr_drm_create(dpy, drw);
+		wlr_scene_set_linux_dmabuf_v1(scene,
+				wlr_linux_dmabuf_v1_create_with_renderer(dpy, 5, drw));
+	}
 
-  /* Initializes the interface used to implement urgency hints */
-  activation = wlr_xdg_activation_v1_create(dpy);
-  LISTEN_STATIC(&activation->events.request_activate, urgent);
+	/* Autocreates an allocator for us.
+	 * The allocator is the bridge between the renderer and the backend. It
+	 * handles the buffer creation, allowing wlroots to render onto the
+	 * screen */
+	if (!(alloc = wlr_allocator_autocreate(backend, drw)))
+		die("couldn't create allocator");
 
-  gamma_control_mgr = wlr_gamma_control_manager_v1_create(dpy);
-  LISTEN_STATIC(&gamma_control_mgr->events.set_gamma, setgamma);
+	/* This creates some hands-off wlroots interfaces. The compositor is
+	 * necessary for clients to allocate surfaces and the data device manager
+	 * handles the clipboard. Each of these wlroots interfaces has room for you
+	 * to dig your fingers in and play with their behavior if you want. Note that
+	 * the clients cannot set the selection directly without compositor approval,
+	 * see the setsel() function. */
+	compositor = wlr_compositor_create(dpy, 6, drw);
+	wlr_subcompositor_create(dpy);
+	wlr_data_device_manager_create(dpy);
+	wlr_export_dmabuf_manager_v1_create(dpy);
+	wlr_screencopy_manager_v1_create(dpy);
+	wlr_data_control_manager_v1_create(dpy);
+	wlr_primary_selection_v1_device_manager_create(dpy);
+	wlr_viewporter_create(dpy);
+	wlr_single_pixel_buffer_manager_v1_create(dpy);
+	wlr_fractional_scale_manager_v1_create(dpy, 1);
+	wlr_presentation_create(dpy, backend);
+	// wlr_alpha_modifier_v1_create(dpy);
 
-  /* Creates an output layout, which a wlroots utility for working with an
-   * arrangement of screens in a physical layout. */
-  output_layout = wlr_output_layout_create();
-  LISTEN_STATIC(&output_layout->events.change, updatemons);
-  wlr_xdg_output_manager_v1_create(dpy, output_layout);
+	/* Initializes the interface used to implement urgency hints */
+	activation = wlr_xdg_activation_v1_create(dpy);
+	LISTEN_STATIC(&activation->events.request_activate, urgent);
 
-  /* Configure a listener to be notified when new outputs are available on the
-   * backend. */
-  wl_list_init(&mons);
-  LISTEN_STATIC(&backend->events.new_output, createmon);
+	gamma_control_mgr = wlr_gamma_control_manager_v1_create(dpy);
+	LISTEN_STATIC(&gamma_control_mgr->events.set_gamma, setgamma);
 
-  /* Set up our client lists and the xdg-shell. The xdg-shell is a
-   * Wayland protocol which is used for application windows. For more
-   * detail on shells, refer to the article:
-   *
-   * https://drewdevault.com/2018/07/29/Wayland-shells.html
-   */
-  wl_list_init(&clients);
-  wl_list_init(&fstack);
+	// power_mgr = wlr_output_power_manager_v1_create(dpy);
+	// LISTEN_STATIC(&power_mgr->events.set_mode, powermgrsetmode);
 
-  idle_notifier = wlr_idle_notifier_v1_create(dpy);
+	/* Creates an output layout, which a wlroots utility for working with an
+	 * arrangement of screens in a physical layout. */
+	output_layout = wlr_output_layout_create(dpy);
+	LISTEN_STATIC(&output_layout->events.change, updatemons);
+	wlr_xdg_output_manager_v1_create(dpy, output_layout);
 
-  idle_inhibit_mgr = wlr_idle_inhibit_v1_create(dpy);
-  LISTEN_STATIC(&idle_inhibit_mgr->events.new_inhibitor, createidleinhibitor);
+	/* Configure a listener to be notified when new outputs are available on the
+	 * backend. */
+	wl_list_init(&mons);
+	LISTEN_STATIC(&backend->events.new_output, createmon);
 
-  layer_shell = wlr_layer_shell_v1_create(dpy, 3);
-  LISTEN_STATIC(&layer_shell->events.new_surface, createlayersurface);
+	/* Set up our client lists, the xdg-shell and the layer-shell. The xdg-shell is a
+	 * Wayland protocol which is used for application windows. For more
+	 * detail on shells, refer to the article:
+	 *
+	 * https://drewdevault.com/2018/07/29/Wayland-shells.html
+	 */
+	wl_list_init(&clients);
+	wl_list_init(&fstack);
 
-  xdg_shell = wlr_xdg_shell_create(dpy, 6);
-  LISTEN_STATIC(&xdg_shell->events.new_surface, createnotify);
+	xdg_shell = wlr_xdg_shell_create(dpy, 6);
+	LISTEN_STATIC(&xdg_shell->events.new_toplevel, createnotify);
+	// LISTEN_STATIC(&xdg_shell->events.new_popup, createpopup);
 
-  session_lock_mgr = wlr_session_lock_manager_v1_create(dpy);
-  wl_signal_add(&session_lock_mgr->events.new_lock, &lock_listener);
-  LISTEN_STATIC(&session_lock_mgr->events.destroy, destroysessionmgr);
-  locked_bg = wlr_scene_rect_create(layers[LyrBlock], sgeom.width, sgeom.height,
-                                    (float[4]){0.1, 0.1, 0.1, 1.0});
-  wlr_scene_node_set_enabled(&locked_bg->node, 0);
+	layer_shell = wlr_layer_shell_v1_create(dpy, 3);
+	LISTEN_STATIC(&layer_shell->events.new_surface, createlayersurface);
 
-  /* Use decoration protocols to negotiate server-side decorations */
-  wlr_server_decoration_manager_set_default_mode(
-      wlr_server_decoration_manager_create(dpy),
-      WLR_SERVER_DECORATION_MANAGER_MODE_SERVER);
-  xdg_decoration_mgr = wlr_xdg_decoration_manager_v1_create(dpy);
-  LISTEN_STATIC(&xdg_decoration_mgr->events.new_toplevel_decoration,
-                createdecoration);
-  pointer_constraints = wlr_pointer_constraints_v1_create(dpy);
-  LISTEN_STATIC(&pointer_constraints->events.new_constraint,
-                createpointerconstraint);
+	idle_notifier = wlr_idle_notifier_v1_create(dpy);
 
-  relative_pointer_mgr = wlr_relative_pointer_manager_v1_create(dpy);
+	idle_inhibit_mgr = wlr_idle_inhibit_v1_create(dpy);
+	LISTEN_STATIC(&idle_inhibit_mgr->events.new_inhibitor, createidleinhibitor);
 
-  /*
-   * Creates a cursor, which is a wlroots utility for tracking the cursor
-   * image shown on screen.
-   */
-  cursor = wlr_cursor_create();
-  wlr_cursor_attach_output_layout(cursor, output_layout);
+	session_lock_mgr = wlr_session_lock_manager_v1_create(dpy);
+	wl_signal_add(&session_lock_mgr->events.new_lock, &lock_listener);
+	LISTEN_STATIC(&session_lock_mgr->events.destroy, destroysessionmgr);
+	locked_bg = wlr_scene_rect_create(layers[LyrBlock], sgeom.width, sgeom.height,
+			(float [4]){0.1f, 0.1f, 0.1f, 1.0f});
+	wlr_scene_node_set_enabled(&locked_bg->node, 0);
 
-  /* Creates an xcursor manager, another wlroots utility which loads up
-   * Xcursor themes to source cursor images from and makes sure that cursor
-   * images are available at all scale factors on the screen (necessary for
-   * HiDPI support). Scaled cursors will be loaded with each output. */
-  // cursor_mgr = wlr_xcursor_manager_create(cursor_theme, 24);
-  cursor_mgr = wlr_xcursor_manager_create(NULL, 24);
-  setenv("XCURSOR_SIZE", "24", 1);
+	/* Use decoration protocols to negotiate server-side decorations */
+	wlr_server_decoration_manager_set_default_mode(
+			wlr_server_decoration_manager_create(dpy),
+			WLR_SERVER_DECORATION_MANAGER_MODE_SERVER);
+	xdg_decoration_mgr = wlr_xdg_decoration_manager_v1_create(dpy);
+	LISTEN_STATIC(&xdg_decoration_mgr->events.new_toplevel_decoration, createdecoration);
 
-  /*
-   * wlr_cursor *only* displays an image on screen. It does not move around
-   * when the pointer moves. However, we can attach input devices to it, and
-   * it will generate aggregate events for all of them. In these events, we
-   * can choose how we want to process them, forwarding them to clients and
-   * moving the cursor around. More detail on this process is described in my
-   * input handling blog post:
-   *
-   * https://drewdevault.com/2018/07/17/Input-handling-in-wlroots.html
-   *
-   * And more comments are sprinkled throughout the notify functions above.
-   */
-  LISTEN_STATIC(&cursor->events.motion, motionrelative);
-  LISTEN_STATIC(&cursor->events.motion_absolute, motionabsolute);
-  LISTEN_STATIC(&cursor->events.button, buttonpress);
-  LISTEN_STATIC(&cursor->events.axis, axisnotify);
-  LISTEN_STATIC(&cursor->events.frame, cursorframe);
+	pointer_constraints = wlr_pointer_constraints_v1_create(dpy);
+	LISTEN_STATIC(&pointer_constraints->events.new_constraint, createpointerconstraint);
 
-  // 这两句代码会造成obs窗口里的鼠标光标消失,不知道注释有什么影响
-  cursor_shape_mgr = wlr_cursor_shape_manager_v1_create(dpy, 1);
-  LISTEN_STATIC(&cursor_shape_mgr->events.request_set_shape, setcursorshape);
+	relative_pointer_mgr = wlr_relative_pointer_manager_v1_create(dpy);
 
-  /*
-   * Configures a seat, which is a single "seat" at which a user sits and
-   * operates the computer. This conceptually includes up to one keyboard,
-   * pointer, touch, and drawing tablet device. We also rig up a listener to
-   * let us know when new input devices are available on the backend.
-   */
-  wl_list_init(&keyboards);
-  LISTEN_STATIC(&backend->events.new_input, inputdevice);
-  virtual_keyboard_mgr = wlr_virtual_keyboard_manager_v1_create(dpy);
-  LISTEN_STATIC(&virtual_keyboard_mgr->events.new_virtual_keyboard,
-                virtualkeyboard);
-  virtual_pointer_mgr = wlr_virtual_pointer_manager_v1_create(dpy);
-  LISTEN_STATIC(&virtual_pointer_mgr->events.new_virtual_pointer,
-                virtualpointer);
+	/*
+	 * Creates a cursor, which is a wlroots utility for tracking the cursor
+	 * image shown on screen.
+	 */
+	cursor = wlr_cursor_create();
+	wlr_cursor_attach_output_layout(cursor, output_layout);
 
-  seat = wlr_seat_create(dpy, "seat0");
-  LISTEN_STATIC(&seat->events.request_set_cursor, setcursor);
-  LISTEN_STATIC(&seat->events.request_set_selection, setsel);
-  LISTEN_STATIC(&seat->events.request_set_primary_selection, setpsel);
-  LISTEN_STATIC(&seat->events.request_start_drag, requeststartdrag);
-  LISTEN_STATIC(&seat->events.start_drag, startdrag);
+	/* Creates an xcursor manager, another wlroots utility which loads up
+	 * Xcursor themes to source cursor images from and makes sure that cursor
+	 * images are available at all scale factors on the screen (necessary for
+	 * HiDPI support). Scaled cursors will be loaded with each output. */
+	cursor_mgr = wlr_xcursor_manager_create(NULL, 24);
+	setenv("XCURSOR_SIZE", "24", 1);
 
-  output_mgr = wlr_output_manager_v1_create(dpy);
-  LISTEN_STATIC(&output_mgr->events.apply, outputmgrapply);
-  LISTEN_STATIC(&output_mgr->events.test, outputmgrtest);
+	/*
+	 * wlr_cursor *only* displays an image on screen. It does not move around
+	 * when the pointer moves. However, we can attach input devices to it, and
+	 * it will generate aggregate events for all of them. In these events, we
+	 * can choose how we want to process them, forwarding them to clients and
+	 * moving the cursor around. More detail on this process is described in
+	 * https://drewdevault.com/2018/07/17/Input-handling-in-wlroots.html
+	 *
+	 * And more comments are sprinkled throughout the notify functions above.
+	 */
+	LISTEN_STATIC(&cursor->events.motion, motionrelative);
+	LISTEN_STATIC(&cursor->events.motion_absolute, motionabsolute);
+	LISTEN_STATIC(&cursor->events.button, buttonpress);
+	LISTEN_STATIC(&cursor->events.axis, axisnotify);
+	LISTEN_STATIC(&cursor->events.frame, cursorframe);
 
-  wlr_scene_set_presentation(scene, wlr_presentation_create(dpy, backend));
-#ifdef IM
+	cursor_shape_mgr = wlr_cursor_shape_manager_v1_create(dpy, 1);
+	LISTEN_STATIC(&cursor_shape_mgr->events.request_set_shape, setcursorshape);
+
+	/*
+	 * Configures a seat, which is a single "seat" at which a user sits and
+	 * operates the computer. This conceptually includes up to one keyboard,
+	 * pointer, touch, and drawing tablet device. We also rig up a listener to
+	 * let us know when new input devices are available on the backend.
+	 */
+	LISTEN_STATIC(&backend->events.new_input, inputdevice);
+	virtual_keyboard_mgr = wlr_virtual_keyboard_manager_v1_create(dpy);
+	LISTEN_STATIC(&virtual_keyboard_mgr->events.new_virtual_keyboard, virtualkeyboard);
+	virtual_pointer_mgr = wlr_virtual_pointer_manager_v1_create(dpy);
+	LISTEN_STATIC(&virtual_pointer_mgr->events.new_virtual_pointer, virtualpointer);
+
+	seat = wlr_seat_create(dpy, "seat0");
+	LISTEN_STATIC(&seat->events.request_set_cursor, setcursor);
+	LISTEN_STATIC(&seat->events.request_set_selection, setsel);
+	LISTEN_STATIC(&seat->events.request_set_primary_selection, setpsel);
+	LISTEN_STATIC(&seat->events.request_start_drag, requeststartdrag);
+	LISTEN_STATIC(&seat->events.start_drag, startdrag);
+
+	kb_group = createkeyboardgroup();
+	wl_list_init(&kb_group->destroy.link);
+
+	output_mgr = wlr_output_manager_v1_create(dpy);
+	LISTEN_STATIC(&output_mgr->events.apply, outputmgrapply);
+	LISTEN_STATIC(&output_mgr->events.test, outputmgrtest);
+
+	/* Make sure XWayland clients don't connect to the parent X server,
+	 * e.g when running in the x11 backend or the wayland backend and the
+	 * compositor has Xwayland support */
+	unsetenv("DISPLAY");
+
+  #ifdef IM
   /* create text_input-, and input_method-protocol relevant globals */
   input_method_manager = wlr_input_method_manager_v2_create(dpy);
   text_input_manager = wlr_text_input_manager_v3_create(dpy);
@@ -4614,8 +5051,7 @@ void setup(void) {
   input_relay = calloc(1, sizeof(*input_relay));
   dwl_input_method_relay_init(input_relay);
 #endif
-  wl_global_create(dpy, &zdwl_ipc_manager_v2_interface, 1, NULL,
-                   dwl_ipc_manager_bind);
+  wl_global_create(dpy, &zdwl_ipc_manager_v2_interface, 2, NULL, dwl_ipc_manager_bind);
 
   // 创建顶层管理句柄
   foreign_toplevel_manager = wlr_foreign_toplevel_manager_v1_create(dpy);
@@ -4623,21 +5059,20 @@ void setup(void) {
       wlr_xdg_foreign_registry_create(dpy);
   wlr_xdg_foreign_v1_create(dpy, foreign_registry);
   wlr_xdg_foreign_v2_create(dpy, foreign_registry);
-#ifdef XWAYLAND
-  /*
-   * Initialise the XWayland X server.
-   * It will be started when the first X client is started.
-   */
-  xwayland = wlr_xwayland_create(dpy, compositor, 1);
-  if (xwayland) {
-    LISTEN_STATIC(&xwayland->events.ready, xwaylandready);
-    LISTEN_STATIC(&xwayland->events.new_surface, createnotifyx11);
 
-    setenv("DISPLAY", xwayland->display_name, 1);
-  } else {
-    fprintf(stderr,
-            "failed to setup XWayland X server, continuing without it\n");
-  }
+#ifdef XWAYLAND
+	/*
+	 * Initialise the XWayland X server.
+	 * It will be started when the first X client is started.
+	 */
+	if ((xwayland = wlr_xwayland_create(dpy, compositor, 1))) {
+		LISTEN_STATIC(&xwayland->events.ready, xwaylandready);
+		LISTEN_STATIC(&xwayland->events.new_surface, createnotifyx11);
+
+		setenv("DISPLAY", xwayland->display_name, 1);
+	} else {
+		fprintf(stderr, "failed to setup XWayland X server, continuing without it\n");
+	}
 #endif
 }
 
@@ -5434,110 +5869,110 @@ void unmapnotify(struct wl_listener *listener, void *data) {
   motionnotify(0, NULL, 0, 0, 0, 0);
 }
 
-void // 0.5
-updatemons(struct wl_listener *listener, void *data) {
-  /*
-   * Called whenever the output layout changes: adding or removing a
-   * monitor, changing an output's mode or position, etc. This is where
-   * the change officially happens and we update geometry, window
-   * positions, focus, and the stored configuration in wlroots'
-   * output-manager implementation.
-   */
-  struct wlr_output_configuration_v1 *config =
-      wlr_output_configuration_v1_create();
-  Client *c;
-  struct wlr_output_configuration_head_v1 *config_head;
-  Monitor *m;
+void
+updatemons(struct wl_listener *listener, void *data)
+{
+	/*
+	 * Called whenever the output layout changes: adding or removing a
+	 * monitor, changing an output's mode or position, etc. This is where
+	 * the change officially happens and we update geometry, window
+	 * positions, focus, and the stored configuration in wlroots'
+	 * output-manager implementation.
+	 */
+	struct wlr_output_configuration_v1 *config
+			= wlr_output_configuration_v1_create();
+	Client *c;
+	struct wlr_output_configuration_head_v1 *config_head;
+	Monitor *m;
 
-  /* First remove from the layout the disabled monitors */
-  wl_list_for_each(m, &mons, link) {
-    if (m->wlr_output->enabled)
-      continue;
-    config_head =
-        wlr_output_configuration_head_v1_create(config, m->wlr_output);
-    config_head->state.enabled = 0;
-    /* Remove this output from the layout to avoid cursor enter inside it */
-    wlr_output_layout_remove(output_layout, m->wlr_output);
-    closemon(m);
-    m->m = m->w = (struct wlr_box){0};
-  }
-  /* Insert outputs that need to */
-  wl_list_for_each(m, &mons, link) {
-    if (m->wlr_output->enabled &&
-        !wlr_output_layout_get(output_layout, m->wlr_output))
-      wlr_output_layout_add_auto(output_layout, m->wlr_output);
-  }
+	/* First remove from the layout the disabled monitors */
+	wl_list_for_each(m, &mons, link) {
+		if (m->wlr_output->enabled)
+			continue;
+		config_head = wlr_output_configuration_head_v1_create(config, m->wlr_output);
+		config_head->state.enabled = 0;
+		/* Remove this output from the layout to avoid cursor enter inside it */
+		wlr_output_layout_remove(output_layout, m->wlr_output);
+		closemon(m);
+		m->m = m->w = (struct wlr_box){0};
+	}
+	/* Insert outputs that need to */
+	wl_list_for_each(m, &mons, link) {
+		if (m->wlr_output->enabled
+				&& !wlr_output_layout_get(output_layout, m->wlr_output))
+			wlr_output_layout_add_auto(output_layout, m->wlr_output);
+	}
 
-  /* Now that we update the output layout we can get its box */
-  wlr_output_layout_get_box(output_layout, NULL, &sgeom);
+	/* Now that we update the output layout we can get its box */
+	wlr_output_layout_get_box(output_layout, NULL, &sgeom);
 
-  /* Make sure the clients are hidden when dwl is locked */
-  wlr_scene_node_set_position(&locked_bg->node, sgeom.x, sgeom.y);
-  wlr_scene_rect_set_size(locked_bg, sgeom.width, sgeom.height);
+	// wlr_scene_node_set_position(&root_bg->node, sgeom.x, sgeom.y);
+	// wlr_scene_rect_set_size(root_bg, sgeom.width, sgeom.height);
 
-  wl_list_for_each(m, &mons, link) {
-    if (!m->wlr_output->enabled)
-      continue;
-    config_head =
-        wlr_output_configuration_head_v1_create(config, m->wlr_output);
+	/* Make sure the clients are hidden when dwl is locked */
+	wlr_scene_node_set_position(&locked_bg->node, sgeom.x, sgeom.y);
+	wlr_scene_rect_set_size(locked_bg, sgeom.width, sgeom.height);
 
-    /* Get the effective monitor geometry to use for surfaces */
-    wlr_output_layout_get_box(output_layout, m->wlr_output, &m->m);
-    m->w = m->m;
-    wlr_scene_output_set_position(m->scene_output, m->m.x, m->m.y);
+	wl_list_for_each(m, &mons, link) {
+		if (!m->wlr_output->enabled)
+			continue;
+		config_head = wlr_output_configuration_head_v1_create(config, m->wlr_output);
 
-    // wlr_scene_node_set_position(&m->fullscreen_bg->node, m->m.x, m->m.y);
-    // wlr_scene_rect_set_size(m->fullscreen_bg, m->m.width, m->m.height);
+		/* Get the effective monitor geometry to use for surfaces */
+		wlr_output_layout_get_box(output_layout, m->wlr_output, &m->m);
+		m->w = m->m;
+		wlr_scene_output_set_position(m->scene_output, m->m.x, m->m.y);
 
-    if (m->lock_surface) {
-      struct wlr_scene_tree *scene_tree = m->lock_surface->surface->data;
-      wlr_scene_node_set_position(&scene_tree->node, m->m.x, m->m.y);
-      wlr_session_lock_surface_v1_configure(m->lock_surface, m->m.width,
-                                            m->m.height);
-    }
+		// wlr_scene_node_set_position(&m->fullscreen_bg->node, m->m.x, m->m.y);
+		// wlr_scene_rect_set_size(m->fullscreen_bg, m->m.width, m->m.height);
 
-    /* Calculate the effective monitor geometry to use for clients */
-    arrangelayers(m);
-    /* Don't move clients to the left output when plugging monitors */
-    arrange(m, false);
-    /* make sure fullscreen clients have the right size */
-    if ((c = focustop(m)) && c->isfullscreen)
-      resize(c, m->m, 0);
+		if (m->lock_surface) {
+			struct wlr_scene_tree *scene_tree = m->lock_surface->surface->data;
+			wlr_scene_node_set_position(&scene_tree->node, m->m.x, m->m.y);
+			wlr_session_lock_surface_v1_configure(m->lock_surface, m->m.width, m->m.height);
+		}
 
-    /* Try to re-set the gamma LUT when updating monitors,
-     * it's only really needed when enabling a disabled output, but meh. */
-    m->gamma_lut_changed = 1;
+		/* Calculate the effective monitor geometry to use for clients */
+		arrangelayers(m);
+		/* Don't move clients to the left output when plugging monitors */
+		arrange(m,false);
+		/* make sure fullscreen clients have the right size */
+		if ((c = focustop(m)) && c->isfullscreen)
+			resize(c, m->m, 0);
 
-    config_head->state.x = m->m.x;
-    config_head->state.y = m->m.y;
-    if (!selmon) {
-      selmon = m;
-    }
-  }
+		/* Try to re-set the gamma LUT when updating monitors,
+		 * it's only really needed when enabling a disabled output, but meh. */
+		m->gamma_lut_changed = 1;
 
-  if (selmon && selmon->wlr_output->enabled) {
-    wl_list_for_each(c, &clients, link) {
-      if (!c->mon && client_surface(c)->mapped) {
-        setmon(c, selmon, c->tags);
-        reset_foreign_tolevel(c);
-      }
-    }
-    focusclient(focustop(selmon), 1);
-    if (selmon->lock_surface) {
-      client_notify_enter(selmon->lock_surface->surface,
-                          wlr_seat_get_keyboard(seat));
-      client_activate_surface(selmon->lock_surface->surface, 1);
-    }
-  }
+		config_head->state.x = m->m.x;
+		config_head->state.y = m->m.y;
 
-  /* FIXME: figure out why the cursor image is at 0,0 after turning all
-   * the monitors on.
-   * Move the cursor image where it used to be. It does not generate a
-   * wl_pointer.motion event for the clients, it's only the image what it's
-   * at the wrong position after all. */
-  wlr_cursor_move(cursor, NULL, 0, 0);
+		if (!selmon) {
+			selmon = m;
+		}
+	}
 
-  wlr_output_manager_v1_set_configuration(output_mgr, config);
+	if (selmon && selmon->wlr_output->enabled) {
+		wl_list_for_each(c, &clients, link) {
+			if (!c->mon && client_surface(c)->mapped)
+				setmon(c, selmon, c->tags);
+		}
+		focusclient(focustop(selmon), 1);
+		if (selmon->lock_surface) {
+			client_notify_enter(selmon->lock_surface->surface,
+					wlr_seat_get_keyboard(seat));
+			client_activate_surface(selmon->lock_surface->surface, 1);
+		}
+	}
+
+	/* FIXME: figure out why the cursor image is at 0,0 after turning all
+	 * the monitors on.
+	 * Move the cursor image where it used to be. It does not generate a
+	 * wl_pointer.motion event for the clients, it's only the image what it's
+	 * at the wrong position after all. */
+	wlr_cursor_move(cursor, NULL, 0, 0);
+
+	wlr_output_manager_v1_set_configuration(output_mgr, config);
 }
 
 void updatetitle(struct wl_listener *listener, void *data) {
