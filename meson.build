@@ -48,6 +48,7 @@ c_args = [
 if xcb.found() and xlibs.found()
   c_args += '-DXWAYLAND'
   c_args += '-DIM'
+  c_args += '-DHANDWRITE'
  endif
 
 executable('maomao',

@@ -18,6 +18,7 @@ wayland_xmls = [
 	'wlr-foreign-toplevel-management-unstable-v1.xml',
 	'dwl-ipc-unstable-v2.xml',
 	'wlr-layer-shell-unstable-v1.xml',
+	'handwrite-unstable-v1.xml',
 ]
 wayland_sources = [
 	wayland_scanner_code.process(wayland_xmls),
