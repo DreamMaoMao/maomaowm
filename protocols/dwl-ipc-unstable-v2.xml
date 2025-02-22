@@ -19,7 +19,7 @@ I would probably just submit raphi's patchset but I don't think that would be po
       reset.
   </description>
 
-  <interface name="zdwl_ipc_manager_v2" version="1">
+  <interface name="zdwl_ipc_manager_v2" version="2">
     <description summary="manage dwl state">
       This interface is exposed as a global in wl_registry.
 
@@ -60,7 +60,7 @@ I would probably just submit raphi's patchset but I don't think that would be po
     </event>
   </interface>
 
-  <interface name="zdwl_ipc_output_v2" version="1">
+  <interface name="zdwl_ipc_output_v2" version="2">
     <description summary="control dwl output">
       Observe and control a dwl output.
 
@@ -162,5 +162,20 @@ I would probably just submit raphi's patchset but I don't think that would be po
       <description summary="Set the layout of this output"/>
       <arg name="index" type="uint" summary="index of a layout recieved by dwl_ipc_manager.layout"/>
     </request>
+
+    <!-- Version 2 -->
+    <event name="fullscreen" since="2">
+      <description summary="Update fullscreen status">
+          Indicates if the selected client on this output is fullscreen.
+      </description>
+      <arg name="is_fullscreen" type="uint" summary="If the selected client is fullscreen. Nonzero is valid, zero invalid"/>
+    </event>
+
+    <event name="floating" since="2">
+      <description summary="Update the floating status">
+          Indicates if the selected client on this output is floating.
+      </description>
+      <arg name="is_floating" type="uint" summary="If the selected client is floating. Nonzero is valid, zero invalid"/>
+    </event>
   </interface>
 </protocol>
