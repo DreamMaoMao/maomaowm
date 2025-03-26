@@ -1583,6 +1583,9 @@ void // 17
 arrange(Monitor *m, bool want_animation) {
   Client *c;
 
+  if(!m)
+    return;
+
   if (!m->wlr_output->enabled)
     return;
 
