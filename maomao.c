@@ -257,6 +257,7 @@ struct Client {
   pid_t pid;
   Client *swallowing, *swallowedby;
   bool is_clip_to_hide;
+  bool need_scale_first_frame;
 };
 
 
@@ -3781,6 +3782,7 @@ mapnotify(struct wl_listener *listener, void *data) {
   c->istiled = 0;
   c->iskilling = 0;
   c->scroller_proportion = scroller_default_proportion;
+  c->need_scale_first_frame = true;
   // nop
   if (new_is_master &&
       strcmp(selmon->pertag->ltidxs[selmon->pertag->curtag]->name,
@@ -4267,19 +4269,12 @@ void snap_scene_buffer_apply_size(struct wlr_scene_buffer *buffer, int sx,
 
 void buffer_set_size(Client *c, animationScale data) {
 
-  /*
-    only scale few previous frames in zoom in. without scale, 
-    the surface may not fill window area at the beginning.
-    if scale too more frames, it can cause visual shaking
-  */
-  double animation_passed =
-      (double)c->animation.passed_frames / c->animation.total_frames;
-
   if (c->animation.current.width <= c->geom.width &&
-      c->animation.current.height <= c->geom.height && (c->animation.action != OPEN || animation_passed > 0.1)) {
+      c->animation.current.height <= c->geom.height && !c->need_scale_first_frame) {
     return;
   }
 
+  c->need_scale_first_frame = false;
 
   if (c->iskilling || c->animation.tagouting || c->animation.tagining ||
       c->animation.tagouted) {
