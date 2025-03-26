@@ -2934,7 +2934,10 @@ void
 dwl_ipc_manager_get_output(struct wl_client *client, struct wl_resource *resource, uint32_t id, struct wl_resource *output)
 {
 	DwlIpcOutput *ipc_output;
-	Monitor *monitor = wlr_output_from_resource(output)->data;
+  struct wlr_output *op = wlr_output_from_resource(output);
+  if(!op)
+    return;
+	Monitor *monitor = op->data;
 	struct wl_resource *output_resource = wl_resource_create(client, &zdwl_ipc_output_v2_interface, wl_resource_get_version(resource), id);
 	if (!output_resource)
 		return;
