@@ -2220,9 +2220,11 @@ closemon(Monitor *m)
 					.width = c->geom.width, .height = c->geom.height}, 0);
 		if (c->mon == m) {
       if(selmon == NULL) {
+        remove_foreign_topleve(c);
         c->mon = NULL;
       } else {
         setmon(c, selmon, c->tags);
+        reset_foreign_tolevel(c);
       }
     }
 	}
