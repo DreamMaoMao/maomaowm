@@ -2347,13 +2347,19 @@ void commitnotify(struct wl_listener *listener, void *data) {
   if (c == grabc)
     return;
 
-  uint32_t width, height;
-  client_actual_size(c, &width, &height);
-  if(width == c->geom.width && height == c->geom.height)
-    return;
+  uint32_t serial = c->surface.xdg->toplevel->base->current.configure_serial;
+  if(!c->dirty || serial < c->configure_serial) return;
 
-  resize(c, c->geom, (c->isfloating && !c->isfullscreen));
+  c->dirty = false;
+  c->need_output_flush = true;
+  // 判断是否需要动画
+  if (!animations || (c->animation_type_open && strcmp(c->animation_type_open,"none") == 0 && c->animation.action == OPEN)) {
+    c->animation.should_animate = false;
+  } else {
+    c->animation.should_animate = true;
+  }
 
+  client_commit(c);
 }
 
 void destroydecoration(struct wl_listener *listener, void *data) {
