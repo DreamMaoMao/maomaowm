@@ -3145,7 +3145,7 @@ void focusclient(Client *c, int lift) {
   if (c && client_surface(c) == old_keyboard_focus_surface && selmon && selmon->sel)
     return;
 
-  if (selmon && selmon->sel && selmon->sel->foreign_toplevel) {
+  if (selmon && selmon->sel && selmon->sel->foreign_toplevel && selmon->sel != c) {
     wlr_foreign_toplevel_handle_v1_set_activated(selmon->sel->foreign_toplevel,
                                                  false);
   }
