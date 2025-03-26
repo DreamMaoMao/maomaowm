@@ -3228,6 +3228,7 @@ void focusclient(Client *c, int lift) {
 }
 
 void focusmon(const Arg *arg) {
+  Client *c;
   int i = 0, nmons = wl_list_length(&mons);
   if (nmons) {
     do /* don't switch to disabled mons */
@@ -3235,7 +3236,11 @@ void focusmon(const Arg *arg) {
     while (!selmon->wlr_output->enabled && i++ < nmons);
   }
   warp_cursor_to_selmon(selmon);
-  focusclient(focustop(selmon), 1);
+  c = focustop(selmon);
+  if(!c)
+    selmon->sel = NULL;
+  else
+    focusclient(c, 1);
 }
 
 void // 17
