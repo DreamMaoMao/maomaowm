@@ -4458,7 +4458,7 @@ void set_open_animaiton(Client *c, struct wlr_box geo) {
   int vertical, vertical_value;
   int special_direction;
   int center_x, center_y;
-  if (strcmp(animation_type_open, "zoom") == 0 ||
+  if ((!c->animation_type_open && strcmp(animation_type_open, "zoom") == 0) ||
       (c->animation_type_open && strcmp(c->animation_type_open, "zoom") == 0)) {
     c->animainit_geom.width = geo.width * zoom_initial_ratio;
     c->animainit_geom.height = geo.height * zoom_initial_ratio;
