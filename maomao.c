@@ -4267,11 +4267,19 @@ void snap_scene_buffer_apply_size(struct wlr_scene_buffer *buffer, int sx,
 
 void buffer_set_size(Client *c, animationScale data) {
 
+  /*
+    only scale few previous frames in zoom in. without scale, 
+    the surface may not fill window area at the beginning.
+    if scale too more frames, it can cause visual shaking
+  */
+  double animation_passed =
+      (double)c->animation.passed_frames / c->animation.total_frames;
+
   if (c->animation.current.width <= c->geom.width &&
-      c->animation.current.height <= c->geom.height &&
-      data.height_scale == 1 && data.width_scale == 1) {
+      c->animation.current.height <= c->geom.height && (c->animation.action != OPEN || animation_passed > 0.1)) {
     return;
   }
+
 
   if (c->iskilling || c->animation.tagouting || c->animation.tagining ||
       c->animation.tagouted) {
