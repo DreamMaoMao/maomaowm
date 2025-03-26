@@ -2346,11 +2346,13 @@ void commitnotify(struct wl_listener *listener, void *data) {
   if (c == grabc)
     return;
 
-  // if don't do this, some client may resize uncompleted
+  uint32_t width, height;
+  client_actual_size(c, &width, &height);
+  if(width == c->geom.width && height == c->geom.height)
+    return;
+
   resize(c, c->geom, (c->isfloating && !c->isfullscreen));
 
-  // if (c->configure_serial && c->configure_serial <=
-  // c->surface.xdg->current.configure_serial) 	c->configure_serial = 0;
 }
 
 void destroydecoration(struct wl_listener *listener, void *data) {
