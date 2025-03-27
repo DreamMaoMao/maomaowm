@@ -1120,6 +1120,16 @@ struct uvec2 clip_to_hide(Client *c, struct wlr_box *clip_box) {
   return offset;
 }
 
+void apply_buffer_scale(Client *c, struct wlr_box clip_box ) {
+  animationScale scale_data;
+  scale_data.width = clip_box.width - 2 * c->bw;
+  scale_data.height = clip_box.height - 2 * c->bw;
+  scale_data.m = c->mon;
+  scale_data.width_scale = (float)clip_box.width / c->current.width;
+  scale_data.height_scale = (float)clip_box.height / c->current.height;
+  buffer_set_size(c, scale_data);
+}
+
 void client_apply_clip(Client *c) {
 
   if (c->iskilling || !client_surface(c)->mapped)
@@ -1136,6 +1146,7 @@ void client_apply_clip(Client *c) {
     offset = clip_to_hide(c, &clip_box);
     apply_border(c, clip_box, offset.x, offset.y);
     wlr_scene_subsurface_tree_set_clip(&c->scene_surface->node, &clip_box);
+    apply_buffer_scale(c, clip_box);
     return;
   }
 
@@ -1158,16 +1169,9 @@ void client_apply_clip(Client *c) {
 
   offset = clip_to_hide(c, &clip_box);
 
-  animationScale scale_data;
-  scale_data.width = clip_box.width - 2 * c->bw;
-  scale_data.height = clip_box.height - 2 * c->bw;
-  scale_data.m = c->mon;
   wlr_scene_subsurface_tree_set_clip(&c->scene_surface->node, &clip_box);
   apply_border(c, clip_box, offset.x, offset.y);
-
-  scale_data.width_scale = (float)clip_box.width / c->current.width;
-  scale_data.height_scale = (float)clip_box.height / c->current.height;
-  buffer_set_size(c, scale_data);
+  apply_buffer_scale(c,clip_box);
 }
 
 bool client_draw_frame(Client *c) {
@@ -3800,7 +3804,6 @@ mapnotify(struct wl_listener *listener, void *data) {
   c->istiled = 0;
   c->iskilling = 0;
   c->scroller_proportion = scroller_default_proportion;
-  c->need_scale_first_frame = true;
   // nop
   if (new_is_master &&
       strcmp(selmon->pertag->ltidxs[selmon->pertag->curtag]->name,
@@ -4559,6 +4562,8 @@ void resize(Client *c, struct wlr_box geo, int interact) {
 
   // wl_event_source_timer_update(c->timer_tick, 10);
   c->need_output_flush = true;
+  c->need_scale_first_frame = true;
+
   // oldgeom = c->geom;
   bbox = interact ? &sgeom : &c->mon->w;
 
