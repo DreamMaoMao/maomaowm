@@ -993,6 +993,7 @@ void client_animation_next_tick(Client *c) {
   }
 
   c->is_open_animation = false;
+  c->animation.tagining = false;
 
   if (animation_passed == 1.0) {
     if (c->animation.begin_fade_in) {
@@ -1000,10 +1001,6 @@ void client_animation_next_tick(Client *c) {
     }
 
     c->animation.running = false;
-
-    if (c->animation.tagining) {
-      c->animation.tagining = false;
-    }
 
     if (c->animation.tagouting) {
       c->animation.tagouting = false;
@@ -2362,7 +2359,7 @@ void commitnotify(struct wl_listener *listener, void *data) {
     return;
   }
 
-  if (!c || c->iskilling || c->animation.tagining || c->animation.tagining ||
+  if (!c || c->iskilling || c->animation.tagouting ||
       c->animation.tagouted)
     return;
 
@@ -4299,7 +4296,7 @@ void buffer_set_size(Client *c, animationScale data) {
 
   c->need_scale_first_frame = false;
 
-  if (c->iskilling || c->animation.tagouting || c->animation.tagining ||
+  if (c->iskilling || c->animation.tagouting ||
       c->animation.tagouted) {
     return;
   }
