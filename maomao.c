@@ -2366,7 +2366,7 @@ void commitnotify(struct wl_listener *listener, void *data) {
   }
 
   if (!c || c->iskilling || c->animation.tagouting ||
-      c->animation.tagouted)
+      c->animation.tagouted || c->animation.tagining)
     return;
 
   if (c == grabc)
@@ -4305,7 +4305,7 @@ void snap_scene_buffer_apply_size(struct wlr_scene_buffer *buffer, int sx,
 void buffer_set_size(Client *c, animationScale data) {
 
   if (c->iskilling || c->animation.tagouting ||
-      c->animation.tagouted) {
+      c->animation.tagouted || c->animation.tagining) {
     return;
   }
 
