@@ -4276,15 +4276,6 @@ void scene_buffer_apply_size(struct wlr_scene_buffer *buffer, int sx, int sy,
   surface_width *= scale_data->width_scale;
   surface_height *= scale_data->height_scale;
 
-  // ignore the few last frames scale
-  if((scale_data->width_scale > 0.99 && scale_data->width_scale <= 1)
-  ||(scale_data->width_scale < 1.09 && scale_data->width_scale >= 1))
-    scale_data->width_scale = 1;
-  if((scale_data->height_scale > 0.99 && scale_data->height_scale <= 1)||
-  (scale_data->height_scale < 1.09  && scale_data->height_scale >= 1))
-    scale_data->height_scale = 1;
-    
-
   if (wlr_subsurface_try_from_wlr_surface(surface) != NULL && 
       surface_width <= scale_data->m->m.width && 
       surface_height <= scale_data->m->m.height &&
