@@ -1397,6 +1397,9 @@ void gpureset(struct wl_listener *listener, void *data) {
   struct wlr_renderer *old_drw = drw;
   struct wlr_allocator *old_alloc = alloc;
   struct Monitor *m;
+
+  wlr_log(WLR_DEBUG, "gpu reset");
+
   if (!(drw = wlr_renderer_autocreate(backend)))
     die("couldn't recreate renderer");
 
