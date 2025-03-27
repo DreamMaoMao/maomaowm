@@ -4580,6 +4580,10 @@ void resize(Client *c, struct wlr_box geo, int interact) {
         c, bbox); // 去掉这个推荐的窗口大小,因为有时推荐的窗口特别大导致平铺异常
   }
 
+  if(c->geom.width <0 || c->geom.height <0) {
+    return;
+  }
+
   if (!c->is_open_animation) {
     c->animation.begin_fade_in = false;
     client_set_opacity(c, 1);
