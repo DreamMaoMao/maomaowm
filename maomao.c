@@ -767,6 +767,11 @@ struct vec2 {
   double x, y;
 };
 
+
+struct uvec2 {
+  int x, y;
+};
+
 #define BAKED_POINTS_COUNT 256
 
 struct vec2 *baked_points_move;
@@ -1071,27 +1076,71 @@ void apply_border(Client *c, struct wlr_box clip_box, int offsetx,
       &c->border[3]->node, clip_box.width - c->bw + offsetx, c->bw + offsety);
 }
 
+struct uvec2 clip_to_hide(Client *c, struct wlr_box *clip_box) {
+  int offsetx=0;
+  int offsety=0;
+  struct uvec2 offset;
+
+  // // make tagout tagin animations not visible in other monitors
+  if (c->istiled) {
+    if (c->animation.current.x <= c->mon->m.x) {
+      offsetx = c->mon->m.x - c->animation.current.x;
+      clip_box->x = clip_box->x + offsetx;
+      clip_box->width = clip_box->width - offsetx;
+    } else if (c->animation.current.x + c->animation.current.width >=
+               c->mon->m.x + c->mon->m.width) {
+      clip_box->width = clip_box->width -
+                       (c->animation.current.x + c->animation.current.width -
+                        c->mon->m.x - c->mon->m.width);
+    }
+
+    if (c->animation.current.y <= c->mon->m.y) {
+      offsety = c->mon->m.y - c->animation.current.y;
+      clip_box->y = clip_box->y + offsety;
+      clip_box->height = clip_box->height - offsety;
+    } else if (c->animation.current.y + c->animation.current.height >=
+               c->mon->m.y + c->mon->m.height) {
+      clip_box->height = clip_box->height -
+                        (c->animation.current.y + c->animation.current.height -
+                         c->mon->m.y - c->mon->m.height);
+    }
+  }
+
+  offset.x = offsetx;
+  offset.y = offsety;
+
+  if((clip_box->width <= 0 || clip_box->height <= 0) && (c->istiled)) {
+    c->is_clip_to_hide = true;
+    wlr_scene_node_set_enabled(&c->scene->node, false);
+  } else if(c->is_clip_to_hide && VISIBLEON(c, c->mon)) {
+    c->is_clip_to_hide = false;
+    wlr_scene_node_set_enabled(&c->scene->node, true);
+  }
+
+  return offset;
+}
+
 void client_apply_clip(Client *c) {
 
   if (c->iskilling || !client_surface(c)->mapped)
     return;
   struct wlr_box clip_box;
+  struct uvec2 offset;
 
   if (!animations) {
     c->animation.running = false;
     c->need_output_flush = false;
     c->animainit_geom = c->current = c->pending = c->animation.current =
         c->geom;
-    apply_border(c, c->geom, 0, 0);
     client_get_clip(c, &clip_box);
+    offset = clip_to_hide(c, &clip_box);
+    apply_border(c, clip_box, offset.x, offset.y);
     wlr_scene_subsurface_tree_set_clip(&c->scene_surface->node, &clip_box);
     return;
   }
 
   uint32_t width, height;
   client_actual_size(c, &width, &height);
-  int offsetx = 0;
-  int offsety = 0;
 
   struct wlr_box geometry;
   client_get_geometry(c, &geometry);
@@ -1107,45 +1156,14 @@ void client_apply_clip(Client *c) {
     clip_box.y = 0;
   }
 
-  // // make tagout tagin animations not visible in other monitors
-  if (c->istiled) {
-    if (c->animation.current.x <= c->mon->m.x) {
-      offsetx = c->mon->m.x - c->animation.current.x;
-      clip_box.x = clip_box.x + offsetx;
-      clip_box.width = clip_box.width - offsetx;
-    } else if (c->animation.current.x + c->animation.current.width >=
-               c->mon->m.x + c->mon->m.width) {
-      clip_box.width = clip_box.width -
-                       (c->animation.current.x + c->animation.current.width -
-                        c->mon->m.x - c->mon->m.width);
-    }
+  offset = clip_to_hide(c, &clip_box);
 
-    if (c->animation.current.y <= c->mon->m.y) {
-      offsety = c->mon->m.y - c->animation.current.y;
-      clip_box.y = clip_box.y + offsety;
-      clip_box.height = clip_box.height - offsety;
-    } else if (c->animation.current.y + c->animation.current.height >=
-               c->mon->m.y + c->mon->m.height) {
-      clip_box.height = clip_box.height -
-                        (c->animation.current.y + c->animation.current.height -
-                         c->mon->m.y - c->mon->m.height);
-    }
-  }
-
-  if((clip_box.width <= 0 || clip_box.height <= 0) && (c->istiled)) {
-    c->is_clip_to_hide = true;
-    wlr_scene_node_set_enabled(&c->scene->node, false);
-    return;
-  } else if(c->is_clip_to_hide && VISIBLEON(c, c->mon)) {
-    c->is_clip_to_hide = false;
-    wlr_scene_node_set_enabled(&c->scene->node, true);
-  }
   animationScale scale_data;
   scale_data.width = clip_box.width - 2 * c->bw;
   scale_data.height = clip_box.height - 2 * c->bw;
   scale_data.m = c->mon;
   wlr_scene_subsurface_tree_set_clip(&c->scene_surface->node, &clip_box);
-  apply_border(c, clip_box, offsetx, offsety);
+  apply_border(c, clip_box, offset.x, offset.y);
 
   scale_data.width_scale = (float)clip_box.width / c->current.width;
   scale_data.height_scale = (float)clip_box.height / c->current.height;
