@@ -2320,7 +2320,15 @@ void client_set_pending_state(Client *c) {
 }
 
 double output_frame_duration_ms(Client *c) {
-  return 1000000.0 / c->mon->wlr_output->refresh;
+  int32_t refresh_total  = 0;
+  Monitor *m;
+  wl_list_for_each(m, &mons, link) {
+    if (!m->wlr_output->enabled) {
+      continue;
+    }
+    refresh_total += m->wlr_output->refresh;
+  }
+  return 1000000.0 / refresh_total;
 }
 
 void client_commit(Client *c) {
