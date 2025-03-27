@@ -4282,7 +4282,7 @@ void scene_buffer_apply_size(struct wlr_scene_buffer *buffer, int sx, int sy,
       surface_height <= scale_data->m->m.height &&
       surface_height > 0 && surface_width > 0) {
     wlr_scene_buffer_set_dest_size(buffer, surface_width, surface_height);
-  } else {
+  } else if(scale_data->width >0 && scale_data->height > 0) {
     wlr_scene_buffer_set_dest_size(buffer, scale_data->width,
                                    scale_data->height);
   }
