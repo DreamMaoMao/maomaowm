@@ -256,7 +256,6 @@ struct Client {
   pid_t pid;
   Client *swallowing, *swallowedby;
   bool is_clip_to_hide;
-  bool need_scale_first_frame;
 };
 
 
@@ -4276,6 +4275,15 @@ void scene_buffer_apply_size(struct wlr_scene_buffer *buffer, int sx, int sy,
   surface_width *= scale_data->width_scale;
   surface_height *= scale_data->height_scale;
 
+  // ignore the few last frames scale
+  if((scale_data->width_scale > 0.99 && scale_data->width_scale <= 1)
+  ||(scale_data->width_scale < 1.09 && scale_data->width_scale >= 1))
+    scale_data->width_scale = 1;
+  if((scale_data->height_scale > 0.99 && scale_data->height_scale <= 1)||
+  (scale_data->height_scale < 1.09  && scale_data->height_scale >= 1))
+    scale_data->height_scale = 1;
+    
+
   if (wlr_subsurface_try_from_wlr_surface(surface) != NULL && 
       surface_width <= scale_data->m->m.width && 
       surface_height <= scale_data->m->m.height &&
@@ -4294,13 +4302,6 @@ void snap_scene_buffer_apply_size(struct wlr_scene_buffer *buffer, int sx,
 }
 
 void buffer_set_size(Client *c, animationScale data) {
-
-  if (c->animation.current.width <= c->geom.width &&
-      c->animation.current.height <= c->geom.height && (!c->need_scale_first_frame)) {
-    return;
-  }
-
-  c->need_scale_first_frame = false;
 
   if (c->iskilling || c->animation.tagouting ||
       c->animation.tagouted) {
@@ -4567,7 +4568,6 @@ void resize(Client *c, struct wlr_box geo, int interact) {
 
   // wl_event_source_timer_update(c->timer_tick, 10);
   c->need_output_flush = true;
-  c->need_scale_first_frame = true;
 
   // oldgeom = c->geom;
   bbox = interact ? &sgeom : &c->mon->w;
