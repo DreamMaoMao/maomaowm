@@ -1146,7 +1146,7 @@ void client_apply_clip(Client *c) {
     offset = clip_to_hide(c, &clip_box);
     apply_border(c, clip_box, offset.x, offset.y);
     wlr_scene_subsurface_tree_set_clip(&c->scene_surface->node, &clip_box);
-    apply_buffer_scale(c, clip_box);
+    /* apply_buffer_scale(c, clip_box); */
     return;
   }
 
@@ -2328,7 +2328,7 @@ double output_frame_duration_ms(Client *c) {
 }
 
 void client_commit(Client *c) {
-  c->dirty = false;
+  /* c->dirty = false; */
   c->current = c->pending; // 设置动画的结束位置
 
   if (c->animation.should_animate) {
@@ -2369,12 +2369,15 @@ void commitnotify(struct wl_listener *listener, void *data) {
   if (c == grabc)
     return;
 
-  uint32_t width, height;
-  client_actual_size(c, &width, &height);
-  if(width == c->geom.width && height == c->geom.height)
+  if(!c->dirty)
     return;
 
   resize(c, c->geom, (c->isfloating && !c->isfullscreen));
+
+  uint32_t width, height;
+  client_actual_size(c, &width, &height);
+  if(width == c->geom.width && height == c->geom.height)
+    c->dirty = false;
 
 }
 
@@ -4270,7 +4273,6 @@ void scene_buffer_apply_size(struct wlr_scene_buffer *buffer, int sx, int sy,
   surface_width *= scale_data->width_scale;
   surface_height *= scale_data->height_scale;
 
-
   if (wlr_subsurface_try_from_wlr_surface(surface) != NULL && 
       surface_width <= scale_data->m->m.width && 
       surface_height <= scale_data->m->m.height &&
@@ -4291,7 +4293,7 @@ void snap_scene_buffer_apply_size(struct wlr_scene_buffer *buffer, int sx,
 void buffer_set_size(Client *c, animationScale data) {
 
   if (c->animation.current.width <= c->geom.width &&
-      c->animation.current.height <= c->geom.height && !c->need_scale_first_frame) {
+      c->animation.current.height <= c->geom.height && (!c->need_scale_first_frame)) {
     return;
   }
 
