@@ -2375,6 +2375,7 @@ void commitnotify(struct wl_listener *listener, void *data) {
   if(!c->dirty)
     return;
 
+	wlr_log(WLR_DEBUG, "app commit event handle:%s",client_get_appid(c));
   resize(c, c->geom, (c->isfloating && !c->isfullscreen));
 
   uint32_t width, height;
