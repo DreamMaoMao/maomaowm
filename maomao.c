@@ -996,7 +996,8 @@ void client_animation_next_tick(Client *c) {
     if (c->animation.begin_fade_in) {
       c->animation.begin_fade_in = false;
     }
-
+    
+    c->animation.tagining = false;
     c->animation.running = false;
 
     if (c->animation.tagouting) {
