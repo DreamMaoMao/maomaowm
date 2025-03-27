@@ -251,7 +251,6 @@ struct Client {
   float scroller_proportion;
   bool need_output_flush;
   struct dwl_animation animation;
-  bool is_fadeout_client;
   int isterm, noswallow;
   // struct wl_event_source *timer_tick;
   pid_t pid;
@@ -6240,7 +6239,6 @@ void init_fadeout_client(Client *c) {
   fadeout_cient->animation.passed_frames = 0;
   fadeout_cient->animation.total_frames =
       fadeout_cient->animation.duration / output_frame_duration_ms(c);
-  fadeout_cient->is_fadeout_client = true;
   wlr_scene_node_set_enabled(&fadeout_cient->scene->node, true);
   wl_list_insert(&fadeout_clients, &fadeout_cient->fadeout_link);
 }
@@ -6250,8 +6248,6 @@ void unmapnotify(struct wl_listener *listener, void *data) {
   /* Called when the surface is unmapped, and should no longer be shown. */
   Client *c = wl_container_of(listener, c, unmap);
   c->iskilling = 1;
-  if (c->is_fadeout_client)
-    return;
 
   if (animations)
     init_fadeout_client(c);
