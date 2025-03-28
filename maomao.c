@@ -6212,6 +6212,10 @@ void init_fadeout_client(Client *c) {
     return;
   }
 
+  if(c->animation_type_close && strcmp(c->animation_type_close, "none") == 0) {
+    return;
+  }
+
   Client *fadeout_cient = ecalloc(1, sizeof(*fadeout_cient));
 
   wlr_scene_node_set_enabled(&c->scene->node, true);
