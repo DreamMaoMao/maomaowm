@@ -256,6 +256,7 @@ struct Client {
   pid_t pid;
   Client *swallowing, *swallowedby;
   bool is_clip_to_hide;
+  bool need_scale_first_frame;
 };
 
 
@@ -4299,6 +4300,14 @@ void snap_scene_buffer_apply_size(struct wlr_scene_buffer *buffer, int sx,
 
 void buffer_set_size(Client *c, animationScale data) {
 
+  if (c->animation.current.width <= c->geom.width &&
+      c->animation.current.height <= c->geom.height && !c->need_scale_first_frame) {
+    return;
+  }
+
+  c->need_scale_first_frame = false;
+
+
   if (c->iskilling || c->animation.tagouting ||
       c->animation.tagouted || c->animation.tagining) {
     return;
@@ -4564,6 +4573,7 @@ void resize(Client *c, struct wlr_box geo, int interact) {
 
   // wl_event_source_timer_update(c->timer_tick, 10);
   c->need_output_flush = true;
+  c->need_scale_first_frame = true;
 
   // oldgeom = c->geom;
   bbox = interact ? &sgeom : &c->mon->w;
