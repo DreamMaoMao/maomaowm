@@ -1272,6 +1272,9 @@ void remove_foreign_topleve(Client *c) {
 }
 
 void add_foreign_toplevel(Client *c) {
+  if(!c || !c->mon || !c->mon->wlr_output || !c->mon->wlr_output->enabled)
+    return;
+
   c->foreign_toplevel =
       wlr_foreign_toplevel_handle_v1_create(foreign_toplevel_manager);
   // 监听来自外部对于窗口的事件请求
@@ -1358,6 +1361,7 @@ swallow(Client *c, Client *w)
   c->ismaxmizescreen = w->ismaxmizescreen;
 	c->tags = w->tags;
 	c->geom = w->geom;
+  c->mon = w->mon;
   c->scroller_proportion = w->scroller_proportion;
 	wl_list_insert(&w->link, &c->link);
 	wl_list_insert(&w->flink, &c->flink);
