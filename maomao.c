@@ -3815,6 +3815,7 @@ mapnotify(struct wl_listener *listener, void *data) {
   c->istiled = 0;
   c->iskilling = 0;
   c->scroller_proportion = scroller_default_proportion;
+  c->need_scale_first_frame = true;
   // nop
   if (new_is_master &&
       strcmp(selmon->pertag->ltidxs[selmon->pertag->curtag]->name,
@@ -4573,7 +4574,6 @@ void resize(Client *c, struct wlr_box geo, int interact) {
 
   // wl_event_source_timer_update(c->timer_tick, 10);
   c->need_output_flush = true;
-  c->need_scale_first_frame = true;
 
   // oldgeom = c->geom;
   bbox = interact ? &sgeom : &c->mon->w;
