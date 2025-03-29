@@ -1179,61 +1179,60 @@ void override_config(void) {
 
 void set_value_default() {
   /* animaion */
-  config.animations = 1;             // 是否启用动画
-  config.animation_fade_in = 1;      // Enable animation fade in
-  config.zoom_initial_ratio = 0.5;   // 动画起始窗口比例
-  config.fadein_begin_opacity = 0.5; // Begin opac window ratio for animations
-  config.fadeout_begin_opacity = 0.5;
-  config.animation_duration_move = 500;  // Animation move speed
-  config.animation_duration_open = 400;  // Animation open speed
-  config.animation_duration_tag = 300;   // Animation tag speed
-  config.animation_duration_close = 300; // Animation tag speed
+  config.animations = animations;             // 是否启用动画
+  config.animation_fade_in = animation_fade_in;      // Enable animation fade in
+  config.zoom_initial_ratio = zoom_initial_ratio;   // 动画起始窗口比例
+  config.fadein_begin_opacity = fadein_begin_opacity; // Begin opac window ratio for animations
+  config.fadeout_begin_opacity = fadeout_begin_opacity;
+  config.animation_duration_move = animation_duration_move;  // Animation move speed
+  config.animation_duration_open = animation_duration_open;  // Animation open speed
+  config.animation_duration_tag = animation_duration_tag;   // Animation tag speed
+  config.animation_duration_close = animation_duration_close; // Animation tag speed
 
   /* appearance */
-  config.axis_bind_apply_timeout = 100; // 滚轮绑定动作的触发的时间间隔
-  config.focus_on_activate = 1;         // 收到窗口激活请求是否自动跳转聚焦
-  config.new_is_master = 1;             // 新窗口是否插在头部
-  config.default_mfact = 0.55f;         // master 窗口比例
-  config.default_smfact = 0.5f;         // 第一个stack比例
-  config.default_nmaster = 1;           // 默认master数量
+  config.axis_bind_apply_timeout = axis_bind_apply_timeout; // 滚轮绑定动作的触发的时间间隔
+  config.focus_on_activate = focus_on_activate;         // 收到窗口激活请求是否自动跳转聚焦
+  config.new_is_master = new_is_master;             // 新窗口是否插在头部
+  config.default_mfact = default_mfact;         // master 窗口比例
+  config.default_smfact = default_smfact;         // 第一个stack比例
+  config.default_nmaster = default_nmaster;           // 默认master数量
 
-  config.numlockon = 1; // 是否打开右边小键盘
+  config.numlockon = numlockon; // 是否打开右边小键盘
 
-  config.ov_tab_mode = 0;    // alt tab切换模式
-  config.hotarea_size = 10;  // 热区大小,10x10
-  config.enable_hotarea = 1; // 是否启用鼠标热区
-  config.smartgaps = 0; /* 1 means no outer gap when there is only one window */
-  config.sloppyfocus = 1; /* focus follows mouse */
-  config.gappih = 5;      /* horiz inner gap between windows */
-  config.gappiv = 5;      /* vert inner gap between windows */
-  config.gappoh = 10;     /* horiz outer gap between windows and screen edge */
-  config.gappov = 10;     /* vert outer gap between windows and screen edge */
+  config.ov_tab_mode = ov_tab_mode;    // alt tab切换模式
+  config.hotarea_size = hotarea_size;  // 热区大小,10x10
+  config.enable_hotarea = enable_hotarea; // 是否启用鼠标热区
+  config.smartgaps = smartgaps; /* 1 means no outer gap when there is only one window */
+  config.sloppyfocus = sloppyfocus; /* focus follows mouse */
+  config.gappih = gappih;      /* horiz inner gap between windows */
+  config.gappiv = gappiv;      /* vert inner gap between windows */
+  config.gappoh = gappoh;     /* horiz outer gap between windows and screen edge */
+  config.gappov = gappov;     /* vert outer gap between windows and screen edge */
 
-  config.scroller_structs = 20;
-  config.scroller_default_proportion = 0.9;
-  config.scoller_focus_center = 0;
-  config.focus_cross_monitor = 0;
+  config.scroller_structs = scroller_structs;
+  config.scroller_default_proportion = scroller_default_proportion;
+  config.scoller_focus_center = scoller_focus_center;
+  config.focus_cross_monitor = focus_cross_monitor;
 
-  config.bypass_surface_visibility =
-      0; /* 1 means idle inhibitors will disable idle tracking even if it's
-            surface isn't visible  */
+  config.bypass_surface_visibility = bypass_surface_visibility; /* 1 means idle inhibitors will disable idle tracking even if it's surface isn't visible  */
 
-  config.overviewgappi = 5;  /* overview时 窗口与边缘 缝隙大小 */
-  config.overviewgappo = 30; /* overview时 窗口与窗口 缝隙大小 */
+  config.borderpx = borderpx;
+  config.overviewgappi = overviewgappi;  /* overview时 窗口与边缘 缝隙大小 */
+  config.overviewgappo = overviewgappo; /* overview时 窗口与窗口 缝隙大小 */
 
-  config.warpcursor = 1; /* Warp cursor to focused client */
+  config.warpcursor = warpcursor; /* Warp cursor to focused client */
 
-  config.repeat_rate = 25;
-  config.repeat_delay = 600;
+  config.repeat_rate = repeat_rate;
+  config.repeat_delay = repeat_delay;
 
   /* Trackpad */
-  config.tap_to_click = 1;
-  config.tap_and_drag = 1;
-  config.drag_lock = 1;
-  config.natural_scrolling = 0;
-  config.disable_while_typing = 1;
-  config.left_handed = 0;
-  config.middle_button_emulation = 0;
+  config.tap_to_click = tap_to_click;
+  config.tap_and_drag = tap_and_drag;
+  config.drag_lock = drag_lock;
+  config.natural_scrolling = natural_scrolling;
+  config.disable_while_typing = disable_while_typing;
+  config.left_handed = left_handed;
+  config.middle_button_emulation = middle_button_emulation;
 
   memcpy(config.animation_curve_move, animation_curve_move,
          sizeof(animation_curve_move));
@@ -1243,6 +1242,15 @@ void set_value_default() {
          sizeof(animation_curve_tag));
   memcpy(config.animation_curve_close, animation_curve_close,
    sizeof(animation_curve_close));
+
+  memcpy(config.rootcolor, rootcolor, sizeof(rootcolor));
+  memcpy(config.bordercolor, bordercolor, sizeof(bordercolor));
+  memcpy(config.focuscolor, focuscolor, sizeof(focuscolor));
+  memcpy(config.maxmizescreencolor, maxmizescreencolor,
+         sizeof(maxmizescreencolor));
+  memcpy(config.urgentcolor, urgentcolor, sizeof(urgentcolor));
+  memcpy(config.scratchpadcolor, scratchpadcolor, sizeof(scratchpadcolor));
+  memcpy(config.globalcolor, globalcolor, sizeof(globalcolor));
 }
 
 void parse_config(void) {
