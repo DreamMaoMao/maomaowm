@@ -5532,13 +5532,12 @@ void tag(const Arg *arg) {
 
 void tagmon(const Arg *arg) {
   Client *c = focustop(selmon);
-  Client *fc;
   Monitor *m;
   if (c) {
+    if(c == selmon->sel) {
+      selmon->sel = NULL;
+    }
     m = dirtomon(arg->i);
-    fc = focustop(selmon);
-    if(!fc)
-      selmon->sel = c;
     setmon(c, m, 0);
     reset_foreign_tolevel(c);
     // 重新计算居中的坐标
@@ -5548,13 +5547,14 @@ void tagmon(const Arg *arg) {
         (int)(c->geom.height * c->mon->w.height / selmon->w.height);
       selmon = c->mon;
       c->geom = setclient_coordinate_center(c->geom);
+      focusclient(c, 1);
       resize(c, c->geom, 1);
     } else {
       selmon = c->mon;
+      focusclient(c, 1);
       arrange(selmon, false);
     }
     warp_cursor_to_selmon(c->mon);
-    focusclient(c, 1);
   }
 }
 
