@@ -3195,8 +3195,8 @@ void focusclient(Client *c, int lift) {
   if (selmon) {
     selmon->prevsel = selmon->sel;
     selmon->sel = c;
-    if (c && selmon->prevsel && selmon->prevsel->istiled &&
-        selmon->prevsel->tags == c->tags && c->istiled && !c->isfloating &&
+    if (c && selmon->prevsel && !selmon->prevsel->isfloating &&
+        selmon->prevsel->tags == c->tags && !c->isfloating &&
         !c->isfullscreen &&
         strcmp(selmon->pertag->ltidxs[selmon->pertag->curtag]->name,
                "scroller") == 0) {
@@ -5796,11 +5796,11 @@ void scroller(Monitor *m, unsigned int gappo, unsigned int gappi) {
     return;
   }
 
-  if (m->sel && m->sel->istiled && !c->ismaxmizescreen &&
-      !c->isfullscreen) {
+  if (m->sel && !m->sel->isfloating && !m->sel->ismaxmizescreen &&
+      !m->sel->isfullscreen) {
     root_client = m->sel;
-  } else if (m->prevsel && m->prevsel->istiled &&
-             !c->ismaxmizescreen && !c->isfullscreen) {
+  } else if (m->prevsel && !m->prevsel->isfloating &&
+             !m->prevsel->ismaxmizescreen && !m->prevsel->isfullscreen) {
     root_client = m->prevsel;
   } else {
     wl_list_for_each(c, &clients, link) {
