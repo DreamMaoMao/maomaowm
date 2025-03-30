@@ -1374,6 +1374,8 @@ swallow(Client *c, Client *w)
 
   if(!c->foreign_toplevel && c->mon)
     add_foreign_toplevel(c);
+  
+  focusclient(c, true);
 }
 
 void toggle_scratchpad(const Arg *arg) {
