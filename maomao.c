@@ -5758,7 +5758,7 @@ void scroller(Monitor *m, unsigned int gappo, unsigned int gappi) {
   wl_list_for_each(c, &clients, link) {
     if (VISIBLEON(c, c->mon) && !c->isfloating && !c->isfullscreen &&
         !c->ismaxmizescreen && !c->iskilling && !c->animation.tagouting &&
-        c->mon == selmon) {
+        c->mon == m) {
       n++;
     }
   }
@@ -5779,7 +5779,7 @@ void scroller(Monitor *m, unsigned int gappo, unsigned int gappi) {
   wl_list_for_each(c, &clients, link) {
     if (VISIBLEON(c, c->mon) && !c->isfloating && !c->isfullscreen &&
         !c->ismaxmizescreen && !c->iskilling && !c->animation.tagouting &&
-        c->mon == selmon) {
+        c->mon == m) {
       tempClients[n] = c;
       n++;
     }
@@ -5796,12 +5796,12 @@ void scroller(Monitor *m, unsigned int gappo, unsigned int gappi) {
     return;
   }
 
-  if (selmon->sel && selmon->sel->istiled && !c->ismaxmizescreen &&
+  if (m->sel && m->sel->istiled && !c->ismaxmizescreen &&
       !c->isfullscreen) {
-    root_client = selmon->sel;
-  } else if (selmon->prevsel && selmon->prevsel->istiled &&
+    root_client = m->sel;
+  } else if (m->prevsel && m->prevsel->istiled &&
              !c->ismaxmizescreen && !c->isfullscreen) {
-    root_client = selmon->prevsel;
+    root_client = m->prevsel;
   } else {
     wl_list_for_each(c, &clients, link) {
       if (c->iskilling)
@@ -5831,8 +5831,8 @@ void scroller(Monitor *m, unsigned int gappo, unsigned int gappi) {
   target_geom.y = m->w.y + (m->w.height - target_geom.height) / 2;
 
   if (need_scroller) {
-    if (scoller_focus_center || selmon->prevsel == NULL ||
-        (selmon->prevsel->scroller_proportion * max_client_width) +
+    if (scoller_focus_center || m->prevsel == NULL ||
+        (m->prevsel->scroller_proportion * max_client_width) +
                 (root_client->scroller_proportion * max_client_width) >
             m->w.width - 2 * scroller_structs - gappih) {
       target_geom.x = m->w.x + (m->w.width - target_geom.width) / 2;
