@@ -86,6 +86,7 @@
 #define MIN(A, B) ((A) < (B) ? (A) : (B))
 #define GEZERO(A) ((A) >= 0 ? (A) : 0)
 #define CLEANMASK(mask) (mask & ~WLR_MODIFIER_CAPS)
+#define ISTILED(A) (!(A)->isfloating && !(A)->isminied && !(A)->iskilling && !(A)->isfloating && !(A)->ismaxmizescreen && !(A)->isfullscreen)
 #define VISIBLEON(C, M)                                                        \
   ((M) && (C)->mon == (M) && ((C)->tags & (M)->tagset[(M)->seltags]))
 #define LENGTH(X) (sizeof X / sizeof X[0])
@@ -220,7 +221,7 @@ struct Client {
   bool dirty;
   uint32_t configure_serial;
   struct wlr_foreign_toplevel_handle_v1 *foreign_toplevel;
-  int isfloating, isurgent, isfullscreen, istiled, isminied;
+  int isfloating, isurgent, isfullscreen, need_float_size_reduce, isminied;
   int ismaxmizescreen;
   int overview_backup_bw;
   int fullscreen_backup_x, fullscreen_backup_y, fullscreen_backup_w,
@@ -1050,7 +1051,7 @@ void apply_border(Client *c, struct wlr_box clip_box, int offsetx,
   wlr_scene_node_set_position(&c->border[3]->node, clip_box.width - c->bw,
                               c->bw);
 
-  if (c->istiled) {
+  if (ISTILED(c)) {
     if (c->animation.current.x < c->mon->m.x) {
       set_rect_size(c->border[2], 0, 0);
     } else if (c->animation.current.x + c->animation.current.width >
@@ -1078,7 +1079,7 @@ struct uvec2 clip_to_hide(Client *c, struct wlr_box *clip_box) {
   struct uvec2 offset;
 
   // // make tagout tagin animations not visible in other monitors
-  if (c->istiled) {
+  if (ISTILED(c)) {
     if (c->animation.current.x <= c->mon->m.x) {
       offsetx = c->mon->m.x - c->animation.current.x;
       clip_box->x = clip_box->x + offsetx;
@@ -1105,7 +1106,7 @@ struct uvec2 clip_to_hide(Client *c, struct wlr_box *clip_box) {
   offset.x = offsetx;
   offset.y = offsety;
 
-  if((clip_box->width <= 0 || clip_box->height <= 0) && (c->istiled)) {
+  if((clip_box->width <= 0 || clip_box->height <= 0) && ISTILED(c)) {
     c->is_clip_to_hide = true;
     wlr_scene_node_set_enabled(&c->scene->node, false);
   } else if(c->is_clip_to_hide && VISIBLEON(c, c->mon)) {
@@ -3816,7 +3817,7 @@ mapnotify(struct wl_listener *listener, void *data) {
   c->geom.height += 2 * c->bw;
   c->ismaxmizescreen = 0;
   c->isfullscreen = 0;
-  c->istiled = 0;
+  c->need_float_size_reduce = 0;
   c->iskilling = 0;
   c->scroller_proportion = scroller_default_proportion;
   c->need_scale_first_frame = true;
@@ -3828,7 +3829,7 @@ mapnotify(struct wl_listener *listener, void *data) {
     wl_list_insert(&clients, &c->link); // 新窗口是master,头部入栈
   else if (strcmp(selmon->pertag->ltidxs[selmon->pertag->curtag]->name,
                   "scroller") == 0 &&
-           selmon->sel && selmon->sel->istiled) {
+           selmon->sel && ISTILED(selmon->sel)) {
     selmon->sel->link.next->prev = &c->link;
     c->link.prev = &selmon->sel->link;
     c->link.next = selmon->sel->link.next;
@@ -4766,7 +4767,7 @@ setfloating(Client *c, int floating) {
   target_box = c->geom;
 
   if (floating == 1 && c != grabc) {
-    if (c->istiled && !c->swallowing && !c->is_open_animation) {
+    if (c->need_float_size_reduce && !c->swallowing && !c->is_open_animation) {
       target_box.height = target_box.height * 0.8;
       target_box.width = target_box.width * 0.8;
     }
@@ -4781,11 +4782,11 @@ setfloating(Client *c, int floating) {
     } else {
       resize(c, target_box, 0);
     }
-    c->istiled = 0;
+    c->need_float_size_reduce = 0;
   } else if(c->isfloating && c == grabc) {
-    c->istiled = 0;
+    c->need_float_size_reduce = 0;
   } else {
-    c->istiled = 1;
+    c->need_float_size_reduce = 1;
     c->is_scratchpad_show = 0;
     c->is_in_scratchpad = 0;
     // 让当前tag中的全屏窗口退出全屏参与平铺
