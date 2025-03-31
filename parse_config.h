@@ -92,7 +92,8 @@ typedef struct {
 
   int scroller_structs;
   float scroller_default_proportion;
-  int scoller_focus_center;
+  int scroller_focus_center;
+  int scroller_prefer_center;
   int focus_cross_monitor;
   float *scroller_proportion_preset;
   int scroller_proportion_preset_count;
@@ -551,8 +552,10 @@ void parse_config_line(Config *config, const char *line) {
     config->scroller_structs = atoi(value);
   } else if (strcmp(key, "scroller_default_proportion") == 0) {
     config->scroller_default_proportion = atof(value);
-  } else if (strcmp(key, "scoller_focus_center") == 0) {
-    config->scoller_focus_center = atoi(value);
+  } else if (strcmp(key, "scroller_focus_center") == 0) {
+    config->scroller_focus_center = atoi(value);
+  } else if (strcmp(key, "scroller_prefer_center") == 0) {
+    config->scroller_prefer_center = atoi(value);
   } else if (strcmp(key, "focus_cross_monitor") == 0) {
     config->focus_cross_monitor = atoi(value);
   } else if (strcmp(key, "scroller_proportion_preset") == 0) {
@@ -1132,8 +1135,9 @@ void override_config(void) {
 
   scroller_structs = config.scroller_structs;
   scroller_default_proportion = config.scroller_default_proportion;
-  scoller_focus_center = config.scoller_focus_center;
+  scroller_focus_center = config.scroller_focus_center;
   focus_cross_monitor = config.focus_cross_monitor;
+  scroller_prefer_center = config.scroller_prefer_center;
 
   new_is_master = config.new_is_master;
   default_mfact = config.default_mfact;
@@ -1211,7 +1215,8 @@ void set_value_default() {
 
   config.scroller_structs = scroller_structs;
   config.scroller_default_proportion = scroller_default_proportion;
-  config.scoller_focus_center = scoller_focus_center;
+  config.scroller_focus_center = scroller_focus_center;
+  config.scroller_prefer_center = scroller_prefer_center;
   config.focus_cross_monitor = focus_cross_monitor;
 
   config.bypass_surface_visibility = bypass_surface_visibility; /* 1 means idle inhibitors will disable idle tracking even if it's surface isn't visible  */
