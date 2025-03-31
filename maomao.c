@@ -1081,7 +1081,7 @@ struct uvec2 clip_to_hide(Client *c, struct wlr_box *clip_box) {
   // // make tagout tagin animations not visible in other monitors
   if (ISTILED(c)) {
     if (c->animation.current.x <= c->mon->m.x) {
-      offsetx = c->mon->m.x - c->animation.current.x;
+      offsetx = c->mon->m.x - c->animation.current.x - c->bw;
       clip_box->x = clip_box->x + offsetx;
       clip_box->width = clip_box->width - offsetx;
     } else if (c->animation.current.x + c->animation.current.width >=
@@ -1092,7 +1092,7 @@ struct uvec2 clip_to_hide(Client *c, struct wlr_box *clip_box) {
     }
 
     if (c->animation.current.y <= c->mon->m.y) {
-      offsety = c->mon->m.y - c->animation.current.y;
+      offsety = c->mon->m.y - c->animation.current.y - c->bw;
       clip_box->y = clip_box->y + offsety;
       clip_box->height = clip_box->height - offsety;
     } else if (c->animation.current.y + c->animation.current.height >=
