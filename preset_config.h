@@ -49,6 +49,9 @@ int scroller_focus_center = 0;
 int scroller_prefer_center = 0;
 int focus_cross_monitor = 0;
 
+unsigned int swipe_min_threshold = 20;
+
+
 int bypass_surface_visibility =
     0; /* 1 means idle inhibitors will disable idle tracking even if it's
           surface isn't visible  */

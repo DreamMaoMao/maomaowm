@@ -32,6 +32,7 @@
 #include <wlr/types/wlr_linux_dmabuf_v1.h>
 #include <wlr/types/wlr_linux_drm_syncobj_v1.h>
 #include <wlr/types/wlr_pointer_constraints_v1.h>
+#include <wlr/types/wlr_pointer_gestures_v1.h>
 #include <wlr/types/wlr_relative_pointer_v1.h>
 #include <wlr/util/region.h>
 #include <wordexp.h>
@@ -105,6 +106,7 @@
 
 /* enums */
 /* enums */
+enum { SWIPE_UP,SWIPE_DOWN, SWIPE_LEFT, SWIPE_RIGHT };
 enum { CurNormal, CurPressed, CurMove, CurResize }; /* cursor */
 enum { XDGShell, LayerShell, X11 };                 /* client types */
 enum { AxisUp, AxisDown, AxisLeft, AxisRight };     // 滚轮滚动的方向
@@ -414,6 +416,15 @@ static void axisnotify(struct wl_listener *listener,
                        void *data); // 滚轮事件处理
 static void buttonpress(struct wl_listener *listener,
                         void *data); // 鼠标按键事件处理
+static int ongesture(struct wlr_pointer_swipe_end_event *event);
+static void swipe_begin(struct wl_listener *listener, void *data);
+static void swipe_update(struct wl_listener *listener, void *data);
+static void swipe_end(struct wl_listener *listener, void *data);
+static void pinch_begin(struct wl_listener *listener, void *data);
+static void pinch_update(struct wl_listener *listener, void *data);
+static void pinch_end(struct wl_listener *listener, void *data);
+static void hold_begin(struct wl_listener *listener, void *data);
+static void hold_end(struct wl_listener *listener, void *data);
 static void checkidleinhibitor(struct wlr_surface *exclude);
 static void cleanup(void); // 退出清理
 static void cleanupkeyboard(struct wl_listener *listener,
@@ -645,6 +656,7 @@ static struct wlr_output_manager_v1 *output_mgr;
 static struct wlr_virtual_keyboard_manager_v1 *virtual_keyboard_mgr;
 static struct wlr_virtual_pointer_manager_v1 *virtual_pointer_mgr;
 static struct wlr_output_power_manager_v1 *power_mgr;
+static struct wlr_pointer_gestures_v1 *pointer_gestures;
 
 static struct wlr_cursor *cursor;
 static struct wlr_xcursor_manager *cursor_mgr;
@@ -677,6 +689,10 @@ static int enablegaps = 1; /* enables gaps, used by togglegaps */
 static int axis_apply_time = 0;
 static int axis_apply_dir = 0;
 static int scroller_focus_lock = 0;
+
+static uint32_t swipe_fingers = 0;
+static double swipe_dx = 0;
+static double swipe_dy = 0;
 
 /* global event handlers */
 static struct zdwl_ipc_manager_v2_interface dwl_manager_implementation = {
@@ -744,7 +760,6 @@ static struct wlr_xwayland *xwayland;
 #include "IM.h"
 #endif
 
-/* compile-time check if all tags fit into an unsigned int bit array. */
 struct NumTags {
   char limitexceeded[LENGTH(tags) > 31 ? -1 : 1];
 };
@@ -2015,6 +2030,174 @@ axisnotify(struct wl_listener *listener, void *data) {
                                event->time_msec, event->orientation,
                                event->delta, event->delta_discrete,
                                event->source, event->relative_direction);
+}
+
+ 
+int
+ongesture(struct wlr_pointer_swipe_end_event *event)
+{
+	struct wlr_keyboard *keyboard;
+	uint32_t mods;
+	const GestureBinding *g;
+	unsigned int motion;
+	unsigned int adx = (int)round(fabs(swipe_dx));
+	unsigned int ady = (int)round(fabs(swipe_dy));
+	int handled = 0;
+  int ji;
+
+	if (event->cancelled) {
+		return handled;
+	}
+
+	// Require absolute distance movement beyond a small thresh-hold
+	if (adx * adx + ady * ady < swipe_min_threshold * swipe_min_threshold) {
+		return handled;
+	}
+
+	if (adx > ady) {
+		motion = swipe_dx < 0 ? SWIPE_LEFT : SWIPE_RIGHT;
+	} else {
+		motion = swipe_dy < 0 ? SWIPE_UP : SWIPE_DOWN;
+	}
+
+	keyboard = wlr_seat_get_keyboard(seat);
+	mods = keyboard ? wlr_keyboard_get_modifiers(keyboard) : 0;
+
+  for (ji = 0; ji < config.gesture_bindings_count; ji++) {
+    if (config.gesture_bindings_count < 1)
+      break;
+    g = &config.gesture_bindings[ji];
+		if (CLEANMASK(mods) == CLEANMASK(g->mod) &&
+			 swipe_fingers == g->fingers_count &&
+			 motion == g->motion && g->func) {
+			g->func(&g->arg);
+			handled = 1;
+		}
+	}
+	return handled;
+}
+
+void
+swipe_begin(struct wl_listener *listener, void *data)
+{
+	struct wlr_pointer_swipe_begin_event *event = data;
+
+	// Forward swipe begin event to client
+	wlr_pointer_gestures_v1_send_swipe_begin(
+		pointer_gestures, 
+		seat,
+		event->time_msec,
+		event->fingers
+	);
+}
+
+void
+swipe_update(struct wl_listener *listener, void *data)
+{
+	struct wlr_pointer_swipe_update_event *event = data;
+
+  swipe_fingers = event->fingers;
+  // Accumulate swipe distance
+  swipe_dx += event->dx;
+  swipe_dy += event->dy;
+
+	// Forward swipe update event to client
+	wlr_pointer_gestures_v1_send_swipe_update(
+		pointer_gestures, 
+		seat,
+		event->time_msec,
+		event->dx,
+		event->dy
+	);
+}
+
+void
+swipe_end(struct wl_listener *listener, void *data)
+{
+	struct wlr_pointer_swipe_end_event *event = data;
+  ongesture(event);
+  swipe_dx = 0;
+  swipe_dy = 0;
+	// Forward swipe end event to client
+	wlr_pointer_gestures_v1_send_swipe_end(
+		pointer_gestures, 
+		seat,
+		event->time_msec,
+		event->cancelled
+	);
+}
+
+void
+pinch_begin(struct wl_listener *listener, void *data)
+{
+	struct wlr_pointer_pinch_begin_event *event = data;
+
+	// Forward pinch begin event to client
+	wlr_pointer_gestures_v1_send_pinch_begin(
+		pointer_gestures, 
+		seat,
+		event->time_msec,
+		event->fingers
+	);
+}
+
+void
+pinch_update(struct wl_listener *listener, void *data)
+{
+	struct wlr_pointer_pinch_update_event *event = data;
+
+	// Forward pinch update event to client
+	wlr_pointer_gestures_v1_send_pinch_update(
+		pointer_gestures,
+		seat,
+		event->time_msec,
+		event->dx,
+		event->dy,
+		event->scale,
+		event->rotation
+	);
+}
+
+void
+pinch_end(struct wl_listener *listener, void *data)
+{
+	struct wlr_pointer_pinch_end_event *event = data;
+
+	// Forward pinch end event to client
+	wlr_pointer_gestures_v1_send_pinch_end(
+		pointer_gestures,
+		seat,
+		event->time_msec,
+		event->cancelled
+	);
+}
+
+void
+hold_begin(struct wl_listener *listener, void *data)
+{
+	struct wlr_pointer_hold_begin_event *event = data;
+
+	// Forward hold begin event to client
+	wlr_pointer_gestures_v1_send_hold_begin(
+		pointer_gestures,
+		seat,
+		event->time_msec,
+		event->fingers
+	);
+}
+
+void
+hold_end(struct wl_listener *listener, void *data)
+{
+	struct wlr_pointer_hold_end_event *event = data;
+
+	// Forward hold end event to client
+	wlr_pointer_gestures_v1_send_hold_end(
+		pointer_gestures,
+		seat,
+		event->time_msec,
+		event->cancelled
+	);
 }
 
 void // 鼠标按键事件
@@ -5372,6 +5555,16 @@ void setup(void) {
   virtual_pointer_mgr = wlr_virtual_pointer_manager_v1_create(dpy);
   wl_signal_add(&virtual_pointer_mgr->events.new_virtual_pointer,
                 &new_virtual_pointer);
+
+  pointer_gestures = wlr_pointer_gestures_v1_create(dpy);
+  LISTEN_STATIC(&cursor->events.swipe_begin, swipe_begin);
+  LISTEN_STATIC(&cursor->events.swipe_update, swipe_update);
+  LISTEN_STATIC(&cursor->events.swipe_end, swipe_end);
+  LISTEN_STATIC(&cursor->events.pinch_begin, pinch_begin);
+  LISTEN_STATIC(&cursor->events.pinch_update, pinch_update);
+  LISTEN_STATIC(&cursor->events.pinch_end, pinch_end);
+  LISTEN_STATIC(&cursor->events.hold_begin, hold_begin);
+  LISTEN_STATIC(&cursor->events.hold_end, hold_end);
 
   seat = wlr_seat_create(dpy, "seat0");
   wl_signal_add(&seat->events.request_set_cursor, &request_cursor);

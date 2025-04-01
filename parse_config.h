@@ -74,6 +74,13 @@ typedef struct {
 } AxisBinding;
 
 typedef struct {
+	unsigned int mod;
+	unsigned int motion;
+	unsigned int fingers_count;
+	void (*func)(const Arg *);
+	Arg arg;
+} GestureBinding;
+typedef struct {
   int animations;
   char animation_type_open[10];
   char animation_type_close[10];
@@ -95,6 +102,7 @@ typedef struct {
   int scroller_focus_center;
   int scroller_prefer_center;
   int focus_cross_monitor;
+  unsigned int swipe_min_threshold;
   float *scroller_proportion_preset;
   int scroller_proportion_preset_count;
 
@@ -167,6 +175,9 @@ typedef struct {
 
   AxisBinding *axis_bindings;
   int axis_bindings_count;
+
+  GestureBinding *gesture_bindings;
+  int gesture_bindings_count;
 
 } Config;
 
@@ -558,6 +569,8 @@ void parse_config_line(Config *config, const char *line) {
     config->scroller_prefer_center = atoi(value);
   } else if (strcmp(key, "focus_cross_monitor") == 0) {
     config->focus_cross_monitor = atoi(value);
+  } else if (strcmp(key, "swipe_min_threshold") == 0) {
+    config->swipe_min_threshold = atoi(value);
   } else if (strcmp(key, "scroller_proportion_preset") == 0) {
     // 1. 统计 value 中有多少个逗号，确定需要解析的浮点数个数
     int count = 0; // 初始化为 0
@@ -1016,6 +1029,37 @@ void parse_config_line(Config *config, const char *line) {
       config->axis_bindings_count++;
     }
 
+  } else if (strncmp(key, "gesturebind", 8) == 0) {
+    config->gesture_bindings =
+        realloc(config->gesture_bindings,
+                (config->gesture_bindings_count + 1) * sizeof(GestureBinding));
+    if (!config->gesture_bindings) {
+      fprintf(stderr, "Error: Failed to allocate memory for axis gesturebind\n");
+      return;
+    }
+
+    GestureBinding *binding = &config->gesture_bindings[config->gesture_bindings_count];
+    memset(binding, 0, sizeof(GestureBinding));
+
+    char mod_str[256], motion_str[256], fingers_count_str[256] , func_name[256], arg_value[256] = "none";
+    if (sscanf(value, "%[^,],%[^,],%[^,],%[^,],%[^\n]", mod_str, motion_str, fingers_count_str, func_name,
+               arg_value) < 4) {
+      fprintf(stderr, "Error: Invalid gesturebind format: %s\n", value);
+      return;
+    }
+
+    binding->mod = parse_mod(mod_str);
+    binding->motion = parse_direction(motion_str);
+    binding->fingers_count = atoi(fingers_count_str);
+    binding->arg.v = NULL;
+    binding->func = parse_func_name(func_name, &binding->arg, arg_value);
+
+    if (!binding->func) {
+      fprintf(stderr, "Error: Unknown function in axisbind: %s\n", func_name);
+    } else {
+      config->gesture_bindings_count++;
+    }
+
   } else {
     fprintf(stderr, "Error: Unknown key: %s\n", key);
   }
@@ -1103,6 +1147,14 @@ void free_config(void) {
   }
   free(config.axis_bindings);
 
+  for (i = 0; i < config.gesture_bindings_count; i++) {
+    if (config.gesture_bindings[i].arg.v) {
+      free((void *)config.gesture_bindings[i].arg.v);
+      config.gesture_bindings[i].arg.v = NULL; // 避免重复释放
+    }
+  }
+  free(config.gesture_bindings);
+
   free(config.scroller_proportion_preset);
   config.scroller_proportion_preset = NULL;
   config.scroller_proportion_preset_count = 0;
@@ -1137,6 +1189,7 @@ void override_config(void) {
   scroller_default_proportion = config.scroller_default_proportion;
   scroller_focus_center = config.scroller_focus_center;
   focus_cross_monitor = config.focus_cross_monitor;
+  swipe_min_threshold = config.swipe_min_threshold;
   scroller_prefer_center = config.scroller_prefer_center;
 
   new_is_master = config.new_is_master;
@@ -1218,6 +1271,7 @@ void set_value_default() {
   config.scroller_focus_center = scroller_focus_center;
   config.scroller_prefer_center = scroller_prefer_center;
   config.focus_cross_monitor = focus_cross_monitor;
+  config.swipe_min_threshold = swipe_min_threshold;
 
   config.bypass_surface_visibility = bypass_surface_visibility; /* 1 means idle inhibitors will disable idle tracking even if it's surface isn't visible  */
 
@@ -1273,6 +1327,8 @@ void parse_config(void) {
   config.mouse_bindings_count = 0;
   config.axis_bindings = NULL;
   config.axis_bindings_count = 0;
+  config.gesture_bindings = NULL;
+  config.gesture_bindings_count = 0;
 
   // 获取 MAOMAOCONFIG 环境变量
   const char *maomaoconfig = getenv("MAOMAOCONFIG");
