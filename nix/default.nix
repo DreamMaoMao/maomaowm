@@ -16,6 +16,7 @@
   meson,
   ninja,
   wlroots,
+  mmsg,
 }:
 let
   pname = "maomaowm";
@@ -51,6 +52,7 @@ stdenv.mkDerivation {
 
   passthru = {
     providedSessions = [ "maomao" ];
+    inherit mmsg;
   };
 
   meta = {

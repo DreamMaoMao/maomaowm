@@ -1,3 +1,4 @@
+self:
 {
   lib,
   config,
@@ -5,7 +6,7 @@
   ...
 }:
 let
-  maomaowm = pkgs.callPackage ./. { };
+  inherit (self.packages.${pkgs.system}) maomaowm;
   cfg = config.wayland.windowManager.maomaowm;
   variables = lib.concatStringsSep " " cfg.systemd.variables;
   extraCommands = lib.concatStringsSep " && " cfg.systemd.extraCommands;

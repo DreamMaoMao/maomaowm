@@ -26,8 +26,8 @@
       ];
 
       flake = {
-        hmModules.maomaowm = import ./nix/hm-modules.nix;
-        nixosModules.maomaowm = import ./nix/nixos-modules.nix { inherit inputs self; };
+        hmModules.maomaowm = import ./nix/hm-modules.nix self;
+        nixosModules.maomaowm = import ./nix/nixos-modules.nix self;
       };
 
       perSystem =
@@ -41,7 +41,8 @@
             callPackage
             ;
           maomaowm = callPackage ./nix {
-            wlroots = inputs.nixpkgs-wayland.packages.${pkgs.system}.wlroots;
+            inherit (inputs.nixpkgs-wayland.packages.${pkgs.system}) wlroots;
+            inherit (inputs.mmsg.packages.${pkgs.system}) mmsg;
           };
           shellOverride = old: {
             nativeBuildInputs = old.nativeBuildInputs ++ [ ];

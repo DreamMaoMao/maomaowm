@@ -1,4 +1,4 @@
-{ inputs, self }:
+self:
 {
   config,
   lib,
@@ -7,16 +7,6 @@
 }:
 let
   cfg = config.programs.maomaowm;
-  mmsg = lib.types.submodule {
-    options = {
-      enable = lib.mkEnableOption "Enable mmsg, the ipc for maomaowm";
-      package = lib.mkOption {
-        type = lib.types.package;
-        default = inputs.mmsg.packages.${pkgs.system}.mmsg;
-        description = "The mmsg package to use";
-      };
-    };
-  };
 in
 {
   options = {
@@ -27,42 +17,31 @@ in
         default = self.packages.${pkgs.system}.maomaowm;
         description = "The maomaowm package to use";
       };
-      mmsg = lib.mkOption {
-        type = mmsg;
-        default = {
-          enable = true;
-        };
-        description = "Options for mmsg, the ipc for maomaowm";
-      };
     };
   };
 
-  config = lib.mkMerge [
-    (lib.mkIf cfg.enable {
-      environment.systemPackages = [ cfg.package ];
+  config = lib.mkIf cfg.enable {
+    environment.systemPackages = [
+      cfg.package
+    ] ++ (if (builtins.hasAttr "mmsg" cfg.package) then [ cfg.package.mmsg ] else [ ]);
 
-      xdg.portal = {
-        enable = lib.mkDefault true;
+    xdg.portal = {
+      enable = lib.mkDefault true;
 
-        wlr.enable = lib.mkDefault true;
+      wlr.enable = lib.mkDefault true;
 
-        configPackages = [ cfg.package ];
-      };
+      configPackages = [ cfg.package ];
+    };
 
-      security.polkit.enable = lib.mkDefault true;
+    security.polkit.enable = lib.mkDefault true;
 
-      programs.xwayland.enable = lib.mkDefault true;
+    programs.xwayland.enable = lib.mkDefault true;
 
-      services = {
-        displayManager.sessionPackages = [ cfg.package ];
+    services = {
+      displayManager.sessionPackages = [ cfg.package ];
 
-        graphical-desktop.enable = lib.mkDefault true;
-      };
+      graphical-desktop.enable = lib.mkDefault true;
+    };
 
-    })
-
-    (lib.mkIf cfg.mmsg.enable {
-      environment.systemPackages = [ cfg.mmsg.package ];
-    })
-  ];
+  };
 }
