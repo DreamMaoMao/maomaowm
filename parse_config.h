@@ -135,7 +135,8 @@ typedef struct {
   int tap_to_click;
   int tap_and_drag;
   int drag_lock;
-  int natural_scrolling;
+  int mouse_natural_scrolling;
+  int trackpad_natural_scrolling;
   int disable_while_typing;
   int left_handed;
   int middle_button_emulation;
@@ -724,8 +725,10 @@ void parse_config_line(Config *config, const char *line) {
     config->tap_and_drag = atoi(value);
   } else if (strcmp(key, "drag_lock") == 0) {
     config->drag_lock = atoi(value);
-  } else if (strcmp(key, "natural_scrolling") == 0) {
-    config->natural_scrolling = atoi(value);
+  } else if (strcmp(key, "mouse_natural_scrolling") == 0) {
+    config->mouse_natural_scrolling = atoi(value);
+  } else if (strcmp(key, "trackpad_natural_scrolling") == 0) {
+    config->trackpad_natural_scrolling = atoi(value);
   } else if (strcmp(key, "disable_while_typing") == 0) {
     config->disable_while_typing = atoi(value);
   } else if (strcmp(key, "left_handed") == 0) {
@@ -1218,7 +1221,8 @@ void override_config(void) {
   tap_to_click = config.tap_to_click;
   tap_and_drag = config.tap_and_drag;
   drag_lock = config.drag_lock;
-  natural_scrolling = config.natural_scrolling;
+  mouse_natural_scrolling = config.mouse_natural_scrolling;
+  trackpad_natural_scrolling = config.trackpad_natural_scrolling;
   disable_while_typing = config.disable_while_typing;
   left_handed = config.left_handed;
   middle_button_emulation = config.middle_button_emulation;
@@ -1288,7 +1292,8 @@ void set_value_default() {
   config.tap_to_click = tap_to_click;
   config.tap_and_drag = tap_and_drag;
   config.drag_lock = drag_lock;
-  config.natural_scrolling = natural_scrolling;
+  config.mouse_natural_scrolling = mouse_natural_scrolling;
+  config.trackpad_natural_scrolling = trackpad_natural_scrolling;
   config.disable_while_typing = disable_while_typing;
   config.left_handed = left_handed;
   config.middle_button_emulation = middle_button_emulation;

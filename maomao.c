@@ -2915,11 +2915,12 @@ void createpointer(struct wlr_pointer *pointer) {
       libinput_device_config_tap_set_drag_enabled(device, tap_and_drag);
       libinput_device_config_tap_set_drag_lock_enabled(device, drag_lock);
       libinput_device_config_tap_set_button_map(device, button_map);
-    }
-
-    if (libinput_device_config_scroll_has_natural_scroll(device))
       libinput_device_config_scroll_set_natural_scroll_enabled(
-          device, natural_scrolling);
+          device, trackpad_natural_scrolling);
+    } else {
+      libinput_device_config_scroll_set_natural_scroll_enabled(
+          device, mouse_natural_scrolling);      
+    }
 
     if (libinput_device_config_dwt_is_available(device))
       libinput_device_config_dwt_set_enabled(device, disable_while_typing);
