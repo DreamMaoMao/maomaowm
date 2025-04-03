@@ -3383,6 +3383,11 @@ void focusclient(Client *c, int lift) {
     wlr_foreign_toplevel_handle_v1_set_activated(selmon->sel->foreign_toplevel,
                                                  false);
   }
+
+  if(c && !c->iskilling && c->mon) {
+    selmon = c->mon;
+  }
+
   if (selmon) {
     selmon->prevsel = selmon->sel;
     selmon->sel = c;
