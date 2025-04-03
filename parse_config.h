@@ -24,6 +24,7 @@ typedef struct {
   const char *animation_type_open;
   const char *animation_type_close;
   int isnoborder;
+  int isopensilent;
   int monitor;
   int width;
   int height;
@@ -425,6 +426,9 @@ FuncType parse_func_name(char *func_name, Arg *arg, char *arg_value) {
     func = viewtoleft;
   } else if (strcmp(func_name, "viewtoright") == 0) {
     func = viewtoright;
+  } else if (strcmp(func_name, "tagsilent") == 0) {
+    func = tagsilent;
+    (*arg).ui = 1 << (atoi(arg_value) - 1);
   } else if (strcmp(func_name, "tagtoleft") == 0) {
     func = tagtoleft;
   } else if (strcmp(func_name, "tagtoright") == 0) {
@@ -828,6 +832,7 @@ void parse_config_line(Config *config, const char *line) {
     rule->isfloating = -1;
     rule->isfullscreen = -1;
     rule->isnoborder = -1;
+    rule->isopensilent = -1;
     rule->isterm = -1;
     rule->noswallow = -1;
     rule->monitor = -1;
@@ -869,6 +874,8 @@ void parse_config_line(Config *config, const char *line) {
           rule->height = atoi(val);
         } else if (strcmp(key, "isnoborder") == 0) {
           rule->isnoborder = atoi(val);
+        } else if (strcmp(key, "isopensilent") == 0) {
+          rule->isopensilent = atoi(val);
         } else if (strcmp(key, "isterm") == 0) {
           rule->isterm = atoi(val);
         } else if (strcmp(key, "noswallow") == 0) {

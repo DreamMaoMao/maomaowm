@@ -246,6 +246,7 @@ struct Client {
   int is_scratchpad_show;
   int isglobal;
   int isnoborder;
+  int isopensilent;
   int iskilling;
   struct wlr_box bounds;
   bool resizing;
@@ -536,7 +537,7 @@ static void setfullscreen(Client *c, int fullscreen);
 static void setmaxmizescreen(Client *c, int maxmizescreen);
 static void setgaps(int oh, int ov, int ih, int iv);
 
-static void setmon(Client *c, Monitor *m, unsigned int newtags);
+static void setmon(Client *c, Monitor *m, unsigned int newtags, bool focus);
 static void setpsel(struct wl_listener *listener, void *data);
 static void setsel(struct wl_listener *listener, void *data);
 static void setup(void);
@@ -1573,6 +1574,7 @@ applyrules(Client *c) {
                                    ? r->scroller_proportion
                                    : c->scroller_proportion;
       c->isnoborder = r->isnoborder > 0 ? r->isnoborder : c->isnoborder;
+      c->isopensilent = r->isopensilent > 0 ? r->isopensilent : c->isopensilent;
       newtags = r->tags > 0 ? r->tags | newtags : newtags;
       i = 0;
       wl_list_for_each(m, &mons, link) if (r->monitor == i++) mon = m;
@@ -1617,9 +1619,9 @@ applyrules(Client *c) {
     arrange(c->mon, false);
   }
 
-  setmon(c, mon, newtags);
+  setmon(c, mon, newtags,!c->isopensilent);
 
-  if (!(c->tags & (1 << (selmon->pertag->curtag - 1)))) {
+  if (!c->isopensilent && !(c->tags & (1 << (selmon->pertag->curtag - 1)))) {
     c->animation.from_rule = true;
     view(&(Arg){.ui = c->tags}, true);
   }
@@ -2260,7 +2262,7 @@ buttonpress(struct wl_listener *listener, void *data) {
       motionnotify(0, NULL, 0, 0, 0, 0);
       /* Drop the window off on its new monitor */
       selmon = xytomon(cursor->x, cursor->y);
-      setmon(grabc, selmon, 0);
+      setmon(grabc, selmon, 0,true);
       grabc = NULL;
       return;
     } else {
@@ -2440,7 +2442,7 @@ closemon(Monitor *m)
         remove_foreign_topleve(c);
         c->mon = NULL;
       } else {
-        setmon(c, selmon, c->tags);
+        setmon(c, selmon, c->tags, true);
         reset_foreign_tolevel(c);
       }
     }
@@ -2552,7 +2554,7 @@ void commitnotify(struct wl_listener *listener, void *data) {
     if (c->mon) {
       client_set_scale(client_surface(c), c->mon->wlr_output->scale);
     }
-    setmon(c, NULL, 0); /* Make sure to reapply rules in mapnotify() */
+    setmon(c, NULL, 0, true); /* Make sure to reapply rules in mapnotify() */
     wlr_xdg_toplevel_set_wm_capabilities(
         c->surface.xdg->toplevel, WLR_XDG_TOPLEVEL_WM_CAPABILITIES_FULLSCREEN);
     wlr_xdg_toplevel_set_size(c->surface.xdg->toplevel, 0, 0);
@@ -4032,7 +4034,7 @@ mapnotify(struct wl_listener *listener, void *data) {
    * try to apply rules for them */
   if ((p = client_get_parent(c))) {
     c->isfloating = 1;
-    setmon(c, p->mon, p->tags);
+    setmon(c, p->mon, p->tags,true);
   } else {
     applyrules(c);
   }
@@ -4043,7 +4045,6 @@ mapnotify(struct wl_listener *listener, void *data) {
   if (selmon->sel && selmon->sel->foreign_toplevel)
     wlr_foreign_toplevel_handle_v1_set_activated(selmon->sel->foreign_toplevel,
                                                  false);
-  selmon->sel = c;
   if (c->foreign_toplevel)
     wlr_foreign_toplevel_handle_v1_set_activated(c->foreign_toplevel, true);
 
@@ -5177,7 +5178,7 @@ void setsmfact(const Arg *arg) {
 }
 
 void
-setmon(Client *c, Monitor *m, uint32_t newtags)
+setmon(Client *c, Monitor *m, uint32_t newtags,bool focus)
 {
 	Monitor *oldmon = c->mon;
 
@@ -5196,7 +5197,8 @@ setmon(Client *c, Monitor *m, uint32_t newtags)
 		setfullscreen(c, c->isfullscreen); /* This will call arrange(c->mon) */
 		setfloating(c, c->isfloating);
 	}
-	focusclient(focustop(selmon), 1);
+  if(focus)
+	  focusclient(focustop(selmon), 1);
 }
 
 void
@@ -5729,6 +5731,20 @@ void tag(const Arg *arg) {
   tag_client(arg, target_client);
 }
 
+void tagsilent(const Arg *arg) {
+  Client *fc;
+  Client *target_client = selmon->sel;
+  target_client->tags = arg->ui & TAGMASK;
+  wl_list_for_each(fc, &clients, link) {
+    if (fc && fc != target_client && target_client->tags & fc->tags &&
+        ISFULLSCREEN(fc) && !target_client->isfloating) {
+      clear_fullscreen_flag(fc);
+    }
+  }
+  focusclient(focustop(selmon), 1);
+  arrange(target_client->mon, false);
+}
+
 void tagmon(const Arg *arg) {
   Client *c = focustop(selmon);
   Monitor *m;
@@ -5737,7 +5753,7 @@ void tagmon(const Arg *arg) {
       selmon->sel = NULL;
     }
     m = dirtomon(arg->i);
-    setmon(c, m, 0);
+    setmon(c, m, 0,true);
     reset_foreign_tolevel(c);
     // 重新计算居中的坐标
     if (c->isfloating) {
@@ -6513,7 +6529,7 @@ void unmapnotify(struct wl_listener *listener, void *data) {
   } else {
     if (!c->swallowing)
     	wl_list_remove(&c->link);
-    setmon(c, NULL, 0);
+    setmon(c, NULL, 0,true);
     if (!c->swallowing)
     	wl_list_remove(&c->flink);
   }
@@ -6628,7 +6644,7 @@ updatemons(struct wl_listener *listener, void *data)
 	if (selmon && selmon->wlr_output->enabled) {
 		wl_list_for_each(c, &clients, link) {
 			if (!c->mon && client_surface(c)->mapped) {
-				setmon(c, selmon, c->tags);
+				setmon(c, selmon, c->tags, true);
         reset_foreign_tolevel(c);
       }
 		}

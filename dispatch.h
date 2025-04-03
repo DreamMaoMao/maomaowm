@@ -7,6 +7,7 @@ void set_proportion(const Arg *arg);
 void increase_proportion(const Arg *arg);
 void switch_proportion_preset(const Arg *arg);
 void zoom(const Arg *arg);
+void tagsilent(const Arg *arg);
 void tagtoleft(const Arg *arg);
 void tagtoright(const Arg *arg);
 void viewtoleft(const Arg *arg);
