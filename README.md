@@ -66,7 +66,7 @@ See below for more features.
 ## depend
 
 ```bash
-yay -S glibc wayland libinput libdrm pixman libxkbcommon git meson ninja wayland-protocols libdisplay-info libliftoff hwdata libseat-git
+yay -S glibc wayland libinput libdrm pixman libxkbcommon git meson ninja wayland-protocols libdisplay-info libliftoff hwdata seatd
 ```
 
 ## stable - wlroots(0.17)
