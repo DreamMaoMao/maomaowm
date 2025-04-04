@@ -41,8 +41,8 @@ libwayland_client_dep = dependency('wayland-client')
 # 获取 Git Commit Hash 和最新的 tag
 git = find_program('git', required : false)
 if git.found()
-  commit_hash = run_command(git, 'rev-parse', '--short', 'HEAD', check : true).stdout().strip()
-  latest_tag = run_command(git, 'describe', '--tags', '--abbrev=0', check : true).stdout().strip()
+  commit_hash = run_command(git, 'rev-parse', '--short', 'HEAD', check : false).stdout().strip()
+  latest_tag = run_command(git, 'describe', '--tags', '--abbrev=0', check : false).stdout().strip()
 else
   commit_hash = 'unknown'
   latest_tag = meson.project_version()  # 如果 Git 不可用，使用默认版本号
