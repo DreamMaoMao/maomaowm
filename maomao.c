@@ -1067,7 +1067,7 @@ void apply_border(Client *c, struct wlr_box clip_box, int offsetx,
   wlr_scene_node_set_position(&c->border[3]->node, clip_box.width - c->bw,
                               c->bw);
 
-  if (ISTILED(c)) {
+  if (ISTILED(c) || c->animation.tagining || c->animation.tagouted || c->animation.tagouting) {
     if (c->animation.current.x < c->mon->m.x) {
       set_rect_size(c->border[2], 0, 0);
     } else if (c->animation.current.x + c->animation.current.width >
@@ -1096,10 +1096,10 @@ struct uvec2 clip_to_hide(Client *c, struct wlr_box *clip_box) {
   offset.x = 0;
   offset.y =0;
 
-  if(!ISTILED(c)) return offset;
+  if(!ISTILED(c) && !c->animation.tagining && !c->animation.tagouted && !c->animation.tagouting) return offset;
 
   // // make tagout tagin animations not visible in other monitors
-  if (ISTILED(c)) {
+  if (ISTILED(c) || c->animation.tagining || c->animation.tagouted || c->animation.tagouting) {
     if (c->animation.current.x <= c->mon->m.x) {
       offsetx = c->mon->m.x - c->animation.current.x - c->bw;
       clip_box->x = clip_box->x + offsetx;
