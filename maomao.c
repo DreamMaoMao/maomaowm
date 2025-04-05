@@ -179,6 +179,7 @@ typedef struct {
   int width;
   int height;
   Monitor *m;
+  bool isfirstframe;
 } animationScale;
 
 struct Client {
@@ -256,7 +257,6 @@ struct Client {
   pid_t pid;
   Client *swallowing, *swallowedby;
   bool is_clip_to_hide;
-  bool need_scale_first_frame;
 };
 
 
@@ -595,8 +595,8 @@ void incohgaps(const Arg *arg);
 void incovgaps(const Arg *arg);
 void incigaps(const Arg *arg);
 void defaultgaps(const Arg *arg);
-void buffer_set_size(Client *c, animationScale scale_data);
-void snap_scene_buffer_apply_size(struct wlr_scene_buffer *buffer, int sx,
+void buffer_apply_effect(Client *c, animationScale scale_data);
+void snap_scene_buffer_apply_effect(struct wlr_scene_buffer *buffer, int sx,
                                   int sy, void *data);
 void client_set_pending_state(Client *c);
 // int timer_tick_action(void *data);
@@ -901,7 +901,7 @@ void fadeout_client_animation_next_tick(Client *c) {
     scale_data.height_scale = animation_passed;
 
     wlr_scene_node_for_each_buffer(&c->scene->node,
-                                   snap_scene_buffer_apply_size, &scale_data);
+                                   snap_scene_buffer_apply_effect, &scale_data);
   }
 
   if (animation_passed == 1.0) {
@@ -1068,7 +1068,7 @@ void apply_buffer_scale(Client *c, struct wlr_box clip_box ) {
   scale_data.m = c->mon;
   scale_data.width_scale = (float)clip_box.width / c->current.width;
   scale_data.height_scale = (float)clip_box.height / c->current.height;
-  buffer_set_size(c, scale_data);
+  buffer_apply_effect(c, scale_data);
 }
 
 void client_apply_clip(Client *c) {
@@ -3903,7 +3903,6 @@ mapnotify(struct wl_listener *listener, void *data) {
   c->need_float_size_reduce = 0;
   c->iskilling = 0;
   c->scroller_proportion = scroller_default_proportion;
-  c->need_scale_first_frame = true;
   // nop
   if (new_is_master &&
       strcmp(selmon->pertag->ltidxs[selmon->pertag->curtag]->name,
@@ -4363,7 +4362,7 @@ void scene_buffer_apply_opacity(struct wlr_scene_buffer *buffer, int sx, int sy,
 }
 
 
-void scene_buffer_apply_size(struct wlr_scene_buffer *buffer, int sx, int sy,
+void scene_buffer_apply_effect(struct wlr_scene_buffer *buffer, int sx, int sy,
                              void *data) {
   animationScale *scale_data = (animationScale *)data;
   
@@ -4393,27 +4392,23 @@ void scene_buffer_apply_size(struct wlr_scene_buffer *buffer, int sx, int sy,
       surface_height > 0 && surface_width > 0) {
     wlr_scene_buffer_set_dest_size(buffer, surface_width, surface_height);
   } else if(scale_data->width >0 && scale_data->height > 0) {
-    wlr_scene_buffer_set_dest_size(buffer, scale_data->width,
-                                   scale_data->height);
+    if(!scale_data->isfirstframe) {
+      scale_data->isfirstframe = true;
+      wlr_scene_buffer_set_dest_size(buffer, scale_data->width,
+                                     scale_data->height);
+    }
     wlr_scene_buffer_set_corner_radius(
      buffer, corner_radius, CORNER_LOCATION_ALL);
   }
 }
 
-void snap_scene_buffer_apply_size(struct wlr_scene_buffer *buffer, int sx,
+void snap_scene_buffer_apply_effect(struct wlr_scene_buffer *buffer, int sx,
                                   int sy, void *data) {
   animationScale *scale_data = (animationScale *)data;
   wlr_scene_buffer_set_dest_size(buffer, scale_data->width, scale_data->height);
 }
 
-void buffer_set_size(Client *c, animationScale data) {
-
-  // if (c->animation.current.width <= c->geom.width &&
-  //     c->animation.current.height <= c->geom.height && !c->need_scale_first_frame) {
-  //   return;
-  // }
-
-  // c->need_scale_first_frame = false;
+void buffer_apply_effect(Client *c, animationScale data) {
 
   if (c->iskilling || c->animation.tagouting ||
       c->animation.tagouted || c->animation.tagining) {
@@ -4424,7 +4419,7 @@ void buffer_set_size(Client *c, animationScale data) {
     return;
 
   wlr_scene_node_for_each_buffer(&c->scene_surface->node,
-                                 scene_buffer_apply_size, &data);
+                                 scene_buffer_apply_effect, &data);
 }
 
 void client_set_opacity(Client *c, double opacity) {
