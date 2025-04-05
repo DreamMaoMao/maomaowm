@@ -77,7 +77,7 @@ I chose the more stable 0.17.4.
 - Arch
 
 ```
-yay -S maomaowm-git
+yay -S maomaowm-round
 ```
 
 - Other
