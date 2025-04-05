@@ -295,30 +295,6 @@ uint32_t parse_mod(const char *mod_str) {
 }
 
 xkb_keysym_t parse_keysym(const char *keysym_str) {
-  if (strcmp(keysym_str, "F1") == 0 || strcmp(keysym_str, "f1") == 0)
-    return XKB_KEY_XF86Switch_VT_1;
-  else if (strcmp(keysym_str, "F2") == 0 || strcmp(keysym_str, "f2") == 0)
-    return XKB_KEY_XF86Switch_VT_2;
-  else if (strcmp(keysym_str, "F3") == 0 || strcmp(keysym_str, "f3") == 0)
-    return XKB_KEY_XF86Switch_VT_3;
-  else if (strcmp(keysym_str, "F4") == 0 || strcmp(keysym_str, "f4") == 0)
-    return XKB_KEY_XF86Switch_VT_4;
-  else if (strcmp(keysym_str, "F5") == 0 || strcmp(keysym_str, "f5") == 0)
-    return XKB_KEY_XF86Switch_VT_5;
-  else if (strcmp(keysym_str, "F6") == 0 || strcmp(keysym_str, "f6") == 0)
-    return XKB_KEY_XF86Switch_VT_6;
-  else if (strcmp(keysym_str, "F7") == 0 || strcmp(keysym_str, "f7") == 0)
-    return XKB_KEY_XF86Switch_VT_7;
-  else if (strcmp(keysym_str, "F8") == 0 || strcmp(keysym_str, "f8") == 0)
-    return XKB_KEY_XF86Switch_VT_8;
-  else if (strcmp(keysym_str, "F9") == 0 || strcmp(keysym_str, "f9") == 0)
-    return XKB_KEY_XF86Switch_VT_9;
-  else if (strcmp(keysym_str, "F10") == 0 || strcmp(keysym_str, "f10") == 0)
-    return XKB_KEY_XF86Switch_VT_10;
-  else if (strcmp(keysym_str, "F11") == 0 || strcmp(keysym_str, "f11") == 0)
-    return XKB_KEY_XF86Switch_VT_11;
-  else if (strcmp(keysym_str, "F12") == 0 || strcmp(keysym_str, "f12") == 0)
-    return XKB_KEY_XF86Switch_VT_12;
   return xkb_keysym_from_name(keysym_str, XKB_KEYSYM_NO_FLAGS);
 }
 
