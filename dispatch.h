@@ -36,3 +36,5 @@ void focusmon(const Arg *arg);
 void focusstack(const Arg *arg);
 void chvt(const Arg *arg);
 void reload_config(const Arg *arg);
+void movewin(const Arg *arg);
+void resizewin(const Arg *arg);

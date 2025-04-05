@@ -477,6 +477,12 @@ FuncType parse_func_name(char *func_name, Arg *arg, char *arg_value) {
   } else if (strcmp(func_name, "toggleview") == 0) {
     func = toggleview;
     (*arg).ui = 1 << (atoi(arg_value) - 1);
+  } else if (strcmp(func_name, "movewin") == 0) {
+    func = movewin;
+    (*arg).i = parse_direction(arg_value);
+  } else if (strcmp(func_name, "resizewin") == 0) {
+    func = resizewin;
+    (*arg).i = parse_direction(arg_value);
   } else {
     return NULL;
   }
