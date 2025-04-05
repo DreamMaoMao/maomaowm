@@ -56,6 +56,7 @@ int bypass_surface_visibility =
     0; /* 1 means idle inhibitors will disable idle tracking even if it's
           surface isn't visible  */
 unsigned int borderpx = 4; /* border pixel of windows */
+unsigned int corner_radius = 10;
 float rootcolor[] = COLOR(0x323232ff);
 float bordercolor[] = COLOR(0x444444ff);
 float focuscolor[] = COLOR(0xc66b25ff);

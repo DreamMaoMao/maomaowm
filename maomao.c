@@ -46,7 +46,10 @@
 #include <wlr/types/wlr_presentation_time.h>
 #include <wlr/types/wlr_primary_selection.h>
 #include <wlr/types/wlr_primary_selection_v1.h>
-#include <wlr/types/wlr_scene.h>
+// #include <wlr/types/wlr_scene.h>
+#include <scenefx/render/fx_renderer/fx_renderer.h>
+#include <scenefx/types/fx/corner_location.h>
+#include <scenefx/types/wlr_scene.h>
 #include <wlr/types/wlr_screencopy_v1.h>
 #include <wlr/types/wlr_seat.h>
 #include <wlr/types/wlr_server_decoration.h>
@@ -185,7 +188,7 @@ struct Client {
       current; /* layout-relative, includes border */
   Monitor *mon;
   struct wlr_scene_tree *scene;
-  struct wlr_scene_rect *border[4]; /* top, bottom, left, right */
+  struct wlr_scene_rect *border; /* top, bottom, left, right */
   struct wlr_scene_tree *scene_surface;
   struct wl_list link;
   struct wl_list flink;
@@ -998,36 +1001,16 @@ void apply_border(Client *c, struct wlr_box clip_box, int offsetx,
     return;
 
   wlr_scene_node_set_position(&c->scene_surface->node, c->bw, c->bw);
-  set_rect_size(c->border[0], clip_box.width, c->bw);
-  set_rect_size(c->border[1], clip_box.width, c->bw);
-  set_rect_size(c->border[2], c->bw, clip_box.height - 2 * c->bw);
-  set_rect_size(c->border[3], c->bw, clip_box.height - 2 * c->bw);
-  wlr_scene_node_set_position(&c->border[0]->node, 0, 0);
-  wlr_scene_node_set_position(&c->border[2]->node, 0, c->bw);
-  wlr_scene_node_set_position(&c->border[1]->node, 0, clip_box.height - c->bw);
-  wlr_scene_node_set_position(&c->border[3]->node, clip_box.width - c->bw,
-                              c->bw);
+
 
   if (ISTILED(c) || c->animation.tagining || c->animation.tagouted || c->animation.tagouting) {
-    if (c->animation.current.x < c->mon->m.x) {
-      set_rect_size(c->border[2], 0, 0);
-    } else if (c->animation.current.x + c->animation.current.width >
-               c->mon->m.x + c->mon->m.width) {
-      set_rect_size(c->border[3], 0, 0);
-    } else if (c->animation.current.y < c->mon->m.y) {
-      set_rect_size(c->border[0], 0, 0);
-    } else if (c->animation.current.y + c->animation.current.height >
-               c->mon->m.y + c->mon->m.height) {
-      set_rect_size(c->border[1], 0, 0);
-    }
+    wlr_scene_node_set_position(&c->border->node, offsetx-c->bw, offsety-c->bw);
   }
 
-  wlr_scene_node_set_position(&c->border[0]->node, offsetx, offsety);
-  wlr_scene_node_set_position(&c->border[2]->node, offsetx, c->bw + offsety);
-  wlr_scene_node_set_position(&c->border[1]->node, offsetx,
-                              clip_box.height - c->bw + offsety);
-  wlr_scene_node_set_position(
-      &c->border[3]->node, clip_box.width - c->bw + offsetx, c->bw + offsety);
+
+    wlr_scene_rect_set_size(c->border,
+      clip_box.width + borderpx * 2,
+      clip_box.height + borderpx * 2);
 }
 
 struct uvec2 clip_to_hide(Client *c, struct wlr_box *clip_box) {
@@ -3904,11 +3887,11 @@ mapnotify(struct wl_listener *listener, void *data) {
     return;
   }
 
-  for (i = 0; i < 4; i++) {
-    c->border[i] = wlr_scene_rect_create(
-        c->scene, 0, 0, c->isurgent ? urgentcolor : bordercolor);
-    c->border[i]->node.data = c;
-  }
+	c->border = wlr_scene_rect_create(c->scene, 0, 0,
+    (float[4]){ 1.0f, 0.f, 0.f, 1.0f });
+  wlr_scene_rect_set_corner_radius(c->border, corner_radius + borderpx);
+  wlr_scene_node_set_position(&c->border->node, -borderpx, -borderpx);
+  wlr_scene_node_lower_to_bottom(&c->border->node);
 
   /* Initialize client geometry with room for border */
   client_set_tiled(c, WLR_EDGE_TOP | WLR_EDGE_BOTTOM | WLR_EDGE_LEFT |
@@ -4412,6 +4395,8 @@ void scene_buffer_apply_size(struct wlr_scene_buffer *buffer, int sx, int sy,
   } else if(scale_data->width >0 && scale_data->height > 0) {
     wlr_scene_buffer_set_dest_size(buffer, scale_data->width,
                                    scale_data->height);
+    wlr_scene_buffer_set_corner_radius(
+     buffer, corner_radius, CORNER_LOCATION_ALL);
   }
 }
 
@@ -4423,12 +4408,12 @@ void snap_scene_buffer_apply_size(struct wlr_scene_buffer *buffer, int sx,
 
 void buffer_set_size(Client *c, animationScale data) {
 
-  if (c->animation.current.width <= c->geom.width &&
-      c->animation.current.height <= c->geom.height && !c->need_scale_first_frame) {
-    return;
-  }
+  // if (c->animation.current.width <= c->geom.width &&
+  //     c->animation.current.height <= c->geom.height && !c->need_scale_first_frame) {
+  //   return;
+  // }
 
-  c->need_scale_first_frame = false;
+  // c->need_scale_first_frame = false;
 
   if (c->iskilling || c->animation.tagouting ||
       c->animation.tagouted || c->animation.tagining) {
@@ -4512,25 +4497,19 @@ void setborder_color(Client *c) {
   if (!c || !c->mon)
     return;
   if (c->isurgent) {
-    for (i = 0; i < 4; i++)
-      wlr_scene_rect_set_color(c->border[i], urgentcolor);
+      wlr_scene_rect_set_color(c->border, urgentcolor);
     return;
   }
   if (c->is_in_scratchpad && c == selmon->sel) {
-    for (i = 0; i < 4; i++)
-      wlr_scene_rect_set_color(c->border[i], scratchpadcolor);
+      wlr_scene_rect_set_color(c->border, scratchpadcolor);
   } else if (c->isglobal && c == selmon->sel) {
-    for (i = 0; i < 4; i++)
-      wlr_scene_rect_set_color(c->border[i], globalcolor);
+      wlr_scene_rect_set_color(c->border, globalcolor);
   } else if (c->ismaxmizescreen && c == selmon->sel) {
-    for (i = 0; i < 4; i++)
-      wlr_scene_rect_set_color(c->border[i], maxmizescreencolor);
+      wlr_scene_rect_set_color(c->border, maxmizescreencolor);
   } else if (c == selmon->sel) {
-    for (i = 0; i < 4; i++)
-      wlr_scene_rect_set_color(c->border[i], focuscolor);
+      wlr_scene_rect_set_color(c->border, focuscolor);
   } else {
-    for (i = 0; i < 4; i++)
-      wlr_scene_rect_set_color(c->border[i], bordercolor);
+      wlr_scene_rect_set_color(c->border, bordercolor);
   }
 }
 
@@ -5322,7 +5301,7 @@ void setup(void) {
   wlr_scene_node_place_below(&drag_icon->node, &layers[LyrBlock]->node);
 
   /* Create a renderer with the default implementation */
-  if (!(drw = wlr_renderer_autocreate(backend)))
+  if (!(drw = fx_renderer_create(backend)))
     die("couldn't create renderer");
 
   /* Create shm, drm and linux_dmabuf interfaces by ourselves.

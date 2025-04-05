@@ -148,6 +148,7 @@ typedef struct {
   unsigned int gappoh;
   unsigned int gappov;
   unsigned int borderpx;
+  unsigned int corner_radius;
   float rootcolor[4];
   float bordercolor[4];
   float focuscolor[4];
@@ -749,6 +750,8 @@ void parse_config_line(Config *config, const char *line) {
     config->gappov = atoi(value);
   } else if (strcmp(key, "borderpx") == 0) {
     config->borderpx = atoi(value);
+  } else if (strcmp(key, "corner_radius") == 0) {
+    config->corner_radius = atoi(value);
   } else if (strcmp(key, "rootcolor") == 0) {
     long int color = parse_color(value);
     if (color == -1) {
@@ -1223,6 +1226,7 @@ void override_config(void) {
   gappoh = config.gappoh;
   gappov = config.gappov;
   borderpx = config.borderpx;
+  corner_radius = config.corner_radius;
   repeat_rate = config.repeat_rate;
   repeat_delay = config.repeat_delay;
   tap_to_click = config.tap_to_click;
@@ -1287,6 +1291,7 @@ void set_value_default() {
   config.bypass_surface_visibility = bypass_surface_visibility; /* 1 means idle inhibitors will disable idle tracking even if it's surface isn't visible  */
 
   config.borderpx = borderpx;
+  config.corner_radius = corner_radius;
   config.overviewgappi = overviewgappi;  /* overview时 窗口与边缘 缝隙大小 */
   config.overviewgappo = overviewgappo; /* overview时 窗口与窗口 缝隙大小 */
 
