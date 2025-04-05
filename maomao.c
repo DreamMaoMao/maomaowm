@@ -3034,7 +3034,7 @@ dirtomon(enum wlr_direction dir) {
   if (!wlr_output_layout_get(output_layout, selmon->wlr_output))
     return selmon;
   if ((next = wlr_output_layout_adjacent_output(
-           output_layout, dir, selmon->wlr_output, selmon->m.x, selmon->m.y)))
+           output_layout, 1 << dir, selmon->wlr_output, selmon->m.x, selmon->m.y)))
     return next->data;
   if ((next = wlr_output_layout_farthest_output(
            output_layout, dir ^ (WLR_DIRECTION_LEFT | WLR_DIRECTION_RIGHT),
@@ -6939,6 +6939,174 @@ void zoom(const Arg *arg) {
 
   focusclient(sel, 1);
   arrange(selmon, false);
+}
+
+void movewin(const Arg *arg) {
+  Client *c, *tc;
+  int nx, ny;
+  int buttom, top, left, right, tar;
+  c = selmon->sel;
+  if (!c || c->isfullscreen)
+    return;
+  if (!c->isfloating)
+    togglefloating(NULL);
+  nx = c->geom.x;
+  ny = c->geom.y;
+
+  switch (arg->i) {
+  case UP:
+    tar = -99999;
+    top = c->geom.y;
+    ny -= c->mon->w.height / 4;
+
+    wl_list_for_each(tc, &clients, link) {
+      if (!VISIBLEON(tc, selmon) || !tc->isfloating || tc == c)
+        continue;
+      if (c->geom.x + c->geom.width < tc->geom.x ||
+          c->geom.x > tc->geom.x + tc->geom.width)
+        continue;
+      buttom = tc->geom.y + tc->geom.height + gappiv;
+      if (top > buttom && ny < buttom) {
+        tar = MAX(tar, buttom);
+      };
+    }
+
+    ny = tar == -99999 ? ny : tar;
+    ny = MAX(ny, c->mon->w.y + gappov);
+    break;
+  case DOWN:
+    tar = 99999;
+    buttom = c->geom.y + c->geom.height;
+    ny += c->mon->w.height / 4;
+
+    wl_list_for_each(tc, &clients, link) {
+      if (!VISIBLEON(tc, selmon) || !tc->isfloating || tc == c)
+        continue;
+      if (c->geom.x + c->geom.width < tc->geom.x ||
+          c->geom.x > tc->geom.x + tc->geom.width)
+        continue;
+      top = tc->geom.y - gappiv;
+      if (buttom < top && (ny + c->geom.height) > top) {
+        tar = MIN(tar, top - c->geom.height);
+      };
+    }
+    ny = tar == 99999 ? ny : tar;
+    ny = MIN(ny, c->mon->w.y + c->mon->w.height - gappov - c->geom.height);
+    break;
+  case LEFT:
+    tar = -99999;
+    left = c->geom.x;
+    nx -= c->mon->w.width / 6;
+
+    wl_list_for_each(tc, &clients, link) {
+      if (!VISIBLEON(tc, selmon) || !tc->isfloating || tc == c)
+        continue;
+      if (c->geom.y + c->geom.height < tc->geom.y ||
+          c->geom.y > tc->geom.y + tc->geom.height)
+        continue;
+      right = tc->geom.x + tc->geom.width + gappih;
+      if (left > right && nx < right) {
+        tar = MAX(tar, right);
+      };
+    }
+
+    nx = tar == -99999 ? nx : tar;
+    nx = MAX(nx, c->mon->w.x + gappoh);
+    break;
+  case RIGHT:
+    tar = 99999;
+    right = c->geom.x + c->geom.width;
+    nx += c->mon->w.width / 6;
+    wl_list_for_each(tc, &clients, link) {
+      if (!VISIBLEON(tc, selmon) || !tc->isfloating || tc == c)
+        continue;
+      if (c->geom.y + c->geom.height < tc->geom.y ||
+          c->geom.y > tc->geom.y + tc->geom.height)
+        continue;
+      left = tc->geom.x - gappih;
+      if (right < left && (nx + c->geom.width) > left) {
+        tar = MIN(tar, left - c->geom.width);
+      };
+    }
+    nx = tar == 99999 ? nx : tar;
+    nx = MIN(nx, c->mon->w.x + c->mon->w.width - gappoh - c->geom.width);
+    break;
+  }
+
+  resize(
+      c,
+      (struct wlr_box){
+          .x = nx, .y = ny, .width = c->geom.width, .height = c->geom.height},
+      1);
+}
+
+void resizewin(const Arg *arg) {
+  Client *c, *tc;
+  int nw, nh;
+  int buttom, top, left, right, tar;
+  c = selmon->sel;
+  if (!c || c->isfullscreen)
+    return;
+  if (!c->isfloating)
+    togglefloating(NULL);
+  nw = c->geom.width;
+  nh = c->geom.height;
+
+  switch (arg->i) {
+  case UP:
+    nh -= selmon->w.height / 8;
+    nh = MAX(nh, selmon->w.height / 10);
+    break;
+  case DOWN:
+    tar = -99999;
+    buttom = c->geom.y + c->geom.height;
+    nh += selmon->w.height / 8;
+
+    wl_list_for_each(tc, &clients, link) {
+      if (!VISIBLEON(tc, selmon) || !tc->isfloating || tc == c)
+        continue;
+      if (c->geom.x + c->geom.width < tc->geom.x ||
+          c->geom.x > tc->geom.x + tc->geom.width)
+        continue;
+      top = tc->geom.y - gappiv;
+      if (buttom < top && (nh + c->geom.y) > top) {
+        tar = MAX(tar, top - c->geom.y);
+      };
+    }
+    nh = tar == -99999 ? nh : tar;
+    if (c->geom.y + nh + gappov > selmon->w.y + selmon->w.height)
+      nh = selmon->w.y + selmon->w.height - c->geom.y - gappov;
+    break;
+  case LEFT:
+    nw -= selmon->w.width / 16;
+    nw = MAX(nw, selmon->w.width / 10);
+    break;
+  case RIGHT:
+    tar = 99999;
+    right = c->geom.x + c->geom.width;
+    nw += selmon->w.width / 16;
+    wl_list_for_each(tc, &clients, link) {
+      if (!VISIBLEON(tc, selmon) || !tc->isfloating || tc == c)
+        continue;
+      if (c->geom.y + c->geom.height < tc->geom.y ||
+          c->geom.y > tc->geom.y + tc->geom.height)
+        continue;
+      left = tc->geom.x - gappih;
+      if (right < left && (nw + c->geom.x) > left) {
+        tar = MIN(tar, left - c->geom.x);
+      };
+    }
+
+    nw = tar == 99999 ? nw : tar;
+    if (c->geom.x + nw + gappoh > selmon->w.x + selmon->w.width)
+      nw = selmon->w.x + selmon->w.width - c->geom.x - gappoh;
+    break;
+  }
+
+  resize(c,
+         (struct wlr_box){
+             .x = c->geom.x, .y = c->geom.y, .width = nw, .height = nh},
+         1);
 }
 
 #ifdef XWAYLAND
