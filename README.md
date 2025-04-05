@@ -88,6 +88,11 @@ cd wlroots
 meson build -Dprefix=/usr
 sudo ninja -C build install
 
+git clone -b 0.17.4 https://github.com/DreamMaoMao/scenefx
+cd scenefx
+meson build -Dprefix=/usr
+sudo ninja -C build install
+
 git clone https://github.com/DreamMaoMao/maomaowm.git
 cd maomaowm
 meson build -Dprefix=/usr
