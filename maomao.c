@@ -1032,7 +1032,7 @@ struct uvec2 clip_to_hide(Client *c, struct wlr_box *clip_box) {
                c->mon->m.x + c->mon->m.width) {
       clip_box->width = clip_box->width -
                        (c->animation.current.x + c->animation.current.width -
-                        c->mon->m.x - c->mon->m.width);
+                        c->mon->m.x - c->mon->m.width) + c->bw;
     }
 
     if (c->animation.current.y <= c->mon->m.y) {
@@ -1043,7 +1043,7 @@ struct uvec2 clip_to_hide(Client *c, struct wlr_box *clip_box) {
                c->mon->m.y + c->mon->m.height) {
       clip_box->height = clip_box->height -
                         (c->animation.current.y + c->animation.current.height -
-                         c->mon->m.y - c->mon->m.height);
+                         c->mon->m.y - c->mon->m.height) + c->bw;
     }
   }
 
