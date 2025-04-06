@@ -591,7 +591,7 @@ static void handle_foreign_close_request(struct wl_listener *listener,
                                          void *data);
 static void handle_foreign_destroy(struct wl_listener *listener, void *data);
 
-static struct wlr_box setclient_coordinate_center(struct wlr_box geom);
+static struct wlr_box setclient_coordinate_center(struct wlr_box geom, int offsetx, int offsety);
 static unsigned int get_tags_first_tag(unsigned int tags);
 
 void client_commit(Client *c);
@@ -1279,7 +1279,7 @@ void show_scratchpad(Client *c) {
     c->geom.width = c->mon->w.width * 0.7;
     c->geom.height = c->mon->w.height * 0.8;
     // 重新计算居中的坐标
-    c->geom = setclient_coordinate_center(c->geom);
+    c->geom = setclient_coordinate_center(c->geom, 0, 0);
     resize(c, c->geom, 0);
   }
   c->oldtags = selmon->tagset[selmon->seltags];
@@ -1479,16 +1479,47 @@ void toggle_hotarea(int x_root, int y_root) {
 }
 
 struct wlr_box // 计算客户端居中坐标
-setclient_coordinate_center(struct wlr_box geom) {
+setclient_coordinate_center(struct wlr_box geom, int offsetx, int offsety) {
   struct wlr_box tempbox;
+  int offset = 0;
+  int len = 0;
+
   tempbox.x = selmon->w.x + (selmon->w.width - geom.width) / 2;
   tempbox.y = selmon->w.y + (selmon->w.height - geom.height) / 2;
   tempbox.width = geom.width;
   tempbox.height = geom.height;
+
+  if (offsetx != 0) {
+    len = (selmon->w.width - geom.width) / 2 - gappoh;
+    offset = len * (offsetx / 100.0);
+    tempbox.x += offset;
+
+    // 限制窗口在屏幕内
+    if (tempbox.x < selmon->m.x) {
+      tempbox.x = selmon->m.x;
+    }
+    if (tempbox.x + tempbox.width > selmon->m.x + selmon->m.width) {
+      tempbox.x = selmon->m.x + selmon->m.width - tempbox.width;
+    }
+  }
+  if (offsety != 0) {
+    len = (selmon->w.height - geom.height) / 2 - gappov;
+    offset = len * (offsety / 100.0);
+    tempbox.y += offset;
+
+    // 限制窗口在屏幕内
+    if (tempbox.y < selmon->m.y) {
+      tempbox.y = selmon->m.y;
+    }
+    if (tempbox.y + tempbox.height > selmon->m.y + selmon->m.height) {
+      tempbox.y = selmon->m.y + selmon->m.height - tempbox.height;
+    }
+  }
+
   return tempbox;
 }
-
 /* function implementations */
+
 void logtofile(const char *fmt, ...) {
   char buf[256];
   char cmd[256];
@@ -1531,8 +1562,8 @@ applyrulesgeom(Client *c) {
       c->geom.width = r->width > 0 ? r->width : c->geom.width;
       c->geom.height = r->height > 0 ? r->height : c->geom.height;
       // 重新计算居中的坐标
-      c->geom = setclient_coordinate_center(c->geom);
-      hit = r->height > 0 || r->width > 0 ? 1 : 0;
+      c->geom = setclient_coordinate_center(c->geom, r->offsetx, r->offsety);
+      hit = r->height > 0 || r->width > 0 || r->offsetx != 0 || r->offsety != 0 ? 1 : 0;
     }
   }
   return hit;
@@ -1583,7 +1614,7 @@ applyrules(Client *c) {
         c->geom.width = r->width > 0 ? r->width : c->geom.width;
         c->geom.height = r->height > 0 ? r->height : c->geom.height;
         // 重新计算居中的坐标
-        c->geom = setclient_coordinate_center(c->geom);
+        c->geom = setclient_coordinate_center(c->geom, r->offsetx, r->offsety);
       }
     }
   }
@@ -4988,7 +5019,7 @@ setfloating(Client *c, int floating) {
       target_box.width = target_box.width * 0.8;
     }
     // 重新计算居中的坐标
-    target_box = setclient_coordinate_center(target_box);
+    target_box = setclient_coordinate_center(target_box, 0, 0);
     backup_box = c->geom;
     hit = applyrulesgeom(c);
     target_box = hit == 1 ? c->geom : target_box;
@@ -5788,7 +5819,7 @@ void tagmon(const Arg *arg) {
       c->geom.height =
         (int)(c->geom.height * c->mon->w.height / selmon->w.height);
       selmon = c->mon;
-      c->geom = setclient_coordinate_center(c->geom);
+      c->geom = setclient_coordinate_center(c->geom, 0, 0);
       focusclient(c, 1);
       resize(c, c->geom, 1);
     } else {

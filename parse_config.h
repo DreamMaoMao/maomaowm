@@ -26,6 +26,8 @@ typedef struct {
   int isnoborder;
   int isopensilent;
   int monitor;
+  int offsetx;
+  int offsety;
   int width;
   int height;
   int isterm;
@@ -818,6 +820,8 @@ void parse_config_line(Config *config, const char *line) {
     rule->isterm = -1;
     rule->noswallow = -1;
     rule->monitor = -1;
+    rule->offsetx = 0;
+    rule->offsety = 0;
     rule->width = -1;
     rule->height = -1;
     rule->animation_type_open = NULL;
@@ -850,6 +854,10 @@ void parse_config_line(Config *config, const char *line) {
           rule->tags = 1 << (atoi(val) - 1);
         } else if (strcmp(key, "monitor") == 0) {
           rule->monitor = atoi(val);
+        } else if (strcmp(key, "offsetx") == 0) {
+          rule->offsetx = atoi(val);
+        } else if (strcmp(key, "offsety") == 0) {
+          rule->offsety = atoi(val);
         } else if (strcmp(key, "width") == 0) {
           rule->width = atoi(val);
         } else if (strcmp(key, "height") == 0) {
