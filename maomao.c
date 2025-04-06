@@ -1742,7 +1742,7 @@ Client *center_select(Monitor* m) {
   int dirx,diry;
   long int distance;
   wl_list_for_each(c, &clients, link) {
-    if (c && VISIBLEON(c, m) && client_surface(c)->mapped && !c->isfloating) {
+    if (c && VISIBLEON(c, m) && client_surface(c)->mapped && !c->isfloating && !client_is_unmanaged(c)) {
       dirx = c->geom.x + c->geom.width / 2 - (m->w.x + m->w.width / 2);
       diry = c->geom.y + c->geom.height / 2 - (m->w.y + m->w.height / 2);
       distance = dirx * dirx + diry * diry;
@@ -4038,18 +4038,19 @@ mapnotify(struct wl_listener *listener, void *data) {
   c->scroller_proportion = scroller_default_proportion;
   c->need_scale_first_frame = true;
   // nop
+
   if (new_is_master &&
       strcmp(selmon->pertag->ltidxs[selmon->pertag->curtag]->name,
              "scroller") != 0)
     // tile at the top
     wl_list_insert(&clients, &c->link); // 新窗口是master,头部入栈
   else if (strcmp(selmon->pertag->ltidxs[selmon->pertag->curtag]->name,
-                  "scroller") == 0 &&
-           selmon->sel && ISTILED(selmon->sel)) {
-    selmon->sel->link.next->prev = &c->link;
-    c->link.prev = &selmon->sel->link;
-    c->link.next = selmon->sel->link.next;
-    selmon->sel->link.next = &c->link;
+                  "scroller") == 0 && center_select(selmon)) {
+    Client *at_client = center_select(selmon);
+    at_client->link.next->prev = &c->link;
+    c->link.prev = &at_client->link;
+    c->link.next = at_client->link.next;
+    at_client->link.next = &c->link;
   } else
     wl_list_insert(clients.prev, &c->link); // 尾部入栈
   wl_list_insert(&fstack, &c->flink);
@@ -5997,7 +5998,7 @@ void scroller(Monitor *m, unsigned int gappo, unsigned int gappi) {
 
   // 第一次遍历，计算 n 的值
   wl_list_for_each(c, &clients, link) {
-    if (VISIBLEON(c, c->mon) && !c->isfloating && !c->isfullscreen &&
+    if (VISIBLEON(c, c->mon) && !client_is_unmanaged(c) && !c->isfloating && !c->isfullscreen &&
         !c->ismaxmizescreen && !c->iskilling && !c->animation.tagouting &&
         c->mon == m) {
       n++;
@@ -6018,7 +6019,7 @@ void scroller(Monitor *m, unsigned int gappo, unsigned int gappi) {
   // 第二次遍历，填充 tempClients
   n = 0;
   wl_list_for_each(c, &clients, link) {
-    if (VISIBLEON(c, c->mon) && !c->isfloating && !c->isfullscreen &&
+    if (VISIBLEON(c, c->mon) && !client_is_unmanaged(c) && !c->isfloating && !c->isfullscreen &&
         !c->ismaxmizescreen && !c->iskilling && !c->animation.tagouting &&
         c->mon == m) {
       tempClients[n] = c;
@@ -6037,10 +6038,10 @@ void scroller(Monitor *m, unsigned int gappo, unsigned int gappi) {
     return;
   }
 
-  if (m->sel && !m->sel->isfloating && !m->sel->ismaxmizescreen &&
+  if (m->sel && !client_is_unmanaged(m->sel) && !m->sel->isfloating && !m->sel->ismaxmizescreen &&
       !m->sel->isfullscreen) {
     root_client = m->sel;
-  } else if (m->prevsel && !m->prevsel->isfloating &&
+  } else if (m->prevsel && !client_is_unmanaged(m->prevsel) && !m->prevsel->isfloating &&
              !m->prevsel->ismaxmizescreen && !m->prevsel->isfullscreen) {
     root_client = m->prevsel;
   } else {
