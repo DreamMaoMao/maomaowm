@@ -6061,7 +6061,7 @@ void scroller(Monitor *m, unsigned int gappo, unsigned int gappi) {
   if (n == 1) {
     c = tempClients[0];
     target_geom.height = m->w.height - 2 * gappov;
-    target_geom.width = max_client_width * c->scroller_proportion;
+    target_geom.width = (m->w.width - 2 * gappoh) * scroller_default_proportion_single;
     target_geom.x = m->w.x + (m->w.width - target_geom.width) / 2;
     target_geom.y = m->w.y + (m->w.height - target_geom.height) / 2;
     resize(c, target_geom, 0);
