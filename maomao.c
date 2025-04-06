@@ -1734,6 +1734,27 @@ void arrangelayer(Monitor *m, struct wl_list *list, struct wlr_box *usable_area,
   }
 }
 
+
+Client *center_select(Monitor* m) {
+  Client *c = NULL;
+  Client *target_c = NULL;
+  long int mini_distance = -1;
+  int dirx,diry;
+  long int distance;
+  wl_list_for_each(c, &clients, link) {
+    if (c && VISIBLEON(c, m) && client_surface(c)->mapped && !c->isfloating) {
+      dirx = c->geom.x + c->geom.width / 2 - (m->w.x + m->w.width / 2);
+      diry = c->geom.y + c->geom.height / 2 - (m->w.y + m->w.height / 2);
+      distance = dirx * dirx + diry * diry;
+      if (distance < mini_distance || mini_distance == -1) {
+        mini_distance = distance;
+        target_c = c;
+      }
+    }
+  }
+  return target_c;
+}
+
 Client *direction_select(const Arg *arg) {
   Client *c;
   Client **tempClients = NULL; // 初始化为 NULL
@@ -6023,13 +6044,12 @@ void scroller(Monitor *m, unsigned int gappo, unsigned int gappi) {
              !m->prevsel->ismaxmizescreen && !m->prevsel->isfullscreen) {
     root_client = m->prevsel;
   } else {
-    wl_list_for_each(c, &clients, link) {
-      if (c->iskilling)
-        continue;
-      if (c->tags == m->tagset[m->seltags] && !c->isfloating) {
-        root_client = c;
-      }
-    }
+    root_client = center_select(m);
+  }
+  
+  if(!root_client) {
+    free(tempClients); // 释放内存
+    return;
   }
 
   for (i = 0; i < n; i++) {
