@@ -868,7 +868,6 @@ double find_animation_curve_at(double t, int type) {
   return baked_points[up].y;
 }
 
-// 有 bug,只是让上面那根透明了
 void apply_opacity_to_rect_nodes(Client *c, struct wlr_scene_node *node,
                                  double animation_passed) {
   int offsetx = 0;
@@ -882,13 +881,10 @@ void apply_opacity_to_rect_nodes(Client *c, struct wlr_scene_node *node,
     rect->color[3] = (1 - animation_passed) * rect->color[3];
     wlr_scene_rect_set_color(rect, rect->color);
 
-    // TODO: 判断当前窗口是否在屏幕外，如果在屏幕外就不要绘制
-    // 划出的border剪切屏幕之外的，这里底部bttome可以了，左右的还不不对
-    offsetx = c->geom.width - c->animation.current.width;
-    offsety = c->geom.height - c->animation.current.height;
-    if (node->y > c->geom.y + c->geom.height / 2) {
-      wlr_scene_node_set_position(node, c->geom.x,
-                                  c->geom.y + c->geom.height - offsety);
+    offsetx = c->geom.width -  c->animation.current.width;
+    offsety = c->geom.height -  c->animation.current.height;
+    if(node->y > c->geom.y + c->geom.height/2 ){
+      wlr_scene_node_set_position(node,c->geom.x,c->geom.y + c->geom.height - offsety);
       wlr_scene_rect_set_size(rect, c->animation.current.width, c->bw); // down
     } else if (node->y < c->geom.y + c->geom.height / 2 &&
                rect->width > rect->height) {
