@@ -2288,6 +2288,7 @@ buttonpress(struct wl_listener *listener, void *data) {
       /* Drop the window off on its new monitor */
       selmon = xytomon(cursor->x, cursor->y);
       setmon(grabc, selmon, 0,true);
+      reset_foreign_tolevel(grabc);
       grabc = NULL;
       return;
     } else {
