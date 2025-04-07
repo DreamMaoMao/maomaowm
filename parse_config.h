@@ -106,6 +106,7 @@ typedef struct {
   int scroller_focus_center;
   int scroller_prefer_center;
   int focus_cross_monitor;
+  int focus_cross_tag;
   unsigned int swipe_min_threshold;
   float *scroller_proportion_preset;
   int scroller_proportion_preset_count;
@@ -561,6 +562,8 @@ void parse_config_line(Config *config, const char *line) {
     config->scroller_prefer_center = atoi(value);
   } else if (strcmp(key, "focus_cross_monitor") == 0) {
     config->focus_cross_monitor = atoi(value);
+  } else if (strcmp(key, "focus_cross_tag") == 0) {
+    config->focus_cross_tag = atoi(value);
   } else if (strcmp(key, "swipe_min_threshold") == 0) {
     config->swipe_min_threshold = atoi(value);
   } else if (strcmp(key, "scroller_proportion_preset") == 0) {
@@ -1193,6 +1196,7 @@ void override_config(void) {
   scroller_default_proportion_single = config.scroller_default_proportion_single;
   scroller_focus_center = config.scroller_focus_center;
   focus_cross_monitor = config.focus_cross_monitor;
+  focus_cross_tag = config.focus_cross_tag;
   swipe_min_threshold = config.swipe_min_threshold;
   scroller_prefer_center = config.scroller_prefer_center;
 
@@ -1277,6 +1281,7 @@ void set_value_default() {
   config.scroller_focus_center = scroller_focus_center;
   config.scroller_prefer_center = scroller_prefer_center;
   config.focus_cross_monitor = focus_cross_monitor;
+  config.focus_cross_tag = focus_cross_tag;
   config.swipe_min_threshold = swipe_min_threshold;
 
   config.bypass_surface_visibility = bypass_surface_visibility; /* 1 means idle inhibitors will disable idle tracking even if it's surface isn't visible  */

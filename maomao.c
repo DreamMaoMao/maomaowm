@@ -1906,6 +1906,13 @@ void focusdir(const Arg *arg) {
     focusclient(c, 1);
     if (warpcursor)
       warp_cursor(c);
+  } else {
+    if (config.focus_cross_tag) {
+      if (arg->i == LEFT || arg->i == UP)
+        viewtoleft_have_client(NULL);
+      if (arg->i == RIGHT || arg->i == DOWN)
+        viewtoright_have_client(NULL);
+    }
   }
 }
 
