@@ -1646,6 +1646,8 @@ arrange(Monitor *m, bool want_animation) {
             c->animainit_geom.x = c->animation.running ? c->animation.current.x
                                                        : m->m.x - c->geom.width;
           }
+        } else {
+          c->animainit_geom.x = c->animation.current.x;
         }
 
         c->animation.from_rule = false;
