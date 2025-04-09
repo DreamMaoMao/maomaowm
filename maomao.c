@@ -260,7 +260,6 @@ struct Client {
   pid_t pid;
   Client *swallowing, *swallowedby;
   bool is_clip_to_hide;
-  bool need_scale_first_frame;
 };
 
 
@@ -1133,13 +1132,13 @@ struct uvec2 clip_to_hide(Client *c, struct wlr_box *clip_box) {
   return offset;
 }
 
-void apply_buffer_scale(Client *c, struct wlr_box clip_box ) {
+void apply_buffer_scale(Client *c, struct wlr_box clip_box, struct wlr_box geom) {
   animationScale scale_data;
   scale_data.width = clip_box.width - 2 * c->bw;
   scale_data.height = clip_box.height - 2 * c->bw;
   scale_data.m = c->mon;
-  scale_data.width_scale = (float)clip_box.width / c->current.width;
-  scale_data.height_scale = (float)clip_box.height / c->current.height;
+  scale_data.width_scale = (float)scale_data.width / geom.width;
+  scale_data.height_scale = (float)scale_data.height / geom.height;
   buffer_set_size(c, scale_data);
 }
 
@@ -1184,7 +1183,7 @@ void client_apply_clip(Client *c) {
 
   wlr_scene_subsurface_tree_set_clip(&c->scene_surface->node, &clip_box);
   apply_border(c, clip_box, offset.x, offset.y);
-  apply_buffer_scale(c,clip_box);
+  apply_buffer_scale(c,clip_box, geometry);
 }
 
 bool client_draw_frame(Client *c) {
@@ -4073,8 +4072,6 @@ mapnotify(struct wl_listener *listener, void *data) {
   c->need_float_size_reduce = 0;
   c->iskilling = 0;
   c->scroller_proportion = scroller_default_proportion;
-  c->need_scale_first_frame = true;
-  // nop
 
   if (new_is_master &&
       strcmp(selmon->pertag->ltidxs[selmon->pertag->curtag]->name,
@@ -4520,11 +4517,7 @@ void scene_buffer_apply_size(struct wlr_scene_buffer *buffer, int sx, int sy,
                              void *data) {
   animationScale *scale_data = (animationScale *)data;
   
-  if(scale_data->height_scale <= 0 || scale_data->width_scale <= 0) {
-    return;
-  }
-
-  if(scale_data->height <= 0 || scale_data->width <= 0) { 
+  if(scale_data->height_scale < 1 || scale_data->width_scale < 1) {
     return;
   }
 
@@ -4540,15 +4533,18 @@ void scene_buffer_apply_size(struct wlr_scene_buffer *buffer, int sx, int sy,
   surface_width *= scale_data->width_scale;
   surface_height *= scale_data->height_scale;
 
-  if (wlr_subsurface_try_from_wlr_surface(surface) != NULL && 
-      surface_width <= scale_data->m->m.width && 
-      surface_height <= scale_data->m->m.height &&
-      surface_height > 0 && surface_width > 0) {
-    wlr_scene_buffer_set_dest_size(buffer, surface_width, surface_height);
-  } else if(scale_data->width >0 && scale_data->height > 0) {
-    wlr_scene_buffer_set_dest_size(buffer, scale_data->width,
-                                   scale_data->height);
+  if (surface_width > scale_data->width && wlr_subsurface_try_from_wlr_surface(surface) == NULL)  {
+    surface_width = scale_data->width;
   }
+  
+  if (surface_height > scale_data->height && wlr_subsurface_try_from_wlr_surface(surface) == NULL)  {
+    surface_height = scale_data->height;
+  }
+
+  if (surface_height > 0 && surface_width > 0) {
+    wlr_scene_buffer_set_dest_size(buffer, surface_width, surface_height);
+  }
+
 }
 
 void snap_scene_buffer_apply_size(struct wlr_scene_buffer *buffer, int sx,
@@ -4558,14 +4554,6 @@ void snap_scene_buffer_apply_size(struct wlr_scene_buffer *buffer, int sx,
 }
 
 void buffer_set_size(Client *c, animationScale data) {
-
-  if (c->animation.current.width <= c->geom.width &&
-      c->animation.current.height <= c->geom.height && !c->need_scale_first_frame) {
-    return;
-  }
-
-  c->need_scale_first_frame = false;
-
 
   if (c->iskilling || c->animation.tagouting ||
       c->animation.tagouted || c->animation.tagining) {
