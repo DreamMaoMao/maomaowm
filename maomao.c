@@ -4531,6 +4531,14 @@ void scene_buffer_apply_size(struct wlr_scene_buffer *buffer, int sx, int sy,
     return;
   }
 
+  if(scale_data->height_scale == 1 && scale_data->width_scale < 1) {
+    return;
+  } 
+
+  if(scale_data->height_scale < 1 && scale_data->width_scale == 1) {
+    return;
+  }
+
   struct wlr_scene_surface *scene_surface = wlr_scene_surface_try_from_buffer(buffer);
 
   if(scene_surface == NULL) return;
@@ -4540,8 +4548,8 @@ void scene_buffer_apply_size(struct wlr_scene_buffer *buffer, int sx, int sy,
   uint32_t surface_width = surface->current.width;
   uint32_t surface_height = surface->current.height;
 
-  surface_width *= scale_data->width_scale;
-  surface_height *= scale_data->height_scale;
+  surface_width =  scale_data->width_scale < 1 ? surface_width : scale_data->width_scale * surface_width;
+  surface_height = scale_data->height_scale < 1 ? surface_height : scale_data->height_scale * surface_height;
 
   if (surface_width > scale_data->width && wlr_subsurface_try_from_wlr_surface(surface) == NULL)  {
     surface_width = scale_data->width;
