@@ -4854,7 +4854,7 @@ void resize(Client *c, struct wlr_box geo, int interact) {
         c, bbox); // 去掉这个推荐的窗口大小,因为有时推荐的窗口特别大导致平铺异常
   }
 
-  if(c->geom.width <0 || c->geom.height <0) {
+  if((int32_t)c->geom.width <0 || (int32_t)c->geom.height <0) {
     return;
   }
 
