@@ -4517,7 +4517,7 @@ void scene_buffer_apply_size(struct wlr_scene_buffer *buffer, int sx, int sy,
                              void *data) {
   animationScale *scale_data = (animationScale *)data;
   
-  if(scale_data->height_scale < 1 || scale_data->width_scale < 1) {
+  if(scale_data->height_scale < 1 && scale_data->width_scale < 1) {
     return;
   }
 
