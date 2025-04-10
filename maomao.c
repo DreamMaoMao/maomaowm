@@ -1783,23 +1783,15 @@ Client *center_select(Monitor* m) {
   return target_c;
 }
 
-Client *direction_select(const Arg *arg) {
+
+Client *find_client_by_direction(Client *tc,const Arg *arg,bool findfloating, bool align) {
   Client *c;
   Client **tempClients = NULL; // 初始化为 NULL
-  Client *tc = selmon->sel;
   int last = -1;
-
-  if (!tc)
-    return NULL;
-
-  if (tc && (tc->isfullscreen || tc->ismaxmizescreen)) {
-    // 不支持全屏窗口的焦点切换
-    return NULL;
-  }
 
   // 第一次遍历，计算客户端数量
   wl_list_for_each(c, &clients, link) {
-    if (c && (focus_cross_monitor || c->mon == selmon) && (c->tags & c->mon->tagset[c->mon->seltags])) {
+    if (c && (findfloating || !c->isfloating) && (focus_cross_monitor || c->mon == selmon) && (c->tags & c->mon->tagset[c->mon->seltags])) {
       last++;
     }
   }
@@ -1818,7 +1810,7 @@ Client *direction_select(const Arg *arg) {
   // 第二次遍历，填充 tempClients
   last = -1;
   wl_list_for_each(c, &clients, link) {
-    if (c && (focus_cross_monitor || c->mon == selmon) && (c->tags & c->mon->tagset[c->mon->seltags])) {
+    if (c && (findfloating || !c->isfloating) && (focus_cross_monitor || c->mon == selmon) && (c->tags & c->mon->tagset[c->mon->seltags])) {
       last++;
       tempClients[last] = c;
     }
@@ -1842,7 +1834,7 @@ Client *direction_select(const Arg *arg) {
         }
       }
     }
-    if (!tempFocusClients) {
+    if (!tempFocusClients && !align) {
       for (int _i = 0; _i <= last; _i++) {
         if (tempClients[_i]->geom.y < sel_y) {
           int dis_x = tempClients[_i]->geom.x - sel_x;
@@ -1869,7 +1861,7 @@ Client *direction_select(const Arg *arg) {
         }
       }
     }
-    if (!tempFocusClients) {
+    if (!tempFocusClients && !align) {
       for (int _i = 0; _i <= last; _i++) {
         if (tempClients[_i]->geom.y > sel_y) {
           int dis_x = tempClients[_i]->geom.x - sel_x;
@@ -1896,7 +1888,7 @@ Client *direction_select(const Arg *arg) {
         }
       }
     }
-    if (!tempFocusClients) {
+    if (!tempFocusClients && !align) {
       for (int _i = 0; _i <= last; _i++) {
         if (tempClients[_i]->geom.x < sel_x) {
           int dis_x = tempClients[_i]->geom.x - sel_x;
@@ -1923,7 +1915,7 @@ Client *direction_select(const Arg *arg) {
         }
       }
     }
-    if (!tempFocusClients) {
+    if (!tempFocusClients && !align) {
       for (int _i = 0; _i <= last; _i++) {
         if (tempClients[_i]->geom.x > sel_x) {
           int dis_x = tempClients[_i]->geom.x - sel_x;
@@ -1942,6 +1934,24 @@ Client *direction_select(const Arg *arg) {
 
   free(tempClients); // 释放内存
   return tempFocusClients;
+
+}
+
+Client *direction_select(const Arg *arg) {
+
+  Client *tc = selmon->sel;
+
+  if (!tc)
+    return NULL;
+
+  if (tc && (tc->isfullscreen || tc->ismaxmizescreen)) {
+    // 不支持全屏窗口的焦点切换
+    return NULL;
+  }
+
+  return find_client_by_direction(tc, arg, true, false);
+
+
 }
 
 void focusdir(const Arg *arg) {
@@ -5842,8 +5852,8 @@ void fibonacci(Monitor *mon, int s) {
 
   nx = mon->w.x + gappoh;
   ny = mon->w.y + gappov;
-  nw = mon->w.width - gappoh;
-  nh = mon->w.height - gappov;
+  nw = mon->w.width - 2* gappoh;
+  nh = mon->w.height - 2* gappov;
 
   wl_list_for_each(c, &clients, link) if (VISIBLEON(c, mon) && !c->isfloating &&
                                           !c->iskilling && !c->isfullscreen &&
@@ -5882,20 +5892,32 @@ void fibonacci(Monitor *mon, int s) {
 
       if (i == 0) {
         if (n != 1)
-          nw = (mon->w.width - gappoh) *
+          nw = (mon->w.width - 2 * gappoh) *
                mon->pertag->mfacts[mon->pertag->curtag];
         ny = mon->w.y + gappov;
       } else if (i == 1) {
-        nw = mon->w.width - gappoh - nw;
+        nw = mon->w.width - 2 * gappoh - nw;
       } else if (i == 2)
-        nh = mon->w.height - gappov - nh;
+        nh = mon->w.height - 2 * gappov - nh;
       i++;
     }
 
-    resize(c,
-           (struct wlr_box){
-               .x = nx, .y = ny, .width = nw - gappih, .height = nh - gappiv},
-           0);
+    c->geom = (struct wlr_box){
+      .x = nx, .y = ny, .width = nw, .height = nh};
+  }
+
+
+  unsigned int gih, giv;
+  const Arg *dir_down = &(Arg){.i = DOWN};
+  const Arg *dir_right = &(Arg){.i = RIGHT};
+
+  wl_list_for_each(c, &clients, link) if (VISIBLEON(c, mon) && !c->isfloating &&
+                                          !c->iskilling && !c->isfullscreen &&
+                                          !c->ismaxmizescreen &&
+                                          !c->animation.tagouting) {
+    gih = find_client_by_direction(c, dir_right, false, true) ? gappih:0;
+    giv = find_client_by_direction(c, dir_down, false, true) ? gappiv:0;
+    resize(c, (struct wlr_box){.x = c->geom.x, .y = c->geom.y, .width = c->geom.width - gih, .height = c->geom.height - giv}, 0);
   }
 }
 
