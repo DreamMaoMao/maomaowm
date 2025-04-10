@@ -1064,15 +1064,15 @@ void apply_border(Client *c, struct wlr_box clip_box, int offsetx,
 
   if (ISTILED(c) || c->animation.tagining || c->animation.tagouted || c->animation.tagouting) {
     if (c->animation.current.x < c->mon->m.x) {
-      set_rect_size(c->border[2], 0, 0);
+      set_rect_size(c->border[2], GEZERO(c->bw - offsetx), clip_box.height - 2 * c->bw);
     } else if (c->animation.current.x + c->animation.current.width >
                c->mon->m.x + c->mon->m.width) {
-      set_rect_size(c->border[3], 0, 0);
+      set_rect_size(c->border[3], GEZERO(c->bw - offsetx), clip_box.height - 2 * c->bw);
     } else if (c->animation.current.y < c->mon->m.y) {
-      set_rect_size(c->border[0], 0, 0);
+      set_rect_size(c->border[0], clip_box.width, GEZERO(c->bw - offsety));
     } else if (c->animation.current.y + c->animation.current.height >
                c->mon->m.y + c->mon->m.height) {
-      set_rect_size(c->border[1], 0, 0);
+      set_rect_size(c->border[1], clip_box.width, GEZERO(c->bw - offsety));
     }
   }
 
