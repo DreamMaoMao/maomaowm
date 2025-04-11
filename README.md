@@ -74,14 +74,6 @@ yay -S glibc wayland libinput libdrm pixman libxkbcommon git meson ninja wayland
 Since 0.18 has some bugs that affect the experience,
 I chose the more stable 0.17.4.
 
-- Arch
-
-```
-yay -S maomaowm-git
-```
-
-- Other
-
 ```
 git clone -b 0.17.4 https://gitlab.freedesktop.org/wlroots/wlroots.git
 cd wlroots
