@@ -2596,7 +2596,6 @@ double output_frame_duration_ms(Client *c) {
 }
 
 void client_commit(Client *c) {
-  /* c->dirty = false; */
   c->current = c->pending; // 设置动画的结束位置
 
   if (c->animation.should_animate) {
@@ -2640,14 +2639,18 @@ void commitnotify(struct wl_listener *listener, void *data) {
   if(!c->dirty)
     return;
 
-	wlr_log(WLR_DEBUG, "app commit event handle:%s",client_get_appid(c));
+  struct wlr_box geometry;
+  client_get_geometry(c, &geometry);
+  if(geometry.width == c->animation.current.width - 2 * c->bw && geometry.height == c->animation.current.height - 2 * c->bw) {
+    c->dirty = false;
+    return;
+  }
+
+	wlr_log(WLR_DEBUG, "app commit event handle:%s,%d,%d",client_get_appid(c),geometry.width - c->animation.current.width,geometry.height - c->animation.current.height);
   resize(c, c->geom, (c->isfloating && !c->isfullscreen));
 
-  uint32_t width, height;
-  client_actual_size(c, &width, &height);
-  if(width == c->geom.width && height == c->geom.height)
-    c->dirty = false;
-
+  // if (c->configure_serial && c->configure_serial <=
+  // c->surface.xdg->current.configure_serial) 	c->configure_serial = 0;
 }
 
 void destroydecoration(struct wl_listener *listener, void *data) {
