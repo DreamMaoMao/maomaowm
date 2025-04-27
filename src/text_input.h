@@ -7,27 +7,13 @@
 #include <handwrite-unstable-v1-protocol.h>
 #endif
 
-/**
- * The relay structure manages the relationship between text-input and
- * input_method interfaces on a given seat. Multiple text-input interfaces may
- * be bound to a relay, but at most one will be focused (receiving events) at
- * a time. At most one input-method interface may be bound to the seat. The
- * relay manages life cycle of both sides. When both sides are present and
- * focused, the relay passes messages between them.
- *
- * Text input focus is a subset of keyboard focus - if the text-input is
- * in the focused state, wl_keyboard sent an enter as well. However, having
- * wl_keyboard focused doesn't mean that text-input will be focused.
- */
-// 这个relay这一层结构嵌套其实在dwl这里没啥用,暴露出结构成员定义作全局变量代码会更清晰,更符合dwl的风格
-// 但这个代码最初是日本人从sway那边抄过来的,sway的架构比较大,我猜会不会是考虑到会有两个input_method实例才这么定义
-// 为了考虑万一以后哪个版本要扩充,就保留外层的结构
 struct dwl_input_method_relay {
 	struct wl_list text_inputs; // dwl_text_input::link
 	struct wlr_input_method_v2 *input_method; // doesn't have to be present
 
         struct dwl_input_popup *popup;
-
+		struct wlr_surface *focused_surface;
+		struct wl_listener focused_surface_destroy;
 	struct wl_listener text_input_new;
 
 	struct wl_listener input_method_new;
@@ -42,9 +28,6 @@ struct dwl_text_input {
 	struct dwl_input_method_relay *relay;
 
 	struct wlr_text_input_v3 *input;
-	// The surface getting seat's focus. Stored for when text-input cannot
-	// be sent an enter event immediately after getting focus, e.g. when
-	// there's no input method available. Cleared once text-input is entered.
 	struct wlr_surface *pending_focused_surface;
 
 	struct wl_list link;
@@ -114,24 +97,8 @@ const struct zwp_handwrite_v1_interface handwrite_interface_impl = {
     .send_handwrite_text = receive_handwrite_text_from_handwrite_input_app,
 };
 
-// struct wl_client* handwrite_app=NULL;//TODO: multiple handwrite app instance?
-// void zwp_handwrite_v1_handle_bind(struct wl_client *client, void *data, uint32_t version, uint32_t id){
-//     wlr_log(WLR_INFO,"zwp_handwrite_v1_handle_bind called");
-//     handwrite_app = client;
-//     struct wl_resource *resource = wl_resource_create(client, &zwp_handwrite_v1_interface, zwp_handwrite_v1_interface.version, id);
-//     wl_resource_set_implementation(resource, &handwrite_interface_impl, NULL, NULL);
-// }
 #endif
 
-
-
-/**
- * Get keyboard grab of the seat from sway_keyboard if we should forward events
- * to it.
- *
- * Returns NULL if the keyboard is not grabbed by an input method,
- * or if event is from virtual keyboard
- */
 static struct wlr_input_method_keyboard_grab_v2 *keyboard_get_im_grab(KeyboardGroup* kb) {
 	struct wlr_input_method_v2 *input_method = input_relay->input_method;
 
@@ -280,22 +247,28 @@ static void handle_im_destroy(struct wl_listener *listener, void *data) {
 }
 
 static void relay_send_im_state(struct dwl_input_method_relay *relay,
-		struct wlr_text_input_v3 *input) {
-	struct wlr_input_method_v2 *input_method = relay->input_method;
-	if (!input_method) {
-		wlr_log(WLR_INFO, "Sending IM_DONE but im is gone");
-		return;
-	}
-	// TODO: only send each of those if they were modified
+	struct wlr_text_input_v3 *input) {
+struct wlr_input_method_v2 *input_method = relay->input_method;
+if (!input_method) {
+	return;
+}
+
+// 只发送已修改的状态
+if (input->active_features & WLR_TEXT_INPUT_V3_FEATURE_SURROUNDING_TEXT) {
 	wlr_input_method_v2_send_surrounding_text(input_method,
 		input->current.surrounding.text, input->current.surrounding.cursor,
 		input->current.surrounding.anchor);
-	wlr_input_method_v2_send_text_change_cause(input_method,
-		input->current.text_change_cause);
+}
+
+wlr_input_method_v2_send_text_change_cause(input_method,
+	input->current.text_change_cause);
+	
+if (input->active_features & WLR_TEXT_INPUT_V3_FEATURE_CONTENT_TYPE) {
 	wlr_input_method_v2_send_content_type(input_method,
 		input->current.content_type.hint, input->current.content_type.purpose);
-	wlr_input_method_v2_send_done(input_method);
-	// TODO: pass intent, display popup size
+}
+
+wlr_input_method_v2_send_done(input_method);
 }
 
 static void handle_text_input_enable(struct wl_listener *listener, void *data) {
@@ -314,22 +287,6 @@ static void handle_text_input_enable(struct wl_listener *listener, void *data) {
 
 	relay_send_im_state(text_input->relay, text_input->input);
 }
-
-/* static void handle_text_input_commit(struct wl_listener *listener, */
-/* 		void *data) { */
-/* 	struct dwl_text_input *text_input = wl_container_of(listener, text_input, */
-/* 		text_input_commit); */
-/* 	if (!text_input->input->current_enabled) { */
-/* 		wlr_log(WLR_INFO, "text_input_commit but not enabled"); */
-/* 		return; */
-/* 	} */
-/* 	if (text_input->relay->input_method == NULL) { */
-/* 		wlr_log(WLR_INFO, "text_input_commit but input method is NULL"); */
-/* 		return; */
-/* 	} */
-/* 	wlr_log(WLR_DEBUG, "text_input_commit"); */
-/* 	relay_send_im_state(text_input->relay, text_input->input); */
-/* } */
 
 static void relay_disable_text_input(struct dwl_input_method_relay *relay,
 		struct dwl_text_input *text_input) {
@@ -407,12 +364,6 @@ static void relay_handle_text_input_new(struct wl_listener *listener,
 	input->text_input_enable.notify = handle_text_input_enable;
 	wl_signal_add(&wlr_text_input->events.enable, &input->text_input_enable);
 
-	//input->text_input_commit.notify = handle_text_input_commit;
-	//wl_signal_add(&text_input->events.commit, &input->text_input_commit);
-
-	/* input->text_input_disable.notify = handle_text_input_disable; */
-	/* wl_signal_add(&text_input->events.disable, &input->text_input_disable); */
-
 	input->text_input_destroy.notify = handle_text_input_destroy;
 	wl_signal_add(&wlr_text_input->events.destroy, &input->text_input_destroy);
 
@@ -469,9 +420,6 @@ static void get_parent_and_output_box(struct wlr_surface *focused_surface,
 	wlr_log(WLR_INFO,"get_parent_and_output_box output_box  x %d y %d width %d height %d",output_box->x,output_box->y,output_box->width,output_box->height);
 }
 
-// 如果当前focused wlr_text_input_v3.features 满足 WLR_TEXT_INPUT_V3_FEATURE_CURSOR_RECTANGLE, 不含这个feature就弹出在父窗口左上角
-// 根据 wlr_text_input_v3.current.cursor_rectangle 计算出一个wlr_box
-// 再调用 wlr_input_popup_surface_v2_send_text_input_rectangle 和 wlr_scene_node_set_position
 static void input_popup_update(struct dwl_input_popup *popup) {
 	struct wlr_surface* focused_surface;
 	struct wlr_box output_box, parent, cursor;
@@ -485,7 +433,6 @@ static void input_popup_update(struct dwl_input_popup *popup) {
 		return;
 	}
 
-	//TODO: https://gitlab.freedesktop.org/wlroots/wlroots/-/commit/743da5c0ae723098fe772aadb93810f60e700ab9
 
 	if (!popup->popup_surface->surface->mapped) {
 		return;
@@ -573,22 +520,17 @@ static void handle_im_popup_map(struct wl_listener *listener, void *data) {
 
 	wlr_log(WLR_INFO, "IM_popup_map");
 	
-        //popup->scene = &wlr_scene_tree_create(layers[LyrIMPopup])->node;
 	popup->scene = wlr_scene_tree_create(layers[LyrIMPopup]);
 	popup->scene_surface = wlr_scene_subsurface_tree_create(popup->scene,popup->popup_surface->surface);
-	//popup->scene_surface = &wlr_scene_subsurface_tree_create(popup->scene->parent,popup->popup_surface->surface)->node;
-	//popup->scene_surface->data = popup;
 	popup->scene_surface->node.data = popup;
 
 	input_popup_update(popup);
 
-	//wlr_scene_node_set_position(popup->scene, popup->x, popup->y);
 }
 
 static void handle_im_popup_unmap(struct wl_listener *listener, void *data) {
         struct dwl_input_popup *popup =
 		wl_container_of(listener, popup, popup_unmap);
-	//input_popup_update(popup);
 
 	wlr_log(WLR_INFO,"im_popup_unmap");
 	wlr_scene_node_destroy(&popup->scene->node);
@@ -683,6 +625,22 @@ static void relay_handle_input_method_new(struct wl_listener *listener,
 	}
 }
 
+
+/*
+ * Usually this function is not called because the client destroys the surface
+ * role (like xdg_toplevel) first and input_method_relay_set_focus() is called
+ * before wl_surface is destroyed.
+ */
+static void
+relay_handle_focused_surface_destroy(struct wl_listener *listener, void *data)
+{
+	struct dwl_input_method_relay *relay =
+		wl_container_of(listener, relay, focused_surface_destroy);
+	assert(relay->focused_surface == data);
+
+	dwl_input_method_relay_set_focus(relay, NULL);
+}
+
 void dwl_input_method_relay_init(struct dwl_input_method_relay *relay) {
 	wl_list_init(&relay->text_inputs);
 
@@ -695,41 +653,44 @@ void dwl_input_method_relay_init(struct dwl_input_method_relay *relay) {
 	relay->input_method_new.notify = relay_handle_input_method_new;
 	wl_signal_add(&input_method_manager->events.input_method,
 		&relay->input_method_new);
+
+	relay->focused_surface_destroy.notify = relay_handle_focused_surface_destroy;
 }
 
 void dwl_input_method_relay_set_focus(struct dwl_input_method_relay *relay,
-		struct wlr_surface *surface) {
-	struct dwl_text_input *text_input;
-	wl_list_for_each(text_input, &relay->text_inputs, link) {
-		if (text_input->pending_focused_surface) {
-			assert(text_input->input->focused_surface == NULL);
-			if (surface != text_input->pending_focused_surface) {
-				text_input_set_pending_focused_surface(text_input, NULL);
-			}
-		} else if (text_input->input->focused_surface) {
-			assert(text_input->pending_focused_surface == NULL);
-			if (surface != text_input->input->focused_surface) {				
-				relay_disable_text_input(relay, text_input);
-				wlr_text_input_v3_send_leave(text_input->input);
-				wlr_log(WLR_INFO, "wlr_text_input_send_leave");
-			} else {
-				wlr_log(WLR_INFO, "IM relay set_focus already focused");
-				continue;
-			}
-		}
-
-		if (surface
-				&& wl_resource_get_client(text_input->input->resource)
-				== wl_resource_get_client(surface->resource)) {
-			if (relay->input_method) {
-				wlr_text_input_v3_send_enter(text_input->input, surface);
-				wlr_log(WLR_INFO, "wlr_text_input_send_enter");
-                                if (relay->popup) input_popup_update(relay->popup);
-			} else {
-				text_input_set_pending_focused_surface(text_input, surface);
-			}
-		}
-	}
+	struct wlr_surface *surface) {
+if (relay->focused_surface == surface) {
+	return;
 }
 
+// 更新焦点表面
+if (relay->focused_surface) {
+	wl_list_remove(&relay->focused_surface_destroy.link);
+}
+relay->focused_surface = surface;
+if (surface) {
+	wl_signal_add(&surface->events.destroy,
+		&relay->focused_surface_destroy);
+}
+
+struct dwl_text_input *text_input;
+wl_list_for_each(text_input, &relay->text_inputs, link) {
+	// 只处理与焦点表面同客户端的文本输入框
+	if (surface && wl_resource_get_client(text_input->input->resource) ==
+			wl_resource_get_client(surface->resource)) {
+		if (relay->input_method) {
+			wlr_text_input_v3_send_enter(text_input->input, surface);
+		} else {
+			text_input_set_pending_focused_surface(text_input, surface);
+		}
+	} else if (text_input->input->focused_surface) {
+		if (text_input->input->current_enabled) {
+			relay_disable_text_input(relay, text_input);
+		}
+		wlr_text_input_v3_send_leave(text_input->input);
+	} else if (text_input->pending_focused_surface) {
+		text_input_set_pending_focused_surface(text_input, NULL);
+	}
+}
+}
 #endif
