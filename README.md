@@ -2,6 +2,8 @@
 
 This project is developed based on [dwl](https://codeberg.org/dwl/dwl/),
 
+"Since many people have asked about the meaning of this compositor's name,  'Maomao' is an online alias I've been using for years - it comes from the first two characters of the Chinese word for 'caterpillar' (毛毛虫). You can basically think of it as meaning 'caterpillar'.
+
 1. **Lightweight & Fast Build**  
    - *Maomao* is as lightweight as *dwl*, and its build can be completed within few seconds. Despite this, *maomao* does not compromise on functionality.  
 
