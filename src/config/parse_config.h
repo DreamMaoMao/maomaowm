@@ -16,6 +16,14 @@ typedef struct {
   Arg arg;
 } KeyBinding;
 
+struct config_xkb_rule_names {
+ char *rules;
+ char *model;
+ char *layout;
+ char *variant;
+ char *options;
+};
+
 typedef struct {
   const char *id;
   const char *title;
@@ -206,6 +214,8 @@ typedef struct {
 
   char *cursor_theme;
   unsigned int cursor_size;
+
+  struct config_xkb_rule_names xkb_rules;
 
 } Config;
 
@@ -609,6 +619,16 @@ void parse_config_line(Config *config, const char *line) {
 
   if (strcmp(key, "animations") == 0) {
     config->animations = atoi(value);
+  } else if(strcmp(key, "kb_layout") == 0) {
+    config->xkb_rules.layout = strdup(value);
+  } else if(strcmp(key, "kb_variant") == 0) {
+    config->xkb_rules.variant = strdup(value);
+  } else if(strcmp(key, "kb_options") == 0) {
+    config->xkb_rules.options = strdup(value);
+  } else if(strcmp(key, "kb_model") == 0) {
+    config->xkb_rules.model = strdup(value);
+  } else if(strcmp(key, "kb_rules") == 0) {
+    config->xkb_rules.rules = strdup(value);
   } else if (strcmp(key, "animation_type_open") == 0) {
     snprintf(config->animation_type_open, sizeof(config->animation_type_open),
              "%.9s", value); // string limit to 9 char
@@ -1499,6 +1519,27 @@ void free_config(void) {
     config.cursor_theme = NULL;
   }
 
+  if(config.xkb_rules.rules) {
+    free(config.xkb_rules.rules);
+    config.xkb_rules.rules = NULL;
+  }
+  if(config.xkb_rules.model) {
+    free(config.xkb_rules.model);
+    config.xkb_rules.model = NULL;
+  }
+  if(config.xkb_rules.layout) {
+    free(config.xkb_rules.layout);
+    config.xkb_rules.layout = NULL;
+  }
+  if(config.xkb_rules.variant) {
+    free(config.xkb_rules.variant);
+    config.xkb_rules.variant = NULL;
+  }
+  if(config.xkb_rules.options) {
+    free(config.xkb_rules.options);
+    config.xkb_rules.options = NULL;
+  }
+
   // 释放 circle_layout
   free_circle_layout(&config);
 
@@ -1664,6 +1705,12 @@ void set_value_default() {
   config.left_handed = left_handed;
   config.middle_button_emulation = middle_button_emulation;
 
+  config.xkb_rules.rules = NULL;
+  config.xkb_rules.model = NULL;
+  config.xkb_rules.layout = NULL;
+  config.xkb_rules.variant = NULL;
+  config.xkb_rules.options = NULL;
+
   memcpy(config.animation_curve_move, animation_curve_move,
          sizeof(animation_curve_move));
   memcpy(config.animation_curve_open, animation_curve_open,
@@ -1741,6 +1788,11 @@ void parse_config(void) {
   config.tag_rules = NULL;
   config.tag_rules_count = 0;
   config.cursor_theme = NULL;
+  config.xkb_rules.rules = NULL;
+  config.xkb_rules.model = NULL;
+  config.xkb_rules.layout = NULL;
+  config.xkb_rules.variant = NULL;
+  config.xkb_rules.options = NULL;
 
   // 获取 MAOMAOCONFIG 环境变量
   const char *maomaoconfig = getenv("MAOMAOCONFIG");
@@ -1779,6 +1831,7 @@ void reload_config(const Arg *arg) {
   int i, jk;
   Keyboard *kb;
   parse_config();
+  assignkeymap(&kb_group->wlr_group->keyboard);
   init_baked_points();
   run_exec();
 

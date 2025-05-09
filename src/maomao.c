@@ -627,6 +627,7 @@ static void snap_scene_buffer_apply_effect(struct wlr_scene_buffer *buffer,
                                            int sx, int sy, void *data);
 static void client_set_pending_state(Client *c);
 static void set_rect_size(struct wlr_scene_rect *rect, int width, int height);
+static void assignkeymap(struct wlr_keyboard *keyboard);
 
 #include "dispatch/dispatch.h"
 
@@ -2953,21 +2954,24 @@ void createkeyboard(struct wlr_keyboard *keyboard) {
   wlr_keyboard_group_add_keyboard(kb_group->wlr_group, keyboard);
 }
 
-KeyboardGroup *createkeyboardgroup(void) {
-  KeyboardGroup *group = ecalloc(1, sizeof(*group));
-  struct xkb_context *context;
-  struct xkb_keymap *keymap;
+void
+assignkeymap(struct wlr_keyboard *keyboard) {
 
-  group->wlr_group = wlr_keyboard_group_create();
-  group->wlr_group->data = group;
+  struct xkb_rule_names xkb_rules = {
+    .layout = config.xkb_rules.layout,
+    .variant = config.xkb_rules.variant,
+    .options = config.xkb_rules.options,
+    .model = config.xkb_rules.model,
+    .rules = config.xkb_rules.rules,
+  };
 
-  /* Prepare an XKB keymap and assign it to the keyboard group. */
-  context = xkb_context_new(XKB_CONTEXT_NO_FLAGS);
-  if (!(keymap = xkb_keymap_new_from_names(context, &xkb_rules,
-                                           XKB_KEYMAP_COMPILE_NO_FLAGS)))
-    die("failed to compile keymap");
+	struct xkb_context *context = xkb_context_new(XKB_CONTEXT_NO_FLAGS);
+	struct xkb_keymap *keymap = xkb_keymap_new_from_names(context, &xkb_rules,
+					XKB_KEYMAP_COMPILE_NO_FLAGS);
 
-  wlr_keyboard_set_keymap(&group->wlr_group->keyboard, keymap);
+	if (!keymap)
+		die("failed to compile keymap");
+
 
   if (numlockon) {
     xkb_mod_index_t mod_index =
@@ -2983,12 +2987,23 @@ KeyboardGroup *createkeyboardgroup(void) {
       locked_mods |= (uint32_t)1 << mod_index;
   }
 
+	wlr_keyboard_set_keymap(keyboard, keymap);
+	xkb_keymap_unref(keymap);
+	xkb_context_unref(context);
+}
+
+
+KeyboardGroup *createkeyboardgroup(void) {
+  KeyboardGroup *group = ecalloc(1, sizeof(*group));
+
+  group->wlr_group = wlr_keyboard_group_create();
+  group->wlr_group->data = group;
+
+  assignkeymap(&group->wlr_group->keyboard);
+
   if (locked_mods)
     wlr_keyboard_notify_modifiers(&group->wlr_group->keyboard, 0, 0,
                                   locked_mods, 0);
-
-  xkb_keymap_unref(keymap);
-  xkb_context_unref(context);
 
   wlr_keyboard_set_repeat_info(&group->wlr_group->keyboard, repeat_rate,
                                repeat_delay);

@@ -92,15 +92,6 @@ Layout layouts[] = {
     {"D", dwindle, "dwindle"},   {"P", spiral, "spiral"},
 };
 
-/* keyboard */
-struct xkb_rule_names xkb_rules = {
-    /* can specify fields: rules, model, layout, variant, options */
-    /* example:
-    .options = "ctrl:nocaps",
-    */
-    .options = NULL,
-};
-
 int repeat_rate = 25;
 int repeat_delay = 600;
 
