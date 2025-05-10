@@ -1094,7 +1094,7 @@ void apply_border(Client *c, struct wlr_box clip_box, int offsetx,
       set_rect_size(
           c->border[3],
           GEZERO(c->bw - (c->animation.current.x + c->animation.current.width -
-                          c->mon->m.x + c->mon->m.width)),
+                          c->mon->m.x - c->mon->m.width)),
           clip_box.height - 2 * c->bw);
     } else if (c->animation.current.y < c->mon->m.y) {
       set_rect_size(c->border[0], clip_box.width, GEZERO(c->bw - offsety));
@@ -1103,7 +1103,7 @@ void apply_border(Client *c, struct wlr_box clip_box, int offsetx,
       set_rect_size(
           c->border[1], clip_box.width,
           GEZERO(c->bw - (c->animation.current.y + c->animation.current.height -
-                          c->mon->m.y + c->mon->m.height)));
+                          c->mon->m.y - c->mon->m.height)));
     }
   }
 
