@@ -55,3 +55,4 @@ void movewin(const Arg *arg);
 void resizewin(const Arg *arg);
 void toggle_named_scratch(const Arg *arg);
 void toggle_render_border(const Arg *arg);
+void cmd_create_output(const Arg *arg);

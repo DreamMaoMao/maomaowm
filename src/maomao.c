@@ -9,6 +9,9 @@
 #include <signal.h>
 #include <stdbool.h>
 #include <stdio.h>
+#include <wlr/backend/wayland.h>
+#include <wlr/backend/headless.h>
+#include <wlr/backend/multi.h>
 #include <stdlib.h>
 #include <sys/wait.h>
 #include <time.h>
@@ -641,6 +644,7 @@ static struct wl_event_loop *event_loop;
 static struct wlr_relative_pointer_manager_v1 *pointer_manager;
 static struct wlr_foreign_toplevel_manager_v1 *foreign_toplevel_manager;
 static struct wlr_backend *backend;
+static struct wlr_backend *headless_backend;
 static struct wlr_scene *scene;
 static struct wlr_scene_tree *layers[NUM_LAYERS];
 static struct wlr_renderer *drw;
@@ -5618,6 +5622,47 @@ void handle_foreign_destroy(struct wl_listener *listener, void *data) {
   }
 }
 
+static void create_output(struct wlr_backend *backend, void *data) {
+	bool *done = data;
+	if (*done) {
+		return;
+	}
+
+	if (wlr_backend_is_wl(backend)) {
+		wlr_wl_output_create(backend);
+		*done = true;
+	} else if (wlr_backend_is_headless(backend)) {
+		wlr_headless_add_output(backend, 1920, 1080);
+		*done = true;
+	}
+#if WLR_HAS_X11_BACKEND
+	else if (wlr_backend_is_x11(backend)) {
+		wlr_x11_output_create(backend);
+		*done = true;
+	}
+#endif
+}
+
+/**
+ * This command is intended for developer use only.
+ */
+void cmd_create_output(const Arg *arg) {
+  if (!wlr_backend_is_multi(backend)) {
+    wlr_log(WLR_ERROR, "Expected a multi backend");
+    return;
+  }
+
+	bool done = false;
+	wlr_multi_for_each_backend(backend, create_output, &done);
+
+	if (!done) {
+		return;
+	}
+
+	return;
+}
+
+
 void setup(void) {
 
   setenv("XCURSOR_SIZE", "24", 1);
@@ -5650,6 +5695,15 @@ void setup(void) {
    * don't). */
   if (!(backend = wlr_backend_autocreate(event_loop, &session)))
     die("couldn't create backend");
+
+	headless_backend = wlr_headless_backend_create(event_loop);
+	if (!headless_backend) {
+		wlr_log(WLR_ERROR, "Failed to create secondary headless backend");
+		wlr_backend_destroy(backend);
+		return;
+	} else {
+		wlr_multi_backend_add(backend, headless_backend);
+	}
 
   /* Initialize the scene graph used to lay out windows */
   scene = wlr_scene_create();
