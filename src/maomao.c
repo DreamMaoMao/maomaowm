@@ -1079,8 +1079,18 @@ void apply_border(Client *c, struct wlr_box clip_box, int offsetx,
     hit_no_border = true;
   }
 
-  if(hit_no_border) {
+  if(hit_no_border && smartgaps) {
     c->bw = 0;
+  } else if (hit_no_border && !smartgaps) {
+    set_rect_size(c->border[0], 0, 0);
+    set_rect_size(c->border[1], 0, 0);
+    set_rect_size(c->border[2], 0, 0);
+    set_rect_size(c->border[3], 0, 0);
+    wlr_scene_node_set_position(&c->border[0]->node, 0, 0);
+    wlr_scene_node_set_position(&c->border[2]->node, 0, 0);
+    wlr_scene_node_set_position(&c->border[1]->node, 0, clip_box.height);
+    wlr_scene_node_set_position(&c->border[3]->node, clip_box.width, 0);
+    return;    
   } else if(!c->isfullscreen && VISIBLEON(c, c->mon)) {
     c->bw = borderpx;
   }

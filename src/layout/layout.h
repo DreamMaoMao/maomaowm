@@ -31,7 +31,7 @@ void fibonacci(Monitor *mon, int s) {
         c->isfullscreen || c->ismaxmizescreen || c->animation.tagouting)
       continue;
 
-    c->bw = mon->visible_clients == 1 && no_border_when_single ? 0 : borderpx;
+    c->bw = mon->visible_clients == 1 && no_border_when_single && smartgaps ? 0 : borderpx;
     if ((i % 2 && nh / 2 > 2 * c->bw) || (!(i % 2) && nw / 2 > 2 * c->bw)) {
       if (i < n - 1) {
         if (i % 2) {
@@ -147,7 +147,7 @@ void grid(Monitor *m) {
 
   if (n == 1) {
     wl_list_for_each(c, &clients, link) {
-      c->bw = m->visible_clients == 1 && no_border_when_single ? 0 : borderpx;
+      c->bw = m->visible_clients == 1 && no_border_when_single && smartgaps ? 0 : borderpx;
       if (VISIBLEON(c, c->mon) && !c->iskilling && !c->animation.tagouting &&
           c->mon == selmon) {
         cw = (m->w.width - 2 * overviewgappo) * 0.7;
@@ -167,7 +167,7 @@ void grid(Monitor *m) {
     ch = (m->w.height - 2 * overviewgappo) * 0.65;
     i = 0;
     wl_list_for_each(c, &clients, link) {
-      c->bw = m->visible_clients == 1 && no_border_when_single ? 0 : borderpx;
+      c->bw = m->visible_clients == 1 && no_border_when_single && smartgaps ? 0 : borderpx;
       if (VISIBLEON(c, c->mon) && !c->iskilling && !c->animation.tagouting &&
           c->mon == selmon) {
         if (i == 0) {
@@ -211,7 +211,7 @@ void grid(Monitor *m) {
   // 调整每个客户端的位置和大小
   i = 0;
   wl_list_for_each(c, &clients, link) {
-    c->bw = m->visible_clients == 1 && no_border_when_single ? 0 : borderpx;
+    c->bw = m->visible_clients == 1 && no_border_when_single && smartgaps ? 0 : borderpx;
     if (VISIBLEON(c, c->mon) && !c->iskilling && !c->animation.tagouting &&
         c->mon == selmon) {
       cx = m->w.x + (i % cols) * (cw + overviewgappi);
