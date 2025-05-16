@@ -37,6 +37,8 @@ wlroots_dep = dependency('wlroots-0.19')
 xkbcommon_dep = dependency('xkbcommon')
 libinput_dep = dependency('libinput')
 libwayland_client_dep = dependency('wayland-client')
+libscenefx_dep = dependency('scenefx-0.2')
+pcre2_dep = dependency('libpcre2-8')
 
 # 获取 Git Commit Hash 和最新的 tag
 git = find_program('git', required : false)
@@ -75,10 +77,12 @@ executable('maomao',
     xcb,
     xlibs,
     wayland_server_dep,
+    libscenefx_dep,
     wlroots_dep,
     xkbcommon_dep,
     libinput_dep,
     libwayland_client_dep,
+    pcre2_dep,
   ],
   install : true,
   c_args : c_args

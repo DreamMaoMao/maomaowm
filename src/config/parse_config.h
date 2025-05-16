@@ -39,6 +39,8 @@ typedef struct {
   int noswallow;
   int scratchpad_width;
   int scratchpad_height;
+  float focused_opacity;
+  float unfocused_opacity;
   uint32_t passmod;
   xkb_keysym_t keysym;
   KeyBinding globalkeybinding;
@@ -127,8 +129,14 @@ typedef struct {
   int enable_floating_snap;
   int drag_tile_to_tile;
   unsigned int swipe_min_threshold;
+  float focused_opacity;
+  float unfocused_opacity;
   float *scroller_proportion_preset;
   int scroller_proportion_preset_count;
+
+  int blur;
+  unsigned int border_radius;
+  struct blur_data blur_params; 
 
   char **circle_layout;
   int circle_layout_count;
@@ -180,6 +188,7 @@ typedef struct {
   float scratchpadcolor[4];
   float globalcolor[4];
   float overlaycolor[4];
+  float shadowscolor[4];
 
   char autostart[3][256];
 
@@ -214,6 +223,13 @@ typedef struct {
   unsigned int cursor_size;
 
   int single_scratchpad;
+
+  int shadows;
+  unsigned int shadows_size;
+  float shadows_blur;
+  int shadows_position_x;
+  int shadows_position_y;
+
 
 } Config;
 
@@ -758,8 +774,34 @@ void parse_config_line(Config *config, const char *line) {
     config->focus_cross_monitor = atoi(value);
   } else if (strcmp(key, "focus_cross_tag") == 0) {
     config->focus_cross_tag = atoi(value);
+  } else if (strcmp(key, "blur") == 0) {
+    config->blur = atoi(value);
+  } else if (strcmp(key, "border_radius") == 0) {
+    config->border_radius = atoi(value);
+  } else if (strcmp(key, "blur_params_num_passes") == 0) {
+    config->blur_params.num_passes = atoi(value);
+  } else if (strcmp(key, "blur_params_radius") == 0) {
+    config->blur_params.radius = atoi(value);
+  } else if (strcmp(key, "blur_params_noise") == 0) {
+    config->blur_params.noise = atof(value);
+  } else if (strcmp(key, "blur_params_brightness") == 0) {
+    config->blur_params.brightness = atof(value);
+  } else if (strcmp(key, "blur_params_contrast") == 0) {
+    config->blur_params.contrast = atof(value);
+  } else if (strcmp(key, "blur_params_saturation") == 0) {
+    config->blur_params.saturation = atof(value);
   } else if (strcmp(key, "single_scratchpad") == 0) {
     config->single_scratchpad = atoi(value);
+  } else if (strcmp(key, "shadows") == 0) {
+    config->shadows = atoi(value);
+  } else if (strcmp(key, "shadows_size") == 0) {
+    config->shadows_size = atoi(value);
+  } else if (strcmp(key, "shadows_blur") == 0) {
+    config->shadows_blur = atof(value);
+  } else if (strcmp(key, "shadows_position_x") == 0) {
+    config->shadows_position_x = atoi(value);
+  } else if (strcmp(key, "shadows_position_y") == 0) {
+    config->shadows_position_y = atoi(value);
   } else if (strcmp(key, "no_border_when_single") == 0) {
     config->no_border_when_single = atoi(value);
   } else if (strcmp(key, "snap_distance") == 0) {
@@ -770,6 +812,10 @@ void parse_config_line(Config *config, const char *line) {
     config->drag_tile_to_tile = atoi(value);
   } else if (strcmp(key, "swipe_min_threshold") == 0) {
     config->swipe_min_threshold = atoi(value);
+  } else if (strcmp(key, "focused_opacity") == 0) {
+    config->focused_opacity = atof(value);
+  } else if (strcmp(key, "unfocused_opacity") == 0) {
+    config->unfocused_opacity = atof(value);
   } else if (strcmp(key, "scroller_proportion_preset") == 0) {
     // 1. 统计 value 中有多少个逗号，确定需要解析的浮点数个数
     int count = 0; // 初始化为 0
@@ -998,6 +1044,13 @@ void parse_config_line(Config *config, const char *line) {
     } else {
       convert_hex_to_rgba(config->globalcolor, color);
     }
+  } else if (strcmp(key, "shadowscolor") == 0) {
+    long int color = parse_color(value);
+    if (color == -1) {
+      fprintf(stderr, "Error: Invalid shadowscolor format: %s\n", value);
+    } else {
+      convert_hex_to_rgba(config->shadowscolor, color);
+    }
   } else if (strcmp(key, "overlaycolor") == 0) {
     long int color = parse_color(value);
     if (color == -1) {
@@ -1078,6 +1131,8 @@ void parse_config_line(Config *config, const char *line) {
     rule->offsety = 0;
     rule->scratchpad_width = 0;
     rule->scratchpad_height = 0;
+    rule->focused_opacity = 0;
+    rule->unfocused_opacity = 0;
     rule->width = -1;
     rule->height = -1;
     rule->animation_type_open = NULL;
@@ -1121,6 +1176,10 @@ void parse_config_line(Config *config, const char *line) {
           rule->scratchpad_width = atoi(val);
         } else if (strcmp(key, "scratchpad_height") == 0) {
           rule->scratchpad_height = atoi(val);
+        } else if (strcmp(key, "focused_opacity") == 0) {
+          rule->focused_opacity = atof(val);
+        } else if (strcmp(key, "unfocused_opacity") == 0) {
+          rule->unfocused_opacity = atof(val);
         } else if (strcmp(key, "width") == 0) {
           rule->width = atoi(val);
         } else if (strcmp(key, "height") == 0) {
@@ -1763,12 +1822,27 @@ void override_config(void) {
   scroller_focus_center = config.scroller_focus_center;
   focus_cross_monitor = config.focus_cross_monitor;
   focus_cross_tag = config.focus_cross_tag;
+  blur = config.blur;
+  border_radius = config.border_radius;
+  blur_params.num_passes = config.blur_params.num_passes;
+  blur_params.radius = config.blur_params.radius;
+  blur_params.noise = config.blur_params.noise;
+  blur_params.brightness = config.blur_params.brightness;
+  blur_params.contrast = config.blur_params.contrast;
+  blur_params.saturation = config.blur_params.saturation;
   single_scratchpad = config.single_scratchpad;
+  shadows = config.shadows;
+  shadows_size = config.shadows_size;
+  shadows_blur = config.shadows_blur;
+  shadows_position_x = config.shadows_position_x;
+  shadows_position_y = config.shadows_position_y;
   no_border_when_single = config.no_border_when_single;
   snap_distance = config.snap_distance;
   drag_tile_to_tile = config.drag_tile_to_tile;
   enable_floating_snap = config.enable_floating_snap;
   swipe_min_threshold = config.swipe_min_threshold;
+  focused_opacity = config.focused_opacity > 1  || config.focused_opacity <= 0 ? 1 : config.focused_opacity; 
+  unfocused_opacity = config.unfocused_opacity > 1  || config.unfocused_opacity <= 0 ? 1 : config.unfocused_opacity;
   scroller_prefer_center = config.scroller_prefer_center;
 
   new_is_master = config.new_is_master;
@@ -1815,6 +1889,7 @@ void override_config(void) {
   memcpy(scratchpadcolor, config.scratchpadcolor, sizeof(scratchpadcolor));
   memcpy(globalcolor, config.globalcolor, sizeof(globalcolor));
   memcpy(overlaycolor, config.overlaycolor, sizeof(overlaycolor));
+  memcpy(shadowscolor, config.shadowscolor, sizeof(shadowscolor));
 }
 
 void set_value_default() {
@@ -1865,12 +1940,27 @@ void set_value_default() {
   config.scroller_prefer_center = scroller_prefer_center;
   config.focus_cross_monitor = focus_cross_monitor;
   config.focus_cross_tag = focus_cross_tag;
+  config.blur = blur;
+  config.border_radius = border_radius;
+  config.blur_params.num_passes = blur_params_num_passes;
+  config.blur_params.radius = blur_params_radius;
+  config.blur_params.noise = blur_params_noise;
+  config.blur_params.brightness = blur_params_brightness;
+  config.blur_params.contrast = blur_params_contrast;
+  config.blur_params.saturation = blur_params_saturation;
   config.single_scratchpad = single_scratchpad;
+  config.shadows = shadows;
+  config.shadows_size = shadows_size;
+  config.shadows_blur = shadows_blur;
+  config.shadows_position_x = shadows_position_x;
+  config.shadows_position_y = shadows_position_y;
   config.no_border_when_single = no_border_when_single;
   config.snap_distance = snap_distance;
   config.drag_tile_to_tile = drag_tile_to_tile;
   config.enable_floating_snap = enable_floating_snap;
   config.swipe_min_threshold = swipe_min_threshold;
+  config.focused_opacity = focused_opacity;
+  config.unfocused_opacity = unfocused_opacity;
 
   config.bypass_surface_visibility =
       bypass_surface_visibility; /* 1 means idle inhibitors will disable idle
@@ -1916,6 +2006,7 @@ void set_value_default() {
   memcpy(config.scratchpadcolor, scratchpadcolor, sizeof(scratchpadcolor));
   memcpy(config.globalcolor, globalcolor, sizeof(globalcolor));
   memcpy(config.overlaycolor, overlaycolor, sizeof(overlaycolor));
+  memcpy(config.shadowscolor, shadowscolor, sizeof(shadowscolor));
 }
 
 void set_default_key_bindings(Config *config) {
@@ -2007,6 +2098,33 @@ void parse_config(void) {
   override_config();
 }
 
+void reset_blur_params(void) {
+  if(blur) {
+    Monitor *m;
+    wl_list_for_each(m, &mons, link) {
+      if(m->blur != NULL) {
+        wlr_scene_node_destroy(&m->blur->node);
+      }
+      m->blur = wlr_scene_optimized_blur_create(&scene->tree,
+                                                     0, 0);
+		  wlr_scene_node_reparent(&m->blur->node, layers[LyrBlur]);
+	    wlr_scene_optimized_blur_set_size(m->blur,
+	    		m->m.width, m->m.height);
+      wlr_scene_set_blur_data(scene, blur_params);
+    }
+  } else{
+    Monitor *m;
+    wl_list_for_each(m, &mons, link) {
+
+      if(m->blur) {
+        wlr_scene_node_destroy(&m->blur->node);
+        m->blur = NULL;
+      }
+
+    }
+  }
+}
+
 void reload_config(const Arg *arg) {
   Client *c;
   Monitor *m;
@@ -2016,12 +2134,14 @@ void reload_config(const Arg *arg) {
   init_baked_points();
   handlecursoractivity();
   run_exec();
-
+  reset_blur_params();  
   // reset border width when config change
   wl_list_for_each(c, &clients, link) {
     if (c && !c->iskilling) {
       if (c->bw) {
         c->bw = borderpx;
+        c->focused_opacity = focused_opacity;
+        c->unfocused_opacity = unfocused_opacity;
       }
     }
   }
