@@ -1291,14 +1291,17 @@ void client_apply_clip(Client *c) {
   }
 
   offset = clip_to_hide(c, &clip_box);
+  apply_border(c, clip_box, offset.x, offset.y, current_corner_location);
 
   struct wlr_box surface_clip;
   surface_clip = clip_box;
-  surface_clip.width = MAX(surface_clip.width - 2 * borderpx, 0);
-  surface_clip.height = MAX(surface_clip.height - 2 * borderpx, 0);
+  surface_clip.width = surface_clip.width - 2 * borderpx;
+  surface_clip.height = surface_clip.height - 2 * borderpx;
 
+  if(surface_clip.width <= 0 || surface_clip.height <= 0) {
+    return;
+  }
   wlr_scene_subsurface_tree_set_clip(&c->scene_surface->node, &surface_clip);
-  apply_border(c, clip_box, offset.x, offset.y, current_corner_location);
 
   scale_data.should_scale = true;
   scale_data.width = clip_box.width - 2 * c->bw;
