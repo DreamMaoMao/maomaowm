@@ -379,7 +379,6 @@ struct Monitor {
   int gamma_lut_changed;
   int asleep;
   unsigned int visible_clients;
-  struct wlr_scene_optimized_blur *blur;
 };
 
 typedef struct {
@@ -2952,10 +2951,6 @@ void commitlayersurfacenotify(struct wl_listener *listener, void *data) {
              : scene_layer));
   }
 
-  // if(blur && l->type == ZWLR_LAYER_SHELL_V1_LAYER_BACKGROUND) {
-  //   wlr_scene_optimized_blur_mark_dirty(l->mon->blur);
-  // }
-
   arrangelayers(l->mon);
 }
 
@@ -3187,14 +3182,6 @@ KeyboardGroup *createkeyboardgroup(void) {
   return group;
 }
 
-// void
-// iter_scene_buffer_apply_blur(struct wlr_scene_buffer *buffer,
-//                              int sx, int sy, void *data) {
-//   wlr_scene_buffer_set_backdrop_blur(buffer, data);
-//   wlr_scene_buffer_set_backdrop_blur_optimized(buffer, data);
-//   wlr_scene_buffer_set_backdrop_blur_ignore_transparent(buffer, data);
-// }
-
 void createlayersurface(struct wl_listener *listener, void *data) {
   struct wlr_layer_surface_v1 *layer_surface = data;
   LayerSurface *l;
@@ -3228,10 +3215,6 @@ void createlayersurface(struct wl_listener *listener, void *data) {
 
   wl_list_insert(&l->mon->layers[layer_surface->pending.layer], &l->link);
   wlr_surface_send_enter(surface, layer_surface->output);
-
-  // if(blur) {
-  //     wlr_scene_node_for_each_buffer(&l->scene->node, iter_scene_buffer_apply_blur, (void *)1);
-  // }
 
 }
 
@@ -3377,13 +3360,6 @@ void createmon(struct wl_listener *listener, void *data) {
     wlr_output_layout_add_auto(output_layout, wlr_output);
   else
     wlr_output_layout_add(output_layout, wlr_output, m->m.x, m->m.y);
-
-  if(blur) {
-    m->blur = wlr_scene_optimized_blur_create(&scene->tree,
-                                                   wlr_output->width, wlr_output->height);
-    wlr_scene_node_place_above(&m->blur->node, &layers[LyrBg]->node);
-    wlr_scene_node_set_position(&m->blur->node, m->m.x, m->m.y);
-  }
 
 }
 
@@ -5034,18 +5010,6 @@ void scene_buffer_apply_effect(struct wlr_scene_buffer *buffer, int sx, int sy,
   if(wlr_xdg_popup_try_from_wlr_surface(surface) != NULL) return;
 
   wlr_scene_buffer_set_corner_radius(buffer, border_radius, scale_data->corner_location);
-
-  /* we dont blur subsurfaces */
-  if(wlr_subsurface_try_from_wlr_surface(surface) != NULL) return;
-  
-  if(blur) {
-    wlr_scene_buffer_set_backdrop_blur(buffer, true);
-    wlr_scene_buffer_set_backdrop_blur_optimized(buffer, true);
-    wlr_scene_buffer_set_backdrop_blur_ignore_transparent(buffer, false);
-  } else {
-    wlr_scene_buffer_set_backdrop_blur(buffer, false);
-  }
-
 }
 
 void snap_scene_buffer_apply_effect(struct wlr_scene_buffer *buffer, int sx,
@@ -6218,9 +6182,6 @@ void setup(void) {
   output_mgr = wlr_output_manager_v1_create(dpy);
   wl_signal_add(&output_mgr->events.apply, &output_mgr_apply);
   wl_signal_add(&output_mgr->events.test, &output_mgr_test);
-
-  // blur
-  wlr_scene_set_blur_data(scene, blur_params);
 
   /* create text_input-, and input_method-protocol relevant globals */
   input_method_manager = wlr_input_method_manager_v2_create(dpy);
