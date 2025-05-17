@@ -1076,6 +1076,14 @@ void apply_border(Client *c, struct wlr_box clip_box, int offsetx,
   if (c->iskilling || !client_surface(c)->mapped)
     return;
 
+
+  if(c->isfullscreen) {
+    wlr_scene_rect_set_size(c->border, 0, 0);
+    wlr_scene_node_set_position(&c->scene_surface->node, 0, 0);
+    return;
+  }
+
+
   if (clip_box.width > c->animation.current.width) {
     clip_box.width = c->animation.current.width;
   }
