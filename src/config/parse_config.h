@@ -130,9 +130,7 @@ typedef struct {
   float *scroller_proportion_preset;
   int scroller_proportion_preset_count;
 
-  int blur;
   int border_radius;
-  struct blur_data blur_params; 
 
   char **circle_layout;
   int circle_layout_count;
@@ -762,22 +760,8 @@ void parse_config_line(Config *config, const char *line) {
     config->focus_cross_monitor = atoi(value);
   } else if (strcmp(key, "focus_cross_tag") == 0) {
     config->focus_cross_tag = atoi(value);
-  } else if (strcmp(key, "blur") == 0) {
-    config->blur = atoi(value);
-  } else if (strcmp(key, "border_radius") == 0) {
+  }  else if (strcmp(key, "border_radius") == 0) {
     config->border_radius = atoi(value);
-  } else if (strcmp(key, "blur_params_num_passes") == 0) {
-    config->blur_params.num_passes = atoi(value);
-  } else if (strcmp(key, "blur_params_radius") == 0) {
-    config->blur_params.radius = atoi(value);
-  } else if (strcmp(key, "blur_params_noise") == 0) {
-    config->blur_params.noise = atof(value);
-  } else if (strcmp(key, "blur_params_brightness") == 0) {
-    config->blur_params.brightness = atof(value);
-  } else if (strcmp(key, "blur_params_contrast") == 0) {
-    config->blur_params.contrast = atof(value);
-  } else if (strcmp(key, "blur_params_saturation") == 0) {
-    config->blur_params.saturation = atof(value);
   } else if (strcmp(key, "single_scratchpad") == 0) {
     config->single_scratchpad = atoi(value);
   } else if (strcmp(key, "no_border_when_single") == 0) {
@@ -1783,14 +1767,7 @@ void override_config(void) {
   scroller_focus_center = config.scroller_focus_center;
   focus_cross_monitor = config.focus_cross_monitor;
   focus_cross_tag = config.focus_cross_tag;
-  blur = config.blur;
   border_radius = config.border_radius;
-  blur_params.num_passes = config.blur_params.num_passes;
-  blur_params.radius = config.blur_params.radius;
-  blur_params.noise = config.blur_params.noise;
-  blur_params.brightness = config.blur_params.brightness;
-  blur_params.contrast = config.blur_params.contrast;
-  blur_params.saturation = config.blur_params.saturation;
   single_scratchpad = config.single_scratchpad;
   no_border_when_single = config.no_border_when_single;
   snap_distance = config.snap_distance;
@@ -1893,14 +1870,7 @@ void set_value_default() {
   config.scroller_prefer_center = scroller_prefer_center;
   config.focus_cross_monitor = focus_cross_monitor;
   config.focus_cross_tag = focus_cross_tag;
-  config.blur = blur;
   config.border_radius = border_radius;
-  config.blur_params.num_passes = blur_params_num_passes;
-  config.blur_params.radius = blur_params_radius;
-  config.blur_params.noise = blur_params_noise;
-  config.blur_params.brightness = blur_params_brightness;
-  config.blur_params.contrast = blur_params_contrast;
-  config.blur_params.saturation = blur_params_saturation;
   config.single_scratchpad = single_scratchpad;
   config.no_border_when_single = no_border_when_single;
   config.snap_distance = snap_distance;
@@ -2043,35 +2013,6 @@ void parse_config(void) {
   override_config();
 }
 
-void reset_blur_params(void) {
-  if(blur) {
-    Monitor *m;
-    wl_list_for_each(m, &mons, link) {
-      if(m != NULL) {
-        wlr_scene_node_destroy(&m->blur->node);
-      }
-      struct wlr_box output_box;
-      wlr_output_layout_get_box(output_layout, m->wlr_output, &output_box);
-
-      m->blur = wlr_scene_optimized_blur_create(&scene->tree,
-                                                     output_box.width, output_box.height);
-      wlr_scene_set_blur_data(scene, blur_params);
-      wlr_scene_node_place_above(&m->blur->node, &layers[LyrBg]->node);
-      wlr_scene_node_set_position(&m->blur->node, output_box.x, output_box.y);
-    }
-  } else{
-    Monitor *m;
-    wl_list_for_each(m, &mons, link) {
-
-      if(m->blur) {
-        wlr_scene_node_destroy(&m->blur->node);
-        m->blur = NULL;
-      }
-
-    }
-  }
-}
-
 void reload_config(const Arg *arg) {
   Client *c;
   Monitor *m;
@@ -2081,7 +2022,6 @@ void reload_config(const Arg *arg) {
   init_baked_points();
   handlecursoractivity();
   run_exec();
-  reset_blur_params();  
   // reset border width when config change
   wl_list_for_each(c, &clients, link) {
     if (c && !c->iskilling) {
