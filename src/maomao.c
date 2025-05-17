@@ -379,6 +379,7 @@ struct Monitor {
   int gamma_lut_changed;
   int asleep;
   unsigned int visible_clients;
+  struct wlr_scene_optimized_blur *blur;
 };
 
 typedef struct {
@@ -971,7 +972,7 @@ void fadeout_client_animation_next_tick(Client *c) {
     scale_data.width_scale = animation_passed;
     scale_data.height_scale = animation_passed;
 
-    wlr_scene_node_for_each_buffer(&c->scene->node,
+    wlr_scene_node_for_each_buffer(&c->scene_surface->node,
                                    snap_scene_buffer_apply_effect, &scale_data);
   }
 
@@ -1103,7 +1104,7 @@ void apply_border(Client *c, struct wlr_box clip_box, int offsetx,
     c->fake_no_border = true;
   } else if (hit_no_border && !smartgaps) {
     wlr_scene_rect_set_size(c->border, 0, 0);
-    wlr_scene_node_set_position(&c->scene_surface->node, c->bw, c->bw);
+    wlr_scene_node_set_position(&c->scene_surface->node, borderpx, borderpx);
     c->fake_no_border = true;
     return;
   } else if (!c->isfullscreen && VISIBLEON(c, c->mon)) {
@@ -1156,10 +1157,10 @@ void apply_border(Client *c, struct wlr_box clip_box, int offsetx,
     rect_height = 0;
   }
 
-  int node_x = borderpx + offsetx;
-  int node_y = borderpx + offsety;
+  int node_x = offsetx;
+  int node_y = offsety;
 
-  wlr_scene_node_set_position(&c->scene_surface->node, 2* c->bw, 2* c->bw);
+  wlr_scene_node_set_position(&c->scene_surface->node, borderpx, borderpx);
   wlr_scene_rect_set_size(c->border, rect_width, rect_height);
   wlr_scene_node_set_position(&c->border->node, node_x, node_y);
   wlr_scene_rect_set_corner_radius(c->border, border_radius, border_radius_location);
@@ -1208,7 +1209,7 @@ struct uvec2 clip_to_hide(Client *c, struct wlr_box *clip_box) {
   offset.x = offsetx;
   offset.y = offsety;
 
-  if ((clip_box->width < 0 || clip_box->height < 0) &&
+  if ((clip_box->width <= 0 || clip_box->height <= 0) &&
       (ISTILED(c) || c->animation.tagouting || c->animation.tagining)) {
     c->is_clip_to_hide = true;
     wlr_scene_node_set_enabled(&c->scene->node, false);
@@ -1262,7 +1263,11 @@ void client_apply_clip(Client *c) {
         c->geom;
     client_get_clip(c, &clip_box);
     offset = clip_to_hide(c, &clip_box);
+    if(c->is_clip_to_hide) {
+      return;
+    }
     apply_border(c, clip_box, offset.x, offset.y, current_corner_location);
+
     wlr_scene_subsurface_tree_set_clip(&c->scene_surface->node, &clip_box);
     buffer_set_effect(c, (animationScale){0, 0, 0, 0, current_corner_location,false});
     return;
@@ -1316,7 +1321,8 @@ bool client_draw_frame(Client *c) {
     client_animation_next_tick(c);
     client_apply_clip(c);
   } else {
-    wlr_scene_node_set_position(&c->scene->node, c->pending.x, c->pending.y);
+    if(!c->is_clip_to_hide)
+      wlr_scene_node_set_position(&c->scene->node, c->pending.x, c->pending.y);
     c->animainit_geom = c->animation.initial = c->pending = c->current =
         c->geom;
     client_apply_clip(c);
@@ -2943,6 +2949,10 @@ void commitlayersurfacenotify(struct wl_listener *listener, void *data) {
              : scene_layer));
   }
 
+  // if(blur && l->type == ZWLR_LAYER_SHELL_V1_LAYER_BACKGROUND) {
+  //   wlr_scene_optimized_blur_mark_dirty(l->mon->blur);
+  // }
+
   arrangelayers(l->mon);
 }
 
@@ -3174,6 +3184,14 @@ KeyboardGroup *createkeyboardgroup(void) {
   return group;
 }
 
+// void
+// iter_scene_buffer_apply_blur(struct wlr_scene_buffer *buffer,
+//                              int sx, int sy, void *data) {
+//   wlr_scene_buffer_set_backdrop_blur(buffer, data);
+//   wlr_scene_buffer_set_backdrop_blur_optimized(buffer, data);
+//   wlr_scene_buffer_set_backdrop_blur_ignore_transparent(buffer, data);
+// }
+
 void createlayersurface(struct wl_listener *listener, void *data) {
   struct wlr_layer_surface_v1 *layer_surface = data;
   LayerSurface *l;
@@ -3207,6 +3225,11 @@ void createlayersurface(struct wl_listener *listener, void *data) {
 
   wl_list_insert(&l->mon->layers[layer_surface->pending.layer], &l->link);
   wlr_surface_send_enter(surface, layer_surface->output);
+
+  // if(blur) {
+  //     wlr_scene_node_for_each_buffer(&l->scene->node, iter_scene_buffer_apply_blur, (void *)1);
+  // }
+
 }
 
 void createlocksurface(struct wl_listener *listener, void *data) {
@@ -3351,6 +3374,14 @@ void createmon(struct wl_listener *listener, void *data) {
     wlr_output_layout_add_auto(output_layout, wlr_output);
   else
     wlr_output_layout_add(output_layout, wlr_output, m->m.x, m->m.y);
+
+  if(blur) {
+    m->blur = wlr_scene_optimized_blur_create(&scene->tree,
+                                                   wlr_output->width, wlr_output->height);
+    wlr_scene_node_place_above(&m->blur->node, &layers[LyrBg]->node);
+    wlr_scene_node_set_position(&m->blur->node, m->m.x, m->m.y);
+  }
+
 }
 
 void // fix for 0.5
@@ -4459,7 +4490,6 @@ mapnotify(struct wl_listener *listener, void *data) {
   /* Called when the surface is mapped, or ready to display on-screen. */
   Client *p = NULL;
   Client *c = wl_container_of(listener, c, map);
-  int i;
   /* Create scene tree for this client and its border */
   c->scene = client_surface(c)->data = wlr_scene_tree_create(layers[LyrTile]);
   wlr_scene_node_set_enabled(&c->scene->node, c->type != XDGShell);
@@ -5001,6 +5031,17 @@ void scene_buffer_apply_effect(struct wlr_scene_buffer *buffer, int sx, int sy,
   if(wlr_xdg_popup_try_from_wlr_surface(surface) != NULL) return;
 
   wlr_scene_buffer_set_corner_radius(buffer, border_radius, scale_data->corner_location);
+
+  /* we dont blur subsurfaces */
+  if(wlr_subsurface_try_from_wlr_surface(surface) != NULL) return;
+  
+  if(blur) {
+    wlr_scene_buffer_set_backdrop_blur(buffer, true);
+    wlr_scene_buffer_set_backdrop_blur_optimized(buffer, true);
+    wlr_scene_buffer_set_backdrop_blur_ignore_transparent(buffer, false);
+  } else {
+    wlr_scene_buffer_set_backdrop_blur(buffer, false);
+  }
 
 }
 
@@ -5980,6 +6021,7 @@ void setup(void) {
 
   /* Initialize the scene graph used to lay out windows */
   scene = wlr_scene_create();
+
   root_bg = wlr_scene_rect_create(&scene->tree, 0, 0, rootcolor);
   for (i = 0; i < NUM_LAYERS; i++)
     layers[i] = wlr_scene_tree_create(&scene->tree);
@@ -6173,6 +6215,9 @@ void setup(void) {
   output_mgr = wlr_output_manager_v1_create(dpy);
   wl_signal_add(&output_mgr->events.apply, &output_mgr_apply);
   wl_signal_add(&output_mgr->events.test, &output_mgr_test);
+
+  // blur
+  wlr_scene_set_blur_data(scene, blur_params);
 
   /* create text_input-, and input_method-protocol relevant globals */
   input_method_manager = wlr_input_method_manager_v2_create(dpy);

@@ -166,5 +166,26 @@ static const char *tags[] = {
 };
 
 
-int border_radius = 20;
+int border_radius = 10;
 int border_radius_location_default = CORNER_LOCATION_ALL;
+int blur=1;
+
+
+struct blur_data {
+	int num_passes;
+	int radius;
+	float noise;
+	float brightness;
+	float contrast;
+	float saturation;
+};
+struct blur_data blur_params;
+
+
+int   blur_params_num_passes = 1;
+int   blur_params_radius = 5;
+float blur_params_noise = 0.02;
+float blur_params_brightness = 0.9;
+float blur_params_contrast = 0.9;
+float blur_params_saturation = 1.2;
+
