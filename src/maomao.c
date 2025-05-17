@@ -1105,7 +1105,7 @@ void apply_border(Client *c, struct wlr_box clip_box, int offsetx,
     c->fake_no_border = true;
   } else if (hit_no_border && !smartgaps) {
     wlr_scene_rect_set_size(c->border, 0, 0);
-    wlr_scene_node_set_position(&c->scene_surface->node, borderpx, borderpx);
+    wlr_scene_node_set_position(&c->scene_surface->node, c->bw, c->bw);
     c->fake_no_border = true;
     return;
   } else if (!c->isfullscreen && VISIBLEON(c, c->mon)) {
@@ -1113,8 +1113,8 @@ void apply_border(Client *c, struct wlr_box clip_box, int offsetx,
     c->fake_no_border = false;
   }
 
-  int clip_box_width = clip_box.width - 2 * borderpx;
-  int clip_box_height = clip_box.height - 2 * borderpx;
+  int clip_box_width = clip_box.width - 2 * c->bw;
+  int clip_box_height = clip_box.height - 2 * c->bw;
 
   if(clip_box_width < 0) {
     clip_box_width = 0;
@@ -1124,8 +1124,8 @@ void apply_border(Client *c, struct wlr_box clip_box, int offsetx,
     clip_box_height = 0;
   }
 
-  int clip_x = borderpx - offsetx;
-  int clip_y = borderpx - offsety;
+  int clip_x = c->bw - offsetx;
+  int clip_y = c->bw - offsety;
 
   clip_x = clip_x < 0 ? 0 : clip_x;
   clip_y = clip_y < 0 ? 0 : clip_y;
@@ -1161,7 +1161,7 @@ void apply_border(Client *c, struct wlr_box clip_box, int offsetx,
   int node_x = offsetx;
   int node_y = offsety;
 
-  wlr_scene_node_set_position(&c->scene_surface->node, borderpx, borderpx);
+  wlr_scene_node_set_position(&c->scene_surface->node, c->bw, c->bw);
   wlr_scene_rect_set_size(c->border, rect_width, rect_height);
   wlr_scene_node_set_position(&c->border->node, node_x, node_y);
   wlr_scene_rect_set_corner_radius(c->border, border_radius, border_radius_location);
@@ -1296,8 +1296,8 @@ void client_apply_clip(Client *c) {
 
   struct wlr_box surface_clip;
   surface_clip = clip_box;
-  surface_clip.width = surface_clip.width - 2 * borderpx;
-  surface_clip.height = surface_clip.height - 2 * borderpx;
+  surface_clip.width = surface_clip.width - 2 * c->bw;
+  surface_clip.height = surface_clip.height - 2 * c->bw;
 
   if(surface_clip.width <= 0 || surface_clip.height <= 0) {
     return;
@@ -2117,7 +2117,7 @@ void apply_window_snap(Client *c) {
       snap_right_screen = 0;
   int snap_up_mon = 0, snap_down_mon = 0, snap_left_mon = 0, snap_right_mon = 0;
 
-  unsigned int cbw = !render_border || c->fake_no_border ? borderpx : 0;
+  unsigned int cbw = !render_border || c->fake_no_border ? c->bw : 0;
   unsigned int tcbw;
   unsigned int cx, cy, cw, ch, tcx, tcy, tcw, tch;
   cx = c->geom.x + cbw;
@@ -2136,7 +2136,7 @@ void apply_window_snap(Client *c) {
     if (tc && tc->isfloating && !tc->iskilling && client_surface(tc)->mapped &&
         VISIBLEON(tc, c->mon)) {
 
-      tcbw = !render_border || tc->fake_no_border ? borderpx : 0;
+      tcbw = !render_border || tc->fake_no_border ? c->bw : 0;
       tcx = tc->geom.x + tcbw;
       tcy = tc->geom.y + tcbw;
       tcw = tc->geom.width - 2 * tcbw;
