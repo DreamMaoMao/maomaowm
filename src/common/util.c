@@ -7,6 +7,12 @@
 
 #include "util.h"
 
+#define PCRE2_CODE_UNIT_WIDTH 8
+#include <pcre2.h>
+#include <wchar.h>
+
+
+
 void die(const char *fmt, ...) {
   va_list ap;
 
@@ -44,4 +50,35 @@ int fd_set_nonblock(int fd) {
   }
 
   return 0;
+}
+
+int regex_match(const char *pattern, const char *str) {
+    int errnum;
+    PCRE2_SIZE erroffset;
+    pcre2_code *re = pcre2_compile(
+        (PCRE2_SPTR)pattern,
+        PCRE2_ZERO_TERMINATED,
+        PCRE2_UTF,  // 启用 UTF-8 支持
+        &errnum, &erroffset, NULL
+    );
+    if (!re) {
+        PCRE2_UCHAR errbuf[256];
+        pcre2_get_error_message(errnum, errbuf, sizeof(errbuf));
+        fprintf(stderr, "PCRE2 error: %s at offset %zu\n", errbuf, erroffset);
+        return 0;
+    }
+
+    pcre2_match_data *match_data = pcre2_match_data_create_from_pattern(re, NULL);
+    int ret = pcre2_match(
+        re,
+        (PCRE2_SPTR)str,
+        strlen(str),
+        0, 0,
+        match_data,
+        NULL
+    );
+
+    pcre2_match_data_free(match_data);
+    pcre2_code_free(re);
+    return ret >= 0;
 }

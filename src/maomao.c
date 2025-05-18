@@ -1615,10 +1615,10 @@ Client *get_client_by_id_or_title(const char *arg_id, const char *arg_title) {
     if (arg_title && strncmp(arg_title, "none", 4) == 0)
       arg_title = NULL;
 
-    if ((arg_title && strstr(title, arg_title) && !arg_id) ||
-        (arg_id && strstr(appid, arg_id) && !arg_title) ||
-        (arg_id && strstr(appid, arg_id) && arg_title &&
-         strstr(title, arg_title))) {
+    if ((arg_title && regex_match(arg_title, title) && !arg_id) ||
+        (arg_id && regex_match(arg_id, appid) && !arg_title) ||
+        (arg_id && regex_match(arg_id, appid) && arg_title &&
+         regex_match(arg_title, title))) {
       target_client = c;
       break;
     }
@@ -1810,10 +1810,10 @@ applyrulesgeom(Client *c) {
     if (config.window_rules_count < 1)
       break;
     r = &config.window_rules[ji];
-    if ((r->title && strstr(title, r->title) && !r->id) ||
-        (r->id && strstr(appid, r->id) && !r->title) ||
-        (r->id && strstr(appid, r->id) && r->title &&
-         strstr(title, r->title))) {
+    if ((regex_match(r->title,title) && !r->id) ||
+        (r->id && regex_match(r->id,appid) && !r->title) ||
+        (r->id && regex_match(r->id,appid) && r->title &&
+         regex_match(r->title,title))) {
       c->geom.width = r->width > 0 ? r->width : c->geom.width;
       c->geom.height = r->height > 0 ? r->height : c->geom.height;
       // 重新计算居中的坐标
@@ -1850,10 +1850,10 @@ applyrules(Client *c) {
       break;
     r = &config.window_rules[ji];
 
-    if ((r->title && strstr(title, r->title) && !r->id) ||
-        (r->id && strstr(appid, r->id) && !r->title) ||
-        (r->id && strstr(appid, r->id) && r->title &&
-         strstr(title, r->title))) {
+    if ((r->title && regex_match(r->title,title) && !r->id) ||
+        (r->id && regex_match(r->id,appid) && !r->title) ||
+        (r->id && regex_match(r->id,appid) && r->title &&
+         regex_match(r->title,title))) {
       c->isterm = r->isterm > 0 ? r->isterm : c->isterm;
       c->noswallow = r->noswallow > 0 ? r->noswallow : c->noswallow;
       c->scratchpad_geom.width =
@@ -3299,7 +3299,7 @@ void createmon(struct wl_listener *listener, void *data) {
       break;
 
     r = &config.monitor_rules[ji];
-    if (!r->name || strstr(wlr_output->name, r->name)) {
+    if (!r->name || regex_match(r->name, wlr_output->name)) {
       m->mfact = r->mfact;
       m->nmaster = r->nmaster;
       m->m.x = r->x;
@@ -4188,10 +4188,10 @@ bool keypressglobal(struct wlr_surface *last_surface,
           appid = client_get_appid(c);
           title = client_get_title(c);
 
-          if ((r->title && strstr(title, r->title) && !r->id) ||
-              (r->id && strstr(appid, r->id) && !r->title) ||
-              (r->id && strstr(appid, r->id) && r->title &&
-               strstr(title, r->title))) {
+          if ((r->title && regex_match(r->title, title) && !r->id) ||
+              (r->id && regex_match(r->id, appid) && !r->title) ||
+              (r->id && regex_match(r->id, appid) && r->title &&
+               regex_match(r->title, title))) {
             reset = true;
             wlr_seat_keyboard_enter(seat, client_surface(c), keycodes, 0,
                                     &keyboard->modifiers);
