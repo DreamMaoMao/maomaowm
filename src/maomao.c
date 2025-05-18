@@ -12,12 +12,12 @@
 #include <stdlib.h>
 #include <sys/wait.h>
 #include <time.h>
-#include <unistd.h>
 #include <scenefx/render/fx_renderer/fx_renderer.h>
 #include <scenefx/types/fx/blur_data.h>
 #include <scenefx/types/fx/clipped_region.h>
 #include <scenefx/types/fx/corner_location.h>
 #include <scenefx/types/wlr_scene.h>
+#include <unistd.h>
 #include <wayland-server-core.h>
 #include <wlr/backend.h>
 #include <wlr/backend/headless.h>
@@ -121,6 +121,7 @@ enum { XDGShell, LayerShell, X11 };                 /* client types */
 enum { AxisUp, AxisDown, AxisLeft, AxisRight };     // 滚轮滚动的方向
 enum {
   LyrBg,
+  LyrBlur,
   LyrBottom,
   LyrTile,
   LyrFloat,
@@ -2874,8 +2875,10 @@ void cleanupmon(struct wl_listener *listener, void *data) {
 
   closemon(m);
   // wlr_scene_node_destroy(&m->fullscreen_bg->node);
-  wlr_scene_node_destroy(&m->blur->node);
-  m->blur = NULL;
+  if(m->blur) {
+    wlr_scene_node_destroy(&m->blur->node);
+    m->blur = NULL;
+  }
   free(m);
 }
 
@@ -2954,11 +2957,19 @@ void commitlayersurfacenotify(struct wl_listener *listener, void *data) {
              : scene_layer));
   }
 
-  // if(blur && l->type == ZWLR_LAYER_SHELL_V1_LAYER_BACKGROUND) {
-  //   wlr_scene_optimized_blur_mark_dirty(l->mon->blur);
-  // }
-
   arrangelayers(l->mon);
+
+  if (blur) {
+  	// Rerender the optimized blur on change
+  	struct wlr_layer_surface_v1 *wlr_layer_surface = l->layer_surface;
+  	if (wlr_layer_surface->current.layer ==
+  			ZWLR_LAYER_SHELL_V1_LAYER_BACKGROUND ||
+  		wlr_layer_surface->current.layer == ZWLR_LAYER_SHELL_V1_LAYER_BOTTOM) {
+  		if (l->mon) {
+  			wlr_scene_optimized_blur_mark_dirty(l->mon->blur);
+  		}
+  	}
+  }
 }
 
 void client_set_pending_state(Client *c) {
@@ -3382,9 +3393,13 @@ void createmon(struct wl_listener *listener, void *data) {
 
   if(blur) {
     m->blur = wlr_scene_optimized_blur_create(&scene->tree,
-                                                   wlr_output->width, wlr_output->height);
-    wlr_scene_node_place_above(&m->blur->node, &layers[LyrBottom]->node);
-    wlr_scene_node_set_position(&m->blur->node, m->m.x, m->m.y);
+                                                   0, 0);
+    // wlr_scene_node_set_position(&m->blur->node, m->m.x, m->m.y);
+		wlr_scene_node_reparent(&m->blur->node, layers[LyrBlur]);
+	  wlr_scene_optimized_blur_set_size(m->blur,
+	  		m->m.width, m->m.height);
+		// wlr_scene_node_set_enabled(&m->blur->node, 1);
+
   }
 
 }
@@ -4089,7 +4104,14 @@ void incovgaps(const Arg *arg) {
 
 void requestmonstate(struct wl_listener *listener, void *data) {
   struct wlr_output_event_request_state *event = data;
+  Monitor *m = wl_container_of(listener, m, frame);
+
   wlr_output_commit_state(event->output, event->state);
+
+  if(blur) {
+    wlr_scene_optimized_blur_set_size(m->blur, m->m.width, m->m.height);
+  }
+  
   updatemons(NULL, NULL);
 }
 
@@ -4503,7 +4525,7 @@ static void iter_xdg_scene_buffers(struct wlr_scene_buffer *buffer, int sx,
   /* we dont blur subsurfaces */
   if(wlr_subsurface_try_from_wlr_surface(surface) != NULL) return;
 
-	if (c && !client_should_ignore_focus(c)) {
+	if (c) {
 			wlr_scene_buffer_set_backdrop_blur(buffer, true);
 			wlr_scene_buffer_set_backdrop_blur_optimized(buffer, true);
 			wlr_scene_buffer_set_backdrop_blur_ignore_transparent(buffer, true);
@@ -6928,9 +6950,8 @@ void updatemons(struct wl_listener *listener, void *data) {
     // wlr_scene_rect_set_size(m->fullscreen_bg, m->m.width, m->m.height);
 
     if(blur && m->blur) {
-	  wlr_scene_optimized_blur_set_size(m->blur,
-	  		m->wlr_output->width, m->wlr_output->height);
-      wlr_scene_node_set_position(&m->blur->node, m->m.x, m->m.y);
+	    wlr_scene_optimized_blur_set_size(m->blur,
+	    		m->m.width, m->m.height);
     }
 
     if (m->lock_surface) {
