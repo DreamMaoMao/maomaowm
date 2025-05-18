@@ -2056,7 +2056,7 @@ void reset_blur_params(void) {
       m->blur = wlr_scene_optimized_blur_create(&scene->tree,
                                                      output_box.width, output_box.height);
       wlr_scene_set_blur_data(scene, blur_params);
-      wlr_scene_node_place_above(&m->blur->node, &layers[LyrBg]->node);
+      wlr_scene_node_place_above(&m->blur->node, &layers[LyrBottom]->node);
       wlr_scene_node_set_position(&m->blur->node, output_box.x, output_box.y);
     }
   } else{

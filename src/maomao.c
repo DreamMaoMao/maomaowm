@@ -2874,6 +2874,8 @@ void cleanupmon(struct wl_listener *listener, void *data) {
 
   closemon(m);
   // wlr_scene_node_destroy(&m->fullscreen_bg->node);
+  wlr_scene_node_destroy(&m->blur->node);
+  m->blur = NULL;
   free(m);
 }
 
@@ -3381,7 +3383,7 @@ void createmon(struct wl_listener *listener, void *data) {
   if(blur) {
     m->blur = wlr_scene_optimized_blur_create(&scene->tree,
                                                    wlr_output->width, wlr_output->height);
-    wlr_scene_node_place_above(&m->blur->node, &layers[LyrBg]->node);
+    wlr_scene_node_place_above(&m->blur->node, &layers[LyrBottom]->node);
     wlr_scene_node_set_position(&m->blur->node, m->m.x, m->m.y);
   }
 
@@ -4488,6 +4490,26 @@ void locksession(struct wl_listener *listener, void *data) {
   wlr_session_lock_v1_send_locked(session_lock);
 }
 
+static void iter_xdg_scene_buffers(struct wlr_scene_buffer *buffer, int sx,
+								   int sy, void *user_data) {
+	Client *c = user_data;
+
+	struct wlr_scene_surface * scene_surface = wlr_scene_surface_try_from_buffer(buffer);
+	if (!scene_surface) {
+		return;
+	}
+
+  struct wlr_surface *surface = scene_surface->surface;
+  /* we dont blur subsurfaces */
+  if(wlr_subsurface_try_from_wlr_surface(surface) != NULL) return;
+
+	if (c && !client_should_ignore_focus(c)) {
+			wlr_scene_buffer_set_backdrop_blur(buffer, true);
+			wlr_scene_buffer_set_backdrop_blur_optimized(buffer, true);
+			wlr_scene_buffer_set_backdrop_blur_ignore_transparent(buffer, true);
+	}
+}
+
 void // old fix to 0.5
 mapnotify(struct wl_listener *listener, void *data) {
   /* Called when the surface is mapped, or ready to display on-screen. */
@@ -4529,6 +4551,10 @@ mapnotify(struct wl_listener *listener, void *data) {
   wlr_scene_node_set_position(&c->border->node, 0, 0);
   wlr_scene_rect_set_corner_radius(c->border, border_radius, border_radius_location_default);
   wlr_scene_node_set_enabled(&c->border->node, true);
+
+
+	wlr_scene_node_for_each_buffer(&c->scene_surface->node,
+								   iter_xdg_scene_buffers, c);
 
 
   /* Initialize client geometry with room for border */
@@ -5038,14 +5064,6 @@ void scene_buffer_apply_effect(struct wlr_scene_buffer *buffer, int sx, int sy,
   /* we dont blur subsurfaces */
   if(wlr_subsurface_try_from_wlr_surface(surface) != NULL) return;
   
-  if(blur) {
-    wlr_scene_buffer_set_backdrop_blur(buffer, true);
-    wlr_scene_buffer_set_backdrop_blur_optimized(buffer, true);
-    wlr_scene_buffer_set_backdrop_blur_ignore_transparent(buffer, false);
-  } else {
-    wlr_scene_buffer_set_backdrop_blur(buffer, false);
-  }
-
 }
 
 void snap_scene_buffer_apply_effect(struct wlr_scene_buffer *buffer, int sx,
@@ -6908,6 +6926,12 @@ void updatemons(struct wl_listener *listener, void *data) {
 
     // wlr_scene_node_set_position(&m->fullscreen_bg->node, m->m.x, m->m.y);
     // wlr_scene_rect_set_size(m->fullscreen_bg, m->m.width, m->m.height);
+
+    if(blur && m->blur) {
+	  wlr_scene_optimized_blur_set_size(m->blur,
+	  		m->wlr_output->width, m->wlr_output->height);
+      wlr_scene_node_set_position(&m->blur->node, m->m.x, m->m.y);
+    }
 
     if (m->lock_surface) {
       struct wlr_scene_tree *scene_tree = m->lock_surface->surface->data;
