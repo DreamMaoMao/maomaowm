@@ -214,6 +214,8 @@ typedef struct {
   int height;
   enum corner_location corner_location;
   bool should_scale;
+  double percent;
+  float opacity;
 } animationScale;
 
 typedef struct Client Client;
@@ -293,6 +295,8 @@ struct Client {
   bool is_clip_to_hide;
   bool drag_to_tile;
   bool fake_no_border;
+  float focused_opacity;
+  float unfocused_opacity;
 };
 
 typedef struct {
@@ -1029,18 +1033,9 @@ void client_animation_next_tick(Client *c) {
       .height = height,
   };
 
-  if (!c->iskilling && (c->is_open_animation || c->animation.begin_fade_in) &&
-      animation_fade_in) {
-    c->animation.begin_fade_in = true;
-    client_set_opacity(c, MIN(animation_passed + fadein_begin_opacity, 1.0));
-  }
-
   c->is_open_animation = false;
 
   if (animation_passed == 1.0) {
-    if (c->animation.begin_fade_in) {
-      c->animation.begin_fade_in = false;
-    }
 
     // clear the open action state
     // To prevent him from being mistaken that
@@ -1396,6 +1391,8 @@ void client_apply_clip(Client *c) {
   scale_data.width_scale = (float)scale_data.width / geometry.width;
   scale_data.height_scale = (float)scale_data.height / geometry.height;
   scale_data.corner_location = current_corner_location;
+  scale_data.percent = c->is_open_animation && animation_fade_in ? (double)c->animation.passed_frames / c->animation.total_frames : 1.0;
+  scale_data.opacity = c == selmon->sel ? c->focused_opacity : c->unfocused_opacity;
   buffer_set_effect(c, scale_data);
 }
 
@@ -1403,6 +1400,12 @@ bool client_draw_frame(Client *c) {
 
   if (!c || !client_surface(c)->mapped)
     return false;
+
+  if(c == selmon->sel && !c->animation.running) {
+    client_set_opacity(c, c->focused_opacity);
+  } else if(!c->animation.running) {
+    client_set_opacity(c, c->unfocused_opacity);
+  }
 
   if (!c->need_output_flush)
     return false;
@@ -1942,6 +1945,8 @@ applyrules(Client *c) {
          regex_match(r->title,title))) {
       c->isterm = r->isterm > 0 ? r->isterm : c->isterm;
       c->noswallow = r->noswallow > 0 ? r->noswallow : c->noswallow;
+      c->focused_opacity = r->focused_opacity > 0 && r->focused_opacity <= 1.0 ? r->focused_opacity : c->focused_opacity;
+      c->unfocused_opacity = r->unfocused_opacity > 0 && r->unfocused_opacity <= 1.0 ? r->unfocused_opacity : c->unfocused_opacity;
       c->scratchpad_geom.width =
           r->scratchpad_width > 0 ? r->scratchpad_width : c->scratchpad_geom.width;
       c->scratchpad_geom.height =
@@ -4676,6 +4681,8 @@ mapnotify(struct wl_listener *listener, void *data) {
   c->is_open_animation = true;
   c->drag_to_tile = false;
   c->fake_no_border = false;
+  c->focused_opacity = focused_opacity;
+  c->unfocused_opacity = unfocused_opacity;
 
   if (new_is_master && selmon &&
       strcmp(selmon->pertag->ltidxs[selmon->pertag->curtag]->name,
@@ -5154,7 +5161,11 @@ void scene_buffer_apply_effect(struct wlr_scene_buffer *buffer, int sx, int sy,
 
   wlr_scene_buffer_set_corner_radius(buffer, border_radius, scale_data->corner_location);
 
-  
+  float target_opacity = scale_data->percent + fadein_begin_opacity;
+  if (target_opacity > scale_data->opacity) {
+    target_opacity = scale_data->opacity;
+  }
+  wlr_scene_buffer_set_opacity(buffer, target_opacity);
 }
 
 void snap_scene_buffer_apply_effect(struct wlr_scene_buffer *buffer, int sx,
@@ -5435,7 +5446,6 @@ void resize(Client *c, struct wlr_box geo, int interact) {
 
   if (!c->is_open_animation) {
     c->animation.begin_fade_in = false;
-    client_set_opacity(c, 1);
   }
 
   if (c->animation.action == OPEN && !c->animation.tagining &&

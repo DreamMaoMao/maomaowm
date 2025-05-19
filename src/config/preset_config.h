@@ -123,6 +123,9 @@ int left_handed = 0;
 int middle_button_emulation = 0;
 int single_scratchpad = 1;
 
+float focused_opacity = 1.0;
+float unfocused_opacity = 0.7;
+
 int   blur=0;
 int   blur_params_num_passes = 1;
 int   blur_params_radius = 5;

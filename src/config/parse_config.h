@@ -39,6 +39,8 @@ typedef struct {
   int noswallow;
   int scratchpad_width;
   int scratchpad_height;
+  float focused_opacity;
+  float unfocused_opacity;
   uint32_t passmod;
   xkb_keysym_t keysym;
   KeyBinding globalkeybinding;
@@ -127,6 +129,8 @@ typedef struct {
   int enable_floating_snap;
   int drag_tile_to_tile;
   unsigned int swipe_min_threshold;
+  float focused_opacity;
+  float unfocused_opacity;
   float *scroller_proportion_preset;
   int scroller_proportion_preset_count;
 
@@ -808,6 +812,10 @@ void parse_config_line(Config *config, const char *line) {
     config->drag_tile_to_tile = atoi(value);
   } else if (strcmp(key, "swipe_min_threshold") == 0) {
     config->swipe_min_threshold = atoi(value);
+  } else if (strcmp(key, "focused_opacity") == 0) {
+    config->focused_opacity = atof(value);
+  } else if (strcmp(key, "unfocused_opacity") == 0) {
+    config->unfocused_opacity = atof(value);
   } else if (strcmp(key, "scroller_proportion_preset") == 0) {
     // 1. 统计 value 中有多少个逗号，确定需要解析的浮点数个数
     int count = 0; // 初始化为 0
@@ -1123,6 +1131,8 @@ void parse_config_line(Config *config, const char *line) {
     rule->offsety = 0;
     rule->scratchpad_width = 0;
     rule->scratchpad_height = 0;
+    rule->focused_opacity = 0;
+    rule->unfocused_opacity = 0;
     rule->width = -1;
     rule->height = -1;
     rule->animation_type_open = NULL;
@@ -1166,6 +1176,10 @@ void parse_config_line(Config *config, const char *line) {
           rule->scratchpad_width = atoi(val);
         } else if (strcmp(key, "scratchpad_height") == 0) {
           rule->scratchpad_height = atoi(val);
+        } else if (strcmp(key, "focused_opacity") == 0) {
+          rule->focused_opacity = atof(val);
+        } else if (strcmp(key, "unfocused_opacity") == 0) {
+          rule->unfocused_opacity = atof(val);
         } else if (strcmp(key, "width") == 0) {
           rule->width = atoi(val);
         } else if (strcmp(key, "height") == 0) {
@@ -1827,6 +1841,8 @@ void override_config(void) {
   drag_tile_to_tile = config.drag_tile_to_tile;
   enable_floating_snap = config.enable_floating_snap;
   swipe_min_threshold = config.swipe_min_threshold;
+  focused_opacity = config.focused_opacity > 1  || config.focused_opacity <= 0 ? 1 : config.focused_opacity; 
+  unfocused_opacity = config.unfocused_opacity > 1  || config.unfocused_opacity <= 0 ? 1 : config.unfocused_opacity;
   scroller_prefer_center = config.scroller_prefer_center;
 
   new_is_master = config.new_is_master;
@@ -1943,6 +1959,8 @@ void set_value_default() {
   config.drag_tile_to_tile = drag_tile_to_tile;
   config.enable_floating_snap = enable_floating_snap;
   config.swipe_min_threshold = swipe_min_threshold;
+  config.focused_opacity = focused_opacity;
+  config.unfocused_opacity = unfocused_opacity;
 
   config.bypass_surface_visibility =
       bypass_surface_visibility; /* 1 means idle inhibitors will disable idle
@@ -2122,6 +2140,8 @@ void reload_config(const Arg *arg) {
     if (c && !c->iskilling) {
       if (c->bw) {
         c->bw = borderpx;
+        c->focused_opacity = focused_opacity;
+        c->unfocused_opacity = unfocused_opacity;
       }
     }
   }
