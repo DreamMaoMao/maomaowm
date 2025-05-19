@@ -1335,7 +1335,7 @@ void client_apply_clip(Client *c) {
     }
 
     wlr_scene_subsurface_tree_set_clip(&c->scene_surface->node, &surface_clip);
-    // buffer_set_effect(c, (animationScale){0, 0, 0, 0, current_corner_location,false});
+    buffer_set_effect(c, (animationScale){0, 0, 0, 0, current_corner_location,false});
     return;
   }
 
@@ -1390,8 +1390,7 @@ bool client_draw_frame(Client *c) {
     client_animation_next_tick(c);
     client_apply_clip(c);
   } else {
-    if(!c->is_clip_to_hide)
-      wlr_scene_node_set_position(&c->scene->node, c->pending.x, c->pending.y);
+    wlr_scene_node_set_position(&c->scene->node, c->pending.x, c->pending.y);
     c->animainit_geom = c->animation.initial = c->pending = c->current =
         c->geom;
     client_apply_clip(c);
