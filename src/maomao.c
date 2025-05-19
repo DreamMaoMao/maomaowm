@@ -217,6 +217,7 @@ struct Client {
   struct wlr_scene_tree *scene;
   struct wlr_scene_rect *border; /* top, bottom, left, right */
   struct wlr_scene_tree *scene_surface;
+  struct wlr_scene_shadow *shadow;
   struct wl_list link;
   struct wl_list flink;
   struct wl_list fadeout_link;
@@ -1069,6 +1070,61 @@ void set_rect_size(struct wlr_scene_rect *rect, int width, int height) {
   wlr_scene_rect_set_size(rect, GEZERO(width), GEZERO(height));
 }
 
+void
+client_draw_shadow(Client *c) {
+  if(c->shadow != NULL && !c->isfloating) {
+    wlr_scene_node_set_enabled(&c->shadow->node, false);
+    return;
+  }
+
+  uint32_t width, height;
+  client_actual_size(c, &width, &height);
+
+  uint32_t delta = shadows_size + c->bw;
+
+  /* we calculate where to clip the shadow */
+  struct wlr_box client_box = {
+    .x = 0,
+    .y = 0,
+    .width = width,
+    .height = height,
+  };
+
+  struct wlr_box shadow_box = {
+    .x = shadows_position_x,
+    .y = shadows_position_y,
+    .width = width + 2 * delta,
+    .height = height + 2 * delta,
+  };
+
+  struct wlr_box intersection_box;
+  wlr_box_intersection(&intersection_box, &client_box, &shadow_box);
+  /* clipped region takes shadow relative coords, so we translate everything by its position */
+  intersection_box.x -= shadows_position_x;
+  intersection_box.y -= shadows_position_y;
+
+  struct clipped_region clipped_region = {
+    .area = intersection_box,
+    .corner_radius = border_radius,
+    .corners = border_radius_location_default,
+  };
+
+  if(c->shadow == NULL) {
+    c->shadow = wlr_scene_shadow_create(c->scene,
+                                               shadow_box.width, shadow_box.height,
+                                               border_radius,
+                                               shadows_blur,
+                                               shadowscolor);
+    wlr_scene_node_lower_to_bottom(&c->shadow->node);
+    wlr_scene_node_set_position(&c->shadow->node, shadow_box.x, shadow_box.y);
+  }
+
+  wlr_scene_node_set_enabled(&c->shadow->node, true);
+
+  wlr_scene_shadow_set_size(c->shadow, shadow_box.width, shadow_box.height);
+  wlr_scene_shadow_set_clipped_region(c->shadow, clipped_region);
+}
+
 void apply_border(Client *c, struct wlr_box clip_box, int offsetx,
                   int offsety, enum corner_location border_radius_location) {
   int i;
@@ -1255,6 +1311,7 @@ void client_apply_clip(Client *c) {
   struct wlr_box clip_box;
   struct uvec2 offset;
   animationScale scale_data;
+  struct wlr_box surface_clip;
   enum corner_location current_corner_location = set_client_corner_location(c);
 
   if (!animations) {
@@ -1263,14 +1320,22 @@ void client_apply_clip(Client *c) {
     c->animainit_geom = c->current = c->pending = c->animation.current =
         c->geom;
     client_get_clip(c, &clip_box);
+
     offset = clip_to_hide(c, &clip_box);
-    if(c->is_clip_to_hide) {
+
+    apply_border(c, clip_box, offset.x, offset.y, current_corner_location);
+    client_draw_shadow(c);
+
+    surface_clip = clip_box;
+    surface_clip.width = surface_clip.width - 2 * c->bw;
+    surface_clip.height = surface_clip.height - 2 * c->bw;
+
+    if(surface_clip.width <= 0 || surface_clip.height <= 0) {
       return;
     }
-    apply_border(c, clip_box, offset.x, offset.y, current_corner_location);
 
-    wlr_scene_subsurface_tree_set_clip(&c->scene_surface->node, &clip_box);
-    buffer_set_effect(c, (animationScale){0, 0, 0, 0, current_corner_location,false});
+    wlr_scene_subsurface_tree_set_clip(&c->scene_surface->node, &surface_clip);
+    // buffer_set_effect(c, (animationScale){0, 0, 0, 0, current_corner_location,false});
     return;
   }
 
@@ -1293,8 +1358,8 @@ void client_apply_clip(Client *c) {
 
   offset = clip_to_hide(c, &clip_box);
   apply_border(c, clip_box, offset.x, offset.y, current_corner_location);
+  client_draw_shadow(c);
 
-  struct wlr_box surface_clip;
   surface_clip = clip_box;
   surface_clip.width = surface_clip.width - 2 * c->bw;
   surface_clip.height = surface_clip.height - 2 * c->bw;
@@ -4426,6 +4491,8 @@ static bool scene_node_snapshot(struct wlr_scene_node *node, int lx, int ly,
 
 		snapshot_shadow->node.data = scene_shadow->node.data;
 
+    wlr_scene_node_set_enabled(&snapshot_shadow->node, false);
+
 		break;
 	}
 	case WLR_SCENE_NODE_OPTIMIZED_BLUR:
@@ -5393,6 +5460,7 @@ void resize(Client *c, struct wlr_box geo, int interact) {
         c->geom;
     wlr_scene_node_set_position(&c->scene->node, c->geom.x, c->geom.y);
     apply_border(c, c->geom, 0, 0, CORNER_LOCATION_ALL);
+    client_draw_shadow(c);
     client_get_clip(c, &clip);
     wlr_scene_subsurface_tree_set_clip(&c->scene_surface->node, &clip);
     return;

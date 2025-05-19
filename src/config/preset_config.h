@@ -166,9 +166,9 @@ static const char *tags[] = {
 };
 
 
-int border_radius = 10;
+int border_radius = 0;
 int border_radius_location_default = CORNER_LOCATION_ALL;
-int blur=1;
+int blur=0;
 
 
 struct blur_data {
@@ -189,3 +189,9 @@ float blur_params_brightness = 0.9;
 float blur_params_contrast = 0.9;
 float blur_params_saturation = 1.2;
 
+int shadows = 0;
+unsigned int shadows_size = 10;
+double shadows_blur = 15;
+int shadows_position_x = 0;
+int shadows_position_y = 0;
+float shadowscolor[] = COLOR(0x000000ff);;

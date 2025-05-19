@@ -184,6 +184,7 @@ typedef struct {
   float scratchpadcolor[4];
   float globalcolor[4];
   float overlaycolor[4];
+  float shadowscolor[4];
 
   char autostart[3][256];
 
@@ -218,6 +219,13 @@ typedef struct {
   unsigned int cursor_size;
 
   int single_scratchpad;
+
+  int shadows;
+  unsigned int shadows_size;
+  float shadows_blur;
+  int shadows_position_x;
+  int shadows_position_y;
+
 
 } Config;
 
@@ -780,6 +788,16 @@ void parse_config_line(Config *config, const char *line) {
     config->blur_params.saturation = atof(value);
   } else if (strcmp(key, "single_scratchpad") == 0) {
     config->single_scratchpad = atoi(value);
+  } else if (strcmp(key, "shadows") == 0) {
+    config->shadows = atoi(value);
+  } else if (strcmp(key, "shadows_size") == 0) {
+    config->shadows_size = atoi(value);
+  } else if (strcmp(key, "shadows_blur") == 0) {
+    config->shadows_blur = atof(value);
+  } else if (strcmp(key, "shadows_position_x") == 0) {
+    config->shadows_position_x = atoi(value);
+  } else if (strcmp(key, "shadows_position_y") == 0) {
+    config->shadows_position_y = atoi(value);
   } else if (strcmp(key, "no_border_when_single") == 0) {
     config->no_border_when_single = atoi(value);
   } else if (strcmp(key, "snap_distance") == 0) {
@@ -1017,6 +1035,13 @@ void parse_config_line(Config *config, const char *line) {
       fprintf(stderr, "Error: Invalid globalcolor format: %s\n", value);
     } else {
       convert_hex_to_rgba(config->globalcolor, color);
+    }
+  } else if (strcmp(key, "shadowscolor") == 0) {
+    long int color = parse_color(value);
+    if (color == -1) {
+      fprintf(stderr, "Error: Invalid shadowscolor format: %s\n", value);
+    } else {
+      convert_hex_to_rgba(config->shadowscolor, color);
     }
   } else if (strcmp(key, "overlaycolor") == 0) {
     long int color = parse_color(value);
@@ -1792,6 +1817,11 @@ void override_config(void) {
   blur_params.contrast = config.blur_params.contrast;
   blur_params.saturation = config.blur_params.saturation;
   single_scratchpad = config.single_scratchpad;
+  shadows = config.shadows;
+  shadows_size = config.shadows_size;
+  shadows_blur = config.shadows_blur;
+  shadows_position_x = config.shadows_position_x;
+  shadows_position_y = config.shadows_position_y;
   no_border_when_single = config.no_border_when_single;
   snap_distance = config.snap_distance;
   drag_tile_to_tile = config.drag_tile_to_tile;
@@ -1843,6 +1873,7 @@ void override_config(void) {
   memcpy(scratchpadcolor, config.scratchpadcolor, sizeof(scratchpadcolor));
   memcpy(globalcolor, config.globalcolor, sizeof(globalcolor));
   memcpy(overlaycolor, config.overlaycolor, sizeof(overlaycolor));
+  memcpy(shadowscolor, config.shadowscolor, sizeof(shadowscolor));
 }
 
 void set_value_default() {
@@ -1902,6 +1933,11 @@ void set_value_default() {
   config.blur_params.contrast = blur_params_contrast;
   config.blur_params.saturation = blur_params_saturation;
   config.single_scratchpad = single_scratchpad;
+  config.shadows = shadows;
+  config.shadows_size = shadows_size;
+  config.shadows_blur = shadows_blur;
+  config.shadows_position_x = shadows_position_x;
+  config.shadows_position_y = shadows_position_y;
   config.no_border_when_single = no_border_when_single;
   config.snap_distance = snap_distance;
   config.drag_tile_to_tile = drag_tile_to_tile;
@@ -1952,6 +1988,7 @@ void set_value_default() {
   memcpy(config.scratchpadcolor, scratchpadcolor, sizeof(scratchpadcolor));
   memcpy(config.globalcolor, globalcolor, sizeof(globalcolor));
   memcpy(config.overlaycolor, overlaycolor, sizeof(overlaycolor));
+  memcpy(config.shadowscolor, shadowscolor, sizeof(shadowscolor));
 }
 
 void set_default_key_bindings(Config *config) {
