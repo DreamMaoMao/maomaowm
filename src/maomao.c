@@ -1083,19 +1083,10 @@ client_draw_shadow(Client *c) {
   if (c->iskilling || !client_surface(c)->mapped)
     return;
 
-  if(c->shadow != NULL && !c->isfloating) {
-    wlr_scene_node_set_enabled(&c->shadow->node, false);
-    return;
+  if(!shadows || !c->isfloating) {
+     wlr_scene_shadow_set_size(c->shadow, 0, 0);
+    return;   
   }
-
-  if(c->shadow && ! shadows)
-  {
-    wlr_scene_node_set_enabled(&c->shadow->node, false);
-    return;
-  } 
-
-  if(!c->shadow && !shadows)
-    return;
 
   uint32_t width, height;
   client_actual_size(c, &width, &height);
@@ -1129,17 +1120,7 @@ client_draw_shadow(Client *c) {
     .corners = border_radius_location_default,
   };
 
-  if(c->shadow == NULL) {
-    c->shadow = wlr_scene_shadow_create(c->scene,
-                                               shadow_box.width, shadow_box.height,
-                                               border_radius,
-                                               shadows_blur,
-                                               shadowscolor);
-    wlr_scene_node_lower_to_bottom(&c->shadow->node);
-    wlr_scene_node_set_position(&c->shadow->node, shadow_box.x, shadow_box.y);
-  }
-
-  wlr_scene_node_set_enabled(&c->shadow->node, true);
+  wlr_scene_node_set_position(&c->shadow->node, shadow_box.x, shadow_box.y);
 
   wlr_scene_shadow_set_size(c->shadow, shadow_box.width, shadow_box.height);
   wlr_scene_shadow_set_clipped_region(c->shadow, clipped_region);
@@ -4658,6 +4639,16 @@ mapnotify(struct wl_listener *listener, void *data) {
   wlr_scene_rect_set_corner_radius(c->border, border_radius, border_radius_location_default);
   wlr_scene_node_set_enabled(&c->border->node, true);
 
+
+
+  c->shadow = wlr_scene_shadow_create(c->scene,
+                                             0, 0,
+                                             border_radius,
+                                             shadows_blur,
+                                             shadowscolor);
+
+  wlr_scene_node_lower_to_bottom(&c->shadow->node);
+  wlr_scene_node_set_enabled(&c->shadow->node, true);
 
 	wlr_scene_node_for_each_buffer(&c->scene_surface->node,
 								   iter_xdg_scene_buffers, c);
