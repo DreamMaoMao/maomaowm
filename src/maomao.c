@@ -4350,9 +4350,9 @@ static bool scene_node_snapshot(struct wlr_scene_node *node, int lx, int ly,
 		wlr_scene_rect_set_clipped_region(scene_rect,
 										  snapshot_rect->clipped_region);
 		wlr_scene_rect_set_backdrop_blur(scene_rect,
-										 snapshot_rect->backdrop_blur);
-		wlr_scene_rect_set_backdrop_blur_optimized(
-			scene_rect, snapshot_rect->backdrop_blur_optimized);
+										 false);
+		// wlr_scene_rect_set_backdrop_blur_optimized(
+		// 	scene_rect, snapshot_rect->backdrop_blur_optimized);
 		wlr_scene_rect_set_corner_radius(
 			scene_rect, snapshot_rect->corner_radius, snapshot_rect->corners);
 		wlr_scene_rect_set_color(scene_rect, snapshot_rect->color);
@@ -4389,12 +4389,12 @@ static bool scene_node_snapshot(struct wlr_scene_node *node, int lx, int ly,
 										   scene_buffer->corner_radius,
 										   scene_buffer->corners);
 
-		wlr_scene_buffer_set_backdrop_blur_optimized(
-			snapshot_buffer, scene_buffer->backdrop_blur_optimized);
-		wlr_scene_buffer_set_backdrop_blur_ignore_transparent(
-			snapshot_buffer, scene_buffer->backdrop_blur_ignore_transparent);
+		// wlr_scene_buffer_set_backdrop_blur_optimized(
+		// 	snapshot_buffer, scene_buffer->backdrop_blur_optimized);
+		// wlr_scene_buffer_set_backdrop_blur_ignore_transparent(
+		// 	snapshot_buffer, scene_buffer->backdrop_blur_ignore_transparent);
 		wlr_scene_buffer_set_backdrop_blur(snapshot_buffer,
-										   scene_buffer->backdrop_blur);
+										   false);
 
 		snapshot_buffer->node.data = scene_buffer->node.data;
 
