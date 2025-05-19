@@ -4110,7 +4110,7 @@ Client * // 0.5
 focustop(Monitor *m) {
   Client *c;
   wl_list_for_each(c, &fstack, flink) {
-    if (c->iskilling || client_should_ignore_focus(c))
+    if (c->iskilling)
       continue;
     if (VISIBLEON(c, m))
       return c;
