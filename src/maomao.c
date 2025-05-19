@@ -1077,6 +1077,15 @@ client_draw_shadow(Client *c) {
     return;
   }
 
+  if(c->shadow && ! shadows)
+  {
+    wlr_scene_node_set_enabled(&c->shadow->node, false);
+    return;
+  } 
+
+  if(!c->shadow && !shadows)
+    return;
+
   uint32_t width, height;
   client_actual_size(c, &width, &height);
 
@@ -4575,11 +4584,13 @@ static void iter_xdg_scene_buffers(struct wlr_scene_buffer *buffer, int sx,
   /* we dont blur subsurfaces */
   if(wlr_subsurface_try_from_wlr_surface(surface) != NULL) return;
 
-	if (c) {
+	if (blur && c) {
 			wlr_scene_buffer_set_backdrop_blur(buffer, true);
 			wlr_scene_buffer_set_backdrop_blur_optimized(buffer, true);
 			wlr_scene_buffer_set_backdrop_blur_ignore_transparent(buffer, true);
-	}
+	} else {
+    wlr_scene_buffer_set_backdrop_blur(buffer, false);
+  }
 }
 
 void // old fix to 0.5
