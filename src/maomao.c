@@ -195,6 +195,15 @@ struct dwl_animation {
   int action;
 };
 
+struct blur_data {
+	int num_passes;
+	int radius;
+	float noise;
+	float brightness;
+	float contrast;
+	float saturation;
+};
+
 typedef struct Pertag Pertag;
 typedef struct Monitor Monitor;
 
@@ -733,6 +742,9 @@ static struct {
   int hotspot_x;
   int hotspot_y;
 } last_cursor;
+
+struct blur_data blur_params;
+int border_radius_location_default = CORNER_LOCATION_ALL;
 
 #include "config/preset_config.h"
 

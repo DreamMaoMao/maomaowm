@@ -131,7 +131,7 @@ typedef struct {
   int scroller_proportion_preset_count;
 
   int blur;
-  int border_radius;
+  unsigned int border_radius;
   struct blur_data blur_params; 
 
   char **circle_layout;
