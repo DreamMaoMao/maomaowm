@@ -9,9 +9,6 @@
 
 #define PCRE2_CODE_UNIT_WIDTH 8
 #include <pcre2.h>
-#include <wchar.h>
-
-
 
 void die(const char *fmt, ...) {
   va_list ap;
