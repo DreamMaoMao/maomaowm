@@ -3200,14 +3200,6 @@ KeyboardGroup *createkeyboardgroup(void) {
   return group;
 }
 
-// void
-// iter_scene_buffer_apply_blur(struct wlr_scene_buffer *buffer,
-//                              int sx, int sy, void *data) {
-//   wlr_scene_buffer_set_backdrop_blur(buffer, data);
-//   wlr_scene_buffer_set_backdrop_blur_optimized(buffer, data);
-//   wlr_scene_buffer_set_backdrop_blur_ignore_transparent(buffer, data);
-// }
-
 void createlayersurface(struct wl_listener *listener, void *data) {
   struct wlr_layer_surface_v1 *layer_surface = data;
   LayerSurface *l;
@@ -3241,11 +3233,6 @@ void createlayersurface(struct wl_listener *listener, void *data) {
 
   wl_list_insert(&l->mon->layers[layer_surface->pending.layer], &l->link);
   wlr_surface_send_enter(surface, layer_surface->output);
-
-  // if(blur) {
-  //     wlr_scene_node_for_each_buffer(&l->scene->node, iter_scene_buffer_apply_blur, (void *)1);
-  // }
-
 }
 
 void createlocksurface(struct wl_listener *listener, void *data) {
@@ -3394,12 +3381,9 @@ void createmon(struct wl_listener *listener, void *data) {
   if(blur) {
     m->blur = wlr_scene_optimized_blur_create(&scene->tree,
                                                    0, 0);
-    // wlr_scene_node_set_position(&m->blur->node, m->m.x, m->m.y);
 		wlr_scene_node_reparent(&m->blur->node, layers[LyrBlur]);
 	  wlr_scene_optimized_blur_set_size(m->blur,
 	  		m->m.width, m->m.height);
-		// wlr_scene_node_set_enabled(&m->blur->node, 1);
-
   }
 
 }
@@ -5076,15 +5060,11 @@ void scene_buffer_apply_effect(struct wlr_scene_buffer *buffer, int sx, int sy,
       wlr_scene_buffer_set_dest_size(buffer, surface_width, surface_height);
     }
   }
-  // TODO: blur set, opacity set
 
-  /* we dont round or blur popups */
   if(wlr_xdg_popup_try_from_wlr_surface(surface) != NULL) return;
 
   wlr_scene_buffer_set_corner_radius(buffer, border_radius, scale_data->corner_location);
 
-  /* we dont blur subsurfaces */
-  if(wlr_subsurface_try_from_wlr_surface(surface) != NULL) return;
   
 }
 
@@ -5114,18 +5094,6 @@ void buffer_set_effect(Client *c, animationScale data) {
 }
 
 void client_set_opacity(Client *c, double opacity) {
-  wlr_scene_node_for_each_buffer(&c->scene_surface->node,
-                                 scene_buffer_apply_opacity, &opacity);
-}
-
-void client_handle_opacity(Client *c) {
-  if (!c || !c->mon || !client_surface(c)->mapped)
-    return;
-
-  double opacity = c->isfullscreen || c->ismaxmizescreen ? 1.0
-                   : c == selmon->sel                    ? 0.8
-                                                         : 0.5;
-
   wlr_scene_node_for_each_buffer(&c->scene_surface->node,
                                  scene_buffer_apply_opacity, &opacity);
 }
