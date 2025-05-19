@@ -12,6 +12,11 @@
 #include <stdlib.h>
 #include <sys/wait.h>
 #include <time.h>
+#include <scenefx/render/fx_renderer/fx_renderer.h>
+#include <scenefx/types/fx/blur_data.h>
+#include <scenefx/types/fx/clipped_region.h>
+#include <scenefx/types/fx/corner_location.h>
+#include <scenefx/types/wlr_scene.h>
 #include <unistd.h>
 #include <wayland-server-core.h>
 #include <wlr/backend.h>
@@ -51,7 +56,6 @@
 #include <wlr/types/wlr_primary_selection.h>
 #include <wlr/types/wlr_primary_selection_v1.h>
 #include <wlr/types/wlr_relative_pointer_v1.h>
-#include <wlr/types/wlr_scene.h>
 #include <wlr/types/wlr_screencopy_v1.h>
 #include <wlr/types/wlr_seat.h>
 #include <wlr/types/wlr_server_decoration.h>
@@ -117,6 +121,7 @@ enum { XDGShell, LayerShell, X11 };                 /* client types */
 enum { AxisUp, AxisDown, AxisLeft, AxisRight };     // 滚轮滚动的方向
 enum {
   LyrBg,
+  LyrBlur,
   LyrBottom,
   LyrTile,
   LyrFloat,
@@ -198,6 +203,7 @@ typedef struct {
   float height_scale;
   int width;
   int height;
+  enum corner_location corner_location;
   bool should_scale;
 } animationScale;
 
@@ -209,8 +215,9 @@ struct Client {
       overview_backup_geom, current; /* layout-relative, includes border */
   Monitor *mon;
   struct wlr_scene_tree *scene;
-  struct wlr_scene_rect *border[4]; /* top, bottom, left, right */
+  struct wlr_scene_rect *border; /* top, bottom, left, right */
   struct wlr_scene_tree *scene_surface;
+  struct wlr_scene_shadow *shadow;
   struct wl_list link;
   struct wl_list flink;
   struct wl_list fadeout_link;
@@ -374,6 +381,7 @@ struct Monitor {
   int gamma_lut_changed;
   int asleep;
   unsigned int visible_clients;
+  struct wlr_scene_optimized_blur *blur;
 };
 
 typedef struct {
@@ -621,7 +629,7 @@ static unsigned int get_tags_first_tag(unsigned int tags);
 
 static void client_commit(Client *c);
 static void apply_border(Client *c, struct wlr_box clip_box, int offsetx,
-                         int offsety);
+                         int offsety, enum corner_location current_corner_location);
 static void client_set_opacity(Client *c, double opacity);
 static void init_baked_points(void);
 static void scene_buffer_apply_opacity(struct wlr_scene_buffer *buffer, int sx,
@@ -965,7 +973,7 @@ void fadeout_client_animation_next_tick(Client *c) {
     scale_data.height = height;
     scale_data.width_scale = animation_passed;
     scale_data.height_scale = animation_passed;
-
+    
     wlr_scene_node_for_each_buffer(&c->scene->node,
                                    snap_scene_buffer_apply_effect, &scale_data);
   }
@@ -1062,8 +1070,63 @@ void set_rect_size(struct wlr_scene_rect *rect, int width, int height) {
   wlr_scene_rect_set_size(rect, GEZERO(width), GEZERO(height));
 }
 
+void
+client_draw_shadow(Client *c) {
+  if(c->shadow != NULL && !c->isfloating) {
+    wlr_scene_node_set_enabled(&c->shadow->node, false);
+    return;
+  }
+
+  uint32_t width, height;
+  client_actual_size(c, &width, &height);
+
+  uint32_t delta = shadows_size + c->bw;
+
+  /* we calculate where to clip the shadow */
+  struct wlr_box client_box = {
+    .x = 0,
+    .y = 0,
+    .width = width,
+    .height = height,
+  };
+
+  struct wlr_box shadow_box = {
+    .x = shadows_position_x,
+    .y = shadows_position_y,
+    .width = width + 2 * delta,
+    .height = height + 2 * delta,
+  };
+
+  struct wlr_box intersection_box;
+  wlr_box_intersection(&intersection_box, &client_box, &shadow_box);
+  /* clipped region takes shadow relative coords, so we translate everything by its position */
+  intersection_box.x -= shadows_position_x;
+  intersection_box.y -= shadows_position_y;
+
+  struct clipped_region clipped_region = {
+    .area = intersection_box,
+    .corner_radius = border_radius,
+    .corners = border_radius_location_default,
+  };
+
+  if(c->shadow == NULL) {
+    c->shadow = wlr_scene_shadow_create(c->scene,
+                                               shadow_box.width, shadow_box.height,
+                                               border_radius,
+                                               shadows_blur,
+                                               shadowscolor);
+    wlr_scene_node_lower_to_bottom(&c->shadow->node);
+    wlr_scene_node_set_position(&c->shadow->node, shadow_box.x, shadow_box.y);
+  }
+
+  wlr_scene_node_set_enabled(&c->shadow->node, true);
+
+  wlr_scene_shadow_set_size(c->shadow, shadow_box.width, shadow_box.height);
+  wlr_scene_shadow_set_clipped_region(c->shadow, clipped_region);
+}
+
 void apply_border(Client *c, struct wlr_box clip_box, int offsetx,
-                  int offsety) {
+                  int offsety, enum corner_location border_radius_location) {
   int i;
   bool hit_no_border = false;
 
@@ -1097,10 +1160,7 @@ void apply_border(Client *c, struct wlr_box clip_box, int offsetx,
     c->bw = 0;
     c->fake_no_border = true;
   } else if (hit_no_border && !smartgaps) {
-    set_rect_size(c->border[0], 0, 0);
-    set_rect_size(c->border[1], 0, 0);
-    set_rect_size(c->border[2], 0, 0);
-    set_rect_size(c->border[3], 0, 0);
+    wlr_scene_rect_set_size(c->border, 0, 0);
     wlr_scene_node_set_position(&c->scene_surface->node, c->bw, c->bw);
     c->fake_no_border = true;
     return;
@@ -1109,59 +1169,59 @@ void apply_border(Client *c, struct wlr_box clip_box, int offsetx,
     c->fake_no_border = false;
   }
 
-  wlr_scene_node_set_position(&c->scene_surface->node, c->bw, c->bw);
-  set_rect_size(c->border[0], clip_box.width, c->bw);
-  set_rect_size(c->border[1], clip_box.width, c->bw);
-  set_rect_size(c->border[2], c->bw, clip_box.height - 2 * c->bw);
-  set_rect_size(c->border[3], c->bw, clip_box.height - 2 * c->bw);
-  wlr_scene_node_set_position(&c->border[0]->node, 0, 0);
-  wlr_scene_node_set_position(&c->border[2]->node, 0, c->bw);
-  wlr_scene_node_set_position(&c->border[1]->node, 0, clip_box.height - c->bw);
-  wlr_scene_node_set_position(&c->border[3]->node, clip_box.width - c->bw,
-                              c->bw);
+  int clip_box_width = clip_box.width - 2 * c->bw;
+  int clip_box_height = clip_box.height - 2 * c->bw;
 
-  if (ISTILED(c) || c->animation.tagining || c->animation.tagouted ||
-      c->animation.tagouting) {
-    if (c->animation.current.x < c->mon->m.x) {
-      set_rect_size(c->border[2], GEZERO(c->bw - offsetx),
-                    clip_box.height - 2 * c->bw);
-    } else if (c->animation.current.x + c->animation.current.width >
-               c->mon->m.x + c->mon->m.width) {
-      set_rect_size(c->border[3],
-                    GEZERO(c->bw - GEZERO(c->animation.current.x +
-                                          c->animation.current.width -
-                                          c->mon->m.x - c->mon->m.width)),
-                    clip_box.height - 2 * c->bw);
-      set_rect_size(c->border[0], clip_box.width + c->bw,
-                    GEZERO(c->bw - offsety));
-      set_rect_size(c->border[1], clip_box.width + c->bw,
-                    GEZERO(c->bw - GEZERO(c->animation.current.y +
-                                          c->animation.current.height -
-                                          c->mon->m.y - c->mon->m.height)));
-    } else if (c->animation.current.y < c->mon->m.y) {
-      set_rect_size(c->border[0], clip_box.width, GEZERO(c->bw - offsety));
-    } else if (c->animation.current.y + c->animation.current.height >
-               c->mon->m.y + c->mon->m.height) {
-      set_rect_size(c->border[1], clip_box.width,
-                    GEZERO(c->bw - GEZERO(c->animation.current.y +
-                                          c->animation.current.height -
-                                          c->mon->m.y - c->mon->m.height)));
-      set_rect_size(c->border[2], GEZERO(c->bw - offsetx),
-                    clip_box.height - c->bw);
-      set_rect_size(c->border[3],
-                    GEZERO(c->bw - GEZERO(c->animation.current.x +
-                                          c->animation.current.width -
-                                          c->mon->m.x - c->mon->m.width)),
-                    clip_box.height - c->bw);
-    }
+  if(clip_box_width < 0) {
+    clip_box_width = 0;
   }
 
-  wlr_scene_node_set_position(&c->border[0]->node, offsetx, offsety);
-  wlr_scene_node_set_position(&c->border[2]->node, offsetx, c->bw + offsety);
-  wlr_scene_node_set_position(&c->border[1]->node, offsetx,
-                              clip_box.height - c->bw + offsety);
-  wlr_scene_node_set_position(
-      &c->border[3]->node, clip_box.width - c->bw + offsetx, c->bw + offsety);
+  if(clip_box_height < 0) {
+    clip_box_height = 0;
+  }
+
+  int clip_x = c->bw - offsetx;
+  int clip_y = c->bw - offsety;
+
+  clip_x = clip_x < 0 ? 0 : clip_x;
+  clip_y = clip_y < 0 ? 0 : clip_y;
+
+  struct clipped_region clipped_region = {
+    .area = { clip_x, clip_y, clip_box_width, clip_box_height },
+    .corner_radius = border_radius,
+    .corners = border_radius_location,
+  };
+
+  int right_offset = GEZERO(c->animation.current.x + c->animation.current.width - c->mon->m.x - c->mon->m.width);
+  int bottom_offset = GEZERO(c->animation.current.y + c->animation.current.height - c->mon->m.y - c->mon->m.height);
+  int rect_width =  clip_box.width;
+  int rect_height = clip_box.height;
+  
+
+  if(right_offset > 0) {
+    clipped_region.area.width = MIN(clip_box.width,clipped_region.area.width + right_offset);
+  }
+
+  if(bottom_offset > 0) {
+    clipped_region.area.height = MIN(clip_box.height,clipped_region.area.height + bottom_offset);
+  }
+
+  if(rect_width < 0) {
+    rect_width = 0;
+  }
+
+  if(rect_height < 0) {
+    rect_height = 0;
+  }
+
+  int node_x = offsetx;
+  int node_y = offsety;
+
+  wlr_scene_node_set_position(&c->scene_surface->node, c->bw, c->bw);
+  wlr_scene_rect_set_size(c->border, rect_width, rect_height);
+  wlr_scene_node_set_position(&c->border->node, node_x, node_y);
+  wlr_scene_rect_set_corner_radius(c->border, border_radius, border_radius_location);
+  wlr_scene_rect_set_clipped_region(c->border, clipped_region);
 }
 
 struct uvec2 clip_to_hide(Client *c, struct wlr_box *clip_box) {
@@ -1226,6 +1286,24 @@ struct uvec2 clip_to_hide(Client *c, struct wlr_box *clip_box) {
   return offset;
 }
 
+enum corner_location set_client_corner_location(Client *c) {
+  enum corner_location current_corner_location = CORNER_LOCATION_ALL;
+  struct wlr_box target_geom = animations ? c->animation.current : c->geom;
+  if(target_geom.x + border_radius <= c->mon->m.x) {
+    current_corner_location &= ~CORNER_LOCATION_LEFT; // 清除左标志位
+  }
+  if(target_geom.x + target_geom.width - border_radius >= c->mon->m.x + c->mon->m.width) {
+    current_corner_location &= ~CORNER_LOCATION_RIGHT; // 清除右标志位
+  }
+  if(target_geom.y + border_radius <= c->mon->m.y) {
+    current_corner_location &= ~CORNER_LOCATION_TOP; // 清除上标志位
+  }
+  if(target_geom.y + target_geom.height - border_radius >= c->mon->m.y + c->mon->m.height) {
+    current_corner_location &= ~CORNER_LOCATION_BOTTOM; // 清除下标志位
+  }
+  return current_corner_location;
+}
+
 void client_apply_clip(Client *c) {
 
   if (c->iskilling || !client_surface(c)->mapped)
@@ -1233,6 +1311,8 @@ void client_apply_clip(Client *c) {
   struct wlr_box clip_box;
   struct uvec2 offset;
   animationScale scale_data;
+  struct wlr_box surface_clip;
+  enum corner_location current_corner_location = set_client_corner_location(c);
 
   if (!animations) {
     c->animation.running = false;
@@ -1240,10 +1320,22 @@ void client_apply_clip(Client *c) {
     c->animainit_geom = c->current = c->pending = c->animation.current =
         c->geom;
     client_get_clip(c, &clip_box);
+
     offset = clip_to_hide(c, &clip_box);
-    apply_border(c, clip_box, offset.x, offset.y);
-    wlr_scene_subsurface_tree_set_clip(&c->scene_surface->node, &clip_box);
-    buffer_set_effect(c, (animationScale){0, 0, 0, 0, false});
+
+    apply_border(c, clip_box, offset.x, offset.y, current_corner_location);
+    client_draw_shadow(c);
+
+    surface_clip = clip_box;
+    surface_clip.width = surface_clip.width - 2 * c->bw;
+    surface_clip.height = surface_clip.height - 2 * c->bw;
+
+    if(surface_clip.width <= 0 || surface_clip.height <= 0) {
+      return;
+    }
+
+    wlr_scene_subsurface_tree_set_clip(&c->scene_surface->node, &surface_clip);
+    buffer_set_effect(c, (animationScale){0, 0, 0, 0, current_corner_location,false});
     return;
   }
 
@@ -1265,15 +1357,24 @@ void client_apply_clip(Client *c) {
   }
 
   offset = clip_to_hide(c, &clip_box);
+  apply_border(c, clip_box, offset.x, offset.y, current_corner_location);
+  client_draw_shadow(c);
 
-  wlr_scene_subsurface_tree_set_clip(&c->scene_surface->node, &clip_box);
-  apply_border(c, clip_box, offset.x, offset.y);
+  surface_clip = clip_box;
+  surface_clip.width = surface_clip.width - 2 * c->bw;
+  surface_clip.height = surface_clip.height - 2 * c->bw;
+
+  if(surface_clip.width <= 0 || surface_clip.height <= 0) {
+    return;
+  }
+  wlr_scene_subsurface_tree_set_clip(&c->scene_surface->node, &surface_clip);
 
   scale_data.should_scale = true;
   scale_data.width = clip_box.width - 2 * c->bw;
   scale_data.height = clip_box.height - 2 * c->bw;
   scale_data.width_scale = (float)scale_data.width / geometry.width;
   scale_data.height_scale = (float)scale_data.height / geometry.height;
+  scale_data.corner_location = current_corner_location;
   buffer_set_effect(c, scale_data);
 }
 
@@ -1661,7 +1762,7 @@ void gpureset(struct wl_listener *listener, void *data) {
 
   wlr_log(WLR_DEBUG, "gpu reset");
 
-  if (!(drw = wlr_renderer_autocreate(backend)))
+  if (!(drw = fx_renderer_create(backend)))
     die("couldn't recreate renderer");
 
   if (!(alloc = wlr_allocator_autocreate(backend, drw)))
@@ -2080,7 +2181,7 @@ void apply_window_snap(Client *c) {
       snap_right_screen = 0;
   int snap_up_mon = 0, snap_down_mon = 0, snap_left_mon = 0, snap_right_mon = 0;
 
-  unsigned int cbw = !render_border || c->fake_no_border ? borderpx : 0;
+  unsigned int cbw = !render_border || c->fake_no_border ? c->bw : 0;
   unsigned int tcbw;
   unsigned int cx, cy, cw, ch, tcx, tcy, tcw, tch;
   cx = c->geom.x + cbw;
@@ -2099,7 +2200,7 @@ void apply_window_snap(Client *c) {
     if (tc && tc->isfloating && !tc->iskilling && client_surface(tc)->mapped &&
         VISIBLEON(tc, c->mon)) {
 
-      tcbw = !render_border || tc->fake_no_border ? borderpx : 0;
+      tcbw = !render_border || tc->fake_no_border ? c->bw : 0;
       tcx = tc->geom.x + tcbw;
       tcy = tc->geom.y + tcbw;
       tcw = tc->geom.width - 2 * tcbw;
@@ -2838,6 +2939,10 @@ void cleanupmon(struct wl_listener *listener, void *data) {
 
   closemon(m);
   // wlr_scene_node_destroy(&m->fullscreen_bg->node);
+  if(m->blur) {
+    wlr_scene_node_destroy(&m->blur->node);
+    m->blur = NULL;
+  }
   free(m);
 }
 
@@ -2917,6 +3022,18 @@ void commitlayersurfacenotify(struct wl_listener *listener, void *data) {
   }
 
   arrangelayers(l->mon);
+
+  if (blur) {
+  	// Rerender the optimized blur on change
+  	struct wlr_layer_surface_v1 *wlr_layer_surface = l->layer_surface;
+  	if (wlr_layer_surface->current.layer ==
+  			ZWLR_LAYER_SHELL_V1_LAYER_BACKGROUND ||
+  		wlr_layer_surface->current.layer == ZWLR_LAYER_SHELL_V1_LAYER_BOTTOM) {
+  		if (l->mon) {
+  			wlr_scene_optimized_blur_mark_dirty(l->mon->blur);
+  		}
+  	}
+  }
 }
 
 void client_set_pending_state(Client *c) {
@@ -3324,6 +3441,15 @@ void createmon(struct wl_listener *listener, void *data) {
     wlr_output_layout_add_auto(output_layout, wlr_output);
   else
     wlr_output_layout_add(output_layout, wlr_output, m->m.x, m->m.y);
+
+  if(blur) {
+    m->blur = wlr_scene_optimized_blur_create(&scene->tree,
+                                                   0, 0);
+		wlr_scene_node_reparent(&m->blur->node, layers[LyrBlur]);
+	  wlr_scene_optimized_blur_set_size(m->blur,
+	  		m->m.width, m->m.height);
+  }
+
 }
 
 void // fix for 0.5
@@ -4026,7 +4152,14 @@ void incovgaps(const Arg *arg) {
 
 void requestmonstate(struct wl_listener *listener, void *data) {
   struct wlr_output_event_request_state *event = data;
+  Monitor *m = wl_container_of(listener, m, frame);
+
   wlr_output_commit_state(event->output, event->state);
+
+  if(blur) {
+    wlr_scene_optimized_blur_set_size(m->blur, m->m.width, m->m.height);
+  }
+  
   updatemons(NULL, NULL);
 }
 
@@ -4248,78 +4381,128 @@ void keypressmod(struct wl_listener *listener, void *data) {
 }
 
 static bool scene_node_snapshot(struct wlr_scene_node *node, int lx, int ly,
-                                struct wlr_scene_tree *snapshot_tree) {
-  if (!node->enabled && node->type != WLR_SCENE_NODE_TREE) {
-    return true;
-  }
+								struct wlr_scene_tree *snapshot_tree) {
+	if (!node->enabled && node->type != WLR_SCENE_NODE_TREE) {
+		return true;
+	}
 
-  lx += node->x;
-  ly += node->y;
+	lx += node->x;
+	ly += node->y;
 
-  struct wlr_scene_node *snapshot_node = NULL;
-  switch (node->type) {
-  case WLR_SCENE_NODE_TREE:;
-    struct wlr_scene_tree *scene_tree = wlr_scene_tree_from_node(node);
-    struct wlr_scene_node *child;
-    wl_list_for_each(child, &scene_tree->children, link) {
-      scene_node_snapshot(child, lx, ly, snapshot_tree);
-    }
-    break;
-  case WLR_SCENE_NODE_RECT:;
+	struct wlr_scene_node *snapshot_node = NULL;
+	switch (node->type) {
+	case WLR_SCENE_NODE_TREE: {
+		struct wlr_scene_tree *scene_tree = wlr_scene_tree_from_node(node);
 
-    struct wlr_scene_rect *scene_rect = wlr_scene_rect_from_node(node);
+		struct wlr_scene_node *child;
+		wl_list_for_each(child, &scene_tree->children, link) {
+			scene_node_snapshot(child, lx, ly, snapshot_tree);
+		}
+		break;
+	}
+	case WLR_SCENE_NODE_RECT: {
+		struct wlr_scene_rect *scene_rect = wlr_scene_rect_from_node(node);
 
-    struct wlr_scene_rect *snapshot_rect =
-        wlr_scene_rect_create(snapshot_tree, scene_rect->width,
-                              scene_rect->height, scene_rect->color);
-    snapshot_rect->node.data = scene_rect->node.data;
-    if (snapshot_rect == NULL) {
-      return false;
-    }
-    snapshot_node = &snapshot_rect->node;
-    break;
-  case WLR_SCENE_NODE_BUFFER:;
+		struct wlr_scene_rect *snapshot_rect =
+			wlr_scene_rect_create(snapshot_tree, scene_rect->width,
+								  scene_rect->height, scene_rect->color);
+		snapshot_rect->node.data = scene_rect->node.data;
+		if (snapshot_rect == NULL) {
+			return false;
+		}
 
-    struct wlr_scene_buffer *scene_buffer = wlr_scene_buffer_from_node(node);
+		wlr_scene_rect_set_clipped_region(scene_rect,
+										  snapshot_rect->clipped_region);
+		wlr_scene_rect_set_backdrop_blur(scene_rect,
+										 false);
+		// wlr_scene_rect_set_backdrop_blur_optimized(
+		// 	scene_rect, snapshot_rect->backdrop_blur_optimized);
+		wlr_scene_rect_set_corner_radius(
+			scene_rect, snapshot_rect->corner_radius, snapshot_rect->corners);
+		wlr_scene_rect_set_color(scene_rect, snapshot_rect->color);
 
-    struct wlr_scene_buffer *snapshot_buffer =
-        wlr_scene_buffer_create(snapshot_tree, NULL);
-    if (snapshot_buffer == NULL) {
-      return false;
-    }
-    snapshot_node = &snapshot_buffer->node;
-    snapshot_buffer->node.data = scene_buffer->node.data;
+		snapshot_node = &snapshot_rect->node;
+		break;
+	}
+	case WLR_SCENE_NODE_BUFFER: {
+		struct wlr_scene_buffer *scene_buffer =
+			wlr_scene_buffer_from_node(node);
 
-    wlr_scene_buffer_set_dest_size(snapshot_buffer, scene_buffer->dst_width,
-                                   scene_buffer->dst_height);
-    wlr_scene_buffer_set_opaque_region(snapshot_buffer,
-                                       &scene_buffer->opaque_region);
-    wlr_scene_buffer_set_source_box(snapshot_buffer, &scene_buffer->src_box);
-    wlr_scene_buffer_set_transform(snapshot_buffer, scene_buffer->transform);
-    wlr_scene_buffer_set_filter_mode(snapshot_buffer,
-                                     scene_buffer->filter_mode);
+		struct wlr_scene_buffer *snapshot_buffer =
+			wlr_scene_buffer_create(snapshot_tree, NULL);
+		if (snapshot_buffer == NULL) {
+			return false;
+		}
+		snapshot_node = &snapshot_buffer->node;
+		snapshot_buffer->node.data = scene_buffer->node.data;
 
-    // Effects
-    wlr_scene_buffer_set_opacity(snapshot_buffer, scene_buffer->opacity);
+		wlr_scene_buffer_set_dest_size(snapshot_buffer, scene_buffer->dst_width,
+									   scene_buffer->dst_height);
+		wlr_scene_buffer_set_opaque_region(snapshot_buffer,
+										   &scene_buffer->opaque_region);
+		wlr_scene_buffer_set_source_box(snapshot_buffer,
+										&scene_buffer->src_box);
+		wlr_scene_buffer_set_transform(snapshot_buffer,
+									   scene_buffer->transform);
+		wlr_scene_buffer_set_filter_mode(snapshot_buffer,
+										 scene_buffer->filter_mode);
 
-    snapshot_buffer->node.data = scene_buffer->node.data;
+		// Effects
+		wlr_scene_buffer_set_opacity(snapshot_buffer, scene_buffer->opacity);
+		wlr_scene_buffer_set_corner_radius(snapshot_buffer,
+										   scene_buffer->corner_radius,
+										   scene_buffer->corners);
 
-    struct wlr_scene_surface *scene_surface =
-        wlr_scene_surface_try_from_buffer(scene_buffer);
-    if (scene_surface != NULL && scene_surface->surface->buffer != NULL) {
-      wlr_scene_buffer_set_buffer(snapshot_buffer,
-                                  &scene_surface->surface->buffer->base);
-    } else {
-      wlr_scene_buffer_set_buffer(snapshot_buffer, scene_buffer->buffer);
-    }
-    break;
-  }
+		// wlr_scene_buffer_set_backdrop_blur_optimized(
+		// 	snapshot_buffer, scene_buffer->backdrop_blur_optimized);
+		// wlr_scene_buffer_set_backdrop_blur_ignore_transparent(
+		// 	snapshot_buffer, scene_buffer->backdrop_blur_ignore_transparent);
+		wlr_scene_buffer_set_backdrop_blur(snapshot_buffer,
+										   false);
 
-  if (snapshot_node != NULL) {
-    wlr_scene_node_set_position(snapshot_node, lx, ly);
-  }
+		snapshot_buffer->node.data = scene_buffer->node.data;
 
-  return true;
+		struct wlr_scene_surface *scene_surface =
+			wlr_scene_surface_try_from_buffer(scene_buffer);
+		if (scene_surface != NULL && scene_surface->surface->buffer != NULL) {
+			wlr_scene_buffer_set_buffer(snapshot_buffer,
+										&scene_surface->surface->buffer->base);
+		} else {
+			wlr_scene_buffer_set_buffer(snapshot_buffer, scene_buffer->buffer);
+		}
+		break;
+	}
+	case WLR_SCENE_NODE_SHADOW: {
+		struct wlr_scene_shadow *scene_shadow =
+			wlr_scene_shadow_from_node(node);
+
+		struct wlr_scene_shadow *snapshot_shadow = wlr_scene_shadow_create(
+			snapshot_tree, scene_shadow->width, scene_shadow->height,
+			scene_shadow->corner_radius, scene_shadow->blur_sigma,
+			scene_shadow->color);
+		if (snapshot_shadow == NULL) {
+			return false;
+		}
+		snapshot_node = &snapshot_shadow->node;
+
+		wlr_scene_shadow_set_clipped_region(snapshot_shadow,
+											scene_shadow->clipped_region);
+
+		snapshot_shadow->node.data = scene_shadow->node.data;
+
+    wlr_scene_node_set_enabled(&snapshot_shadow->node, false);
+
+		break;
+	}
+	case WLR_SCENE_NODE_OPTIMIZED_BLUR:
+		return true;
+	}
+
+	if (snapshot_node != NULL) {
+		wlr_scene_node_set_position(snapshot_node, lx, ly);
+	}
+
+	return true;
 }
 
 struct wlr_scene_tree *wlr_scene_tree_snapshot(struct wlr_scene_node *node,
@@ -4379,12 +4562,31 @@ void locksession(struct wl_listener *listener, void *data) {
   wlr_session_lock_v1_send_locked(session_lock);
 }
 
+static void iter_xdg_scene_buffers(struct wlr_scene_buffer *buffer, int sx,
+								   int sy, void *user_data) {
+	Client *c = user_data;
+
+	struct wlr_scene_surface * scene_surface = wlr_scene_surface_try_from_buffer(buffer);
+	if (!scene_surface) {
+		return;
+	}
+
+  struct wlr_surface *surface = scene_surface->surface;
+  /* we dont blur subsurfaces */
+  if(wlr_subsurface_try_from_wlr_surface(surface) != NULL) return;
+
+	if (c) {
+			wlr_scene_buffer_set_backdrop_blur(buffer, true);
+			wlr_scene_buffer_set_backdrop_blur_optimized(buffer, true);
+			wlr_scene_buffer_set_backdrop_blur_ignore_transparent(buffer, true);
+	}
+}
+
 void // old fix to 0.5
 mapnotify(struct wl_listener *listener, void *data) {
   /* Called when the surface is mapped, or ready to display on-screen. */
   Client *p = NULL;
   Client *c = wl_container_of(listener, c, map);
-  int i;
   /* Create scene tree for this client and its border */
   c->scene = client_surface(c)->data = wlr_scene_tree_create(layers[LyrTile]);
   wlr_scene_node_set_enabled(&c->scene->node, c->type != XDGShell);
@@ -4416,11 +4618,16 @@ mapnotify(struct wl_listener *listener, void *data) {
     return;
   }
 
-  for (i = 0; i < 4; i++) {
-    c->border[i] = wlr_scene_rect_create(
-        c->scene, 0, 0, c->isurgent ? urgentcolor : bordercolor);
-    c->border[i]->node.data = c;
-  }
+  c->border = wlr_scene_rect_create(c->scene, 0, 0, c->isurgent ? urgentcolor : bordercolor);
+  wlr_scene_node_lower_to_bottom(&c->border->node);
+  wlr_scene_node_set_position(&c->border->node, 0, 0);
+  wlr_scene_rect_set_corner_radius(c->border, border_radius, border_radius_location_default);
+  wlr_scene_node_set_enabled(&c->border->node, true);
+
+
+	wlr_scene_node_for_each_buffer(&c->scene_surface->node,
+								   iter_xdg_scene_buffers, c);
+
 
   /* Initialize client geometry with room for border */
   client_set_tiled(c, WLR_EDGE_TOP | WLR_EDGE_BOTTOM | WLR_EDGE_LEFT |
@@ -4919,7 +5126,12 @@ void scene_buffer_apply_effect(struct wlr_scene_buffer *buffer, int sx, int sy,
       wlr_scene_buffer_set_dest_size(buffer, surface_width, surface_height);
     }
   }
-  // TODO: blur set, opacity set
+
+  if(wlr_xdg_popup_try_from_wlr_surface(surface) != NULL) return;
+
+  wlr_scene_buffer_set_corner_radius(buffer, border_radius, scale_data->corner_location);
+
+  
 }
 
 void snap_scene_buffer_apply_effect(struct wlr_scene_buffer *buffer, int sx,
@@ -4948,18 +5160,6 @@ void buffer_set_effect(Client *c, animationScale data) {
 }
 
 void client_set_opacity(Client *c, double opacity) {
-  wlr_scene_node_for_each_buffer(&c->scene_surface->node,
-                                 scene_buffer_apply_opacity, &opacity);
-}
-
-void client_handle_opacity(Client *c) {
-  if (!c || !c->mon || !client_surface(c)->mapped)
-    return;
-
-  double opacity = c->isfullscreen || c->ismaxmizescreen ? 1.0
-                   : c == selmon->sel                    ? 0.8
-                                                         : 0.5;
-
   wlr_scene_node_for_each_buffer(&c->scene_surface->node,
                                  scene_buffer_apply_opacity, &opacity);
 }
@@ -5258,7 +5458,8 @@ void resize(Client *c, struct wlr_box geo, int interact) {
     c->animainit_geom = c->current = c->pending = c->animation.current =
         c->geom;
     wlr_scene_node_set_position(&c->scene->node, c->geom.x, c->geom.y);
-    apply_border(c, c->geom, 0, 0);
+    apply_border(c, c->geom, 0, 0, CORNER_LOCATION_ALL);
+    client_draw_shadow(c);
     client_get_clip(c, &clip);
     wlr_scene_subsurface_tree_set_clip(&c->scene_surface->node, &clip);
     return;
@@ -5898,6 +6099,7 @@ void setup(void) {
 
   /* Initialize the scene graph used to lay out windows */
   scene = wlr_scene_create();
+
   root_bg = wlr_scene_rect_create(&scene->tree, 0, 0, rootcolor);
   for (i = 0; i < NUM_LAYERS; i++)
     layers[i] = wlr_scene_tree_create(&scene->tree);
@@ -5905,7 +6107,7 @@ void setup(void) {
   wlr_scene_node_place_below(&drag_icon->node, &layers[LyrBlock]->node);
 
   /* Create a renderer with the default implementation */
-  if (!(drw = wlr_renderer_autocreate(backend)))
+  if (!(drw = fx_renderer_create(backend)))
     die("couldn't create renderer");
 
   wl_signal_add(&drw->events.lost, &gpu_reset);
@@ -6091,6 +6293,9 @@ void setup(void) {
   output_mgr = wlr_output_manager_v1_create(dpy);
   wl_signal_add(&output_mgr->events.apply, &output_mgr_apply);
   wl_signal_add(&output_mgr->events.test, &output_mgr_test);
+
+  // blur
+  wlr_scene_set_blur_data(scene, blur_params);
 
   /* create text_input-, and input_method-protocol relevant globals */
   input_method_manager = wlr_input_method_manager_v2_create(dpy);
@@ -6574,7 +6779,7 @@ void unmaplayersurfacenotify(struct wl_listener *listener, void *data) {
 
 void init_fadeout_client(Client *c) {
 
-  if (!c->mon || client_is_unmanaged(c))
+  if (!c->mon || client_is_unmanaged(c) || client_should_ignore_focus(c))
     return;
 
   if (!c->scene) {
@@ -6778,6 +6983,11 @@ void updatemons(struct wl_listener *listener, void *data) {
 
     // wlr_scene_node_set_position(&m->fullscreen_bg->node, m->m.x, m->m.y);
     // wlr_scene_rect_set_size(m->fullscreen_bg, m->m.width, m->m.height);
+
+    if(blur && m->blur) {
+	    wlr_scene_optimized_blur_set_size(m->blur,
+	    		m->m.width, m->m.height);
+    }
 
     if (m->lock_surface) {
       struct wlr_scene_tree *scene_tree = m->lock_surface->surface->data;

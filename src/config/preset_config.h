@@ -164,3 +164,34 @@ enum libinput_config_tap_button_map button_map = LIBINPUT_CONFIG_TAP_MAP_LRM;
 static const char *tags[] = {
     "1", "2", "3", "4", "5", "6", "7", "8", "9",
 };
+
+
+int border_radius = 0;
+int border_radius_location_default = CORNER_LOCATION_ALL;
+int blur=0;
+
+
+struct blur_data {
+	int num_passes;
+	int radius;
+	float noise;
+	float brightness;
+	float contrast;
+	float saturation;
+};
+struct blur_data blur_params;
+
+
+int   blur_params_num_passes = 1;
+int   blur_params_radius = 5;
+float blur_params_noise = 0.02;
+float blur_params_brightness = 0.9;
+float blur_params_contrast = 0.9;
+float blur_params_saturation = 1.2;
+
+int shadows = 0;
+unsigned int shadows_size = 10;
+double shadows_blur = 15;
+int shadows_position_x = 0;
+int shadows_position_y = 0;
+float shadowscolor[] = COLOR(0x000000ff);;
