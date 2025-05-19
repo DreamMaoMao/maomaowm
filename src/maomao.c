@@ -1079,6 +1079,10 @@ void set_rect_size(struct wlr_scene_rect *rect, int width, int height) {
 
 void
 client_draw_shadow(Client *c) {
+
+  if (c->iskilling || !client_surface(c)->mapped)
+    return;
+
   if(c->shadow != NULL && !c->isfloating) {
     wlr_scene_node_set_enabled(&c->shadow->node, false);
     return;
