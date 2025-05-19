@@ -1930,7 +1930,7 @@ applyrules(Client *c) {
   int fullscreen_state_backup = c->isfullscreen;
   setmon(c, mon, newtags, !c->isopensilent);
 
-  if (!c->isopensilent && !(c->tags & (1 << (selmon->pertag->curtag - 1)))) {
+  if (!c->isopensilent && selmon && !(c->tags & (1 << (selmon->pertag->curtag - 1)))) {
     c->animation.from_rule = true;
     view(&(Arg){.ui = c->tags}, true);
   }
@@ -4604,12 +4604,12 @@ mapnotify(struct wl_listener *listener, void *data) {
   c->drag_to_tile = false;
   c->fake_no_border = false;
 
-  if (new_is_master &&
+  if (new_is_master && selmon &&
       strcmp(selmon->pertag->ltidxs[selmon->pertag->curtag]->name,
              "scroller") != 0)
     // tile at the top
     wl_list_insert(&clients, &c->link); // 新窗口是master,头部入栈
-  else if (strcmp(selmon->pertag->ltidxs[selmon->pertag->curtag]->name,
+  else if (selmon && strcmp(selmon->pertag->ltidxs[selmon->pertag->curtag]->name,
                   "scroller") == 0 &&
            center_select(selmon)) {
     Client *at_client = center_select(selmon);
