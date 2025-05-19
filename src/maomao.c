@@ -1392,7 +1392,7 @@ void client_apply_clip(Client *c) {
   scale_data.height_scale = (float)scale_data.height / geometry.height;
   scale_data.corner_location = current_corner_location;
   scale_data.percent = c->is_open_animation && animation_fade_in ? (double)c->animation.passed_frames / c->animation.total_frames : 1.0;
-  scale_data.opacity = c == selmon->sel ? c->focused_opacity : c->unfocused_opacity;
+  scale_data.opacity = c->isfullscreen ? 1 : c == selmon->sel ? c->focused_opacity : c->unfocused_opacity;
   buffer_set_effect(c, scale_data);
 }
 
@@ -1401,7 +1401,9 @@ bool client_draw_frame(Client *c) {
   if (!c || !client_surface(c)->mapped)
     return false;
 
-  if(c == selmon->sel && !c->animation.running) {
+  if(c->isfullscreen) {
+    client_set_opacity(c, 1);
+  } else if(c == selmon->sel && !c->animation.running) {
     client_set_opacity(c, c->focused_opacity);
   } else if(!c->animation.running) {
     client_set_opacity(c, c->unfocused_opacity);
