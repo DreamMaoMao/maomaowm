@@ -1239,27 +1239,29 @@ struct uvec2 clip_to_hide(Client *c, struct wlr_box *clip_box) {
   // // make tagout tagin animations not visible in other monitors
   if (ISTILED(c) || c->animation.tagining || c->animation.tagouted ||
       c->animation.tagouting) {
-    if (c->animation.current.x <= c->mon->m.x) {
-      offsetx = GEZERO(c->mon->m.x - c->animation.current.x);
+    if (c->animation.current.x < c->mon->m.x) {
+      offsetx = c->mon->m.x - c->bw - c->animation.current.x;
+      offsetx = offsetx < 0 ? 0 : offsetx;
       clip_box->x = clip_box->x + offsetx;
       clip_box->width = clip_box->width - offsetx;
-    } else if (c->animation.current.x + c->animation.current.width >=
+    } else if (c->animation.current.x + c->animation.current.width >
                c->mon->m.x + c->mon->m.width) {
       clip_box->width = clip_box->width -
                         (c->animation.current.x + c->animation.current.width -
-                         c->mon->m.x - c->mon->m.width) -
+                         c->mon->m.x - c->mon->m.width) +
                         c->bw;
     }
 
-    if (c->animation.current.y <= c->mon->m.y) {
-      offsety = GEZERO(c->mon->m.y - c->animation.current.y);
+    if (c->animation.current.y < c->mon->m.y) {
+      offsety = c->mon->m.y - c->bw - c->animation.current.y;
+      offsety = offsety < 0 ? 0 : offsety;
       clip_box->y = clip_box->y + offsety;
       clip_box->height = clip_box->height - offsety;
-    } else if (c->animation.current.y + c->animation.current.height >=
+    } else if (c->animation.current.y + c->animation.current.height >
                c->mon->m.y + c->mon->m.height) {
       clip_box->height = clip_box->height -
                          (c->animation.current.y + c->animation.current.height -
-                          c->mon->m.y - c->mon->m.height) -
+                          c->mon->m.y - c->mon->m.height) +
                          c->bw;
     }
   }
@@ -1267,7 +1269,7 @@ struct uvec2 clip_to_hide(Client *c, struct wlr_box *clip_box) {
   offset.x = offsetx;
   offset.y = offsety;
 
-  if ((clip_box->width <= 0 || clip_box->height <= 0) &&
+  if ((clip_box->width < 0 || clip_box->height < 0) &&
       (ISTILED(c) || c->animation.tagouting || c->animation.tagining)) {
     c->is_clip_to_hide = true;
     wlr_scene_node_set_enabled(&c->scene->node, false);
