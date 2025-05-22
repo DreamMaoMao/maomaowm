@@ -173,6 +173,8 @@ typedef struct {
   int disable_while_typing;
   int left_handed;
   int middle_button_emulation;
+  unsigned int accel_profile;
+  double accel_speed;
 
   int smartgaps;
   unsigned int gappih;
@@ -985,6 +987,10 @@ void parse_config_line(Config *config, const char *line) {
     config->left_handed = atoi(value);
   } else if (strcmp(key, "middle_button_emulation") == 0) {
     config->middle_button_emulation = atoi(value);
+  } else if (strcmp(key, "accel_profile") == 0) {
+    config->accel_profile = atoi(value);
+  } else if (strcmp(key, "accel_speed") == 0) {
+    config->accel_speed = atof(value);
   } else if (strcmp(key, "gappih") == 0) {
     config->gappih = atoi(value);
   } else if (strcmp(key, "gappiv") == 0) {
@@ -1878,6 +1884,8 @@ void override_config(void) {
   disable_while_typing = config.disable_while_typing;
   left_handed = config.left_handed;
   middle_button_emulation = config.middle_button_emulation;
+  accel_profile = config.accel_profile;
+  accel_speed = config.accel_speed;
 
   // 复制颜色数组
   memcpy(rootcolor, config.rootcolor, sizeof(rootcolor));
@@ -1987,6 +1995,8 @@ void set_value_default() {
   config.disable_while_typing = disable_while_typing;
   config.left_handed = left_handed;
   config.middle_button_emulation = middle_button_emulation;
+  config.accel_profile = accel_profile;
+  config.accel_speed = accel_speed;
 
   memcpy(config.animation_curve_move, animation_curve_move,
          sizeof(animation_curve_move));
