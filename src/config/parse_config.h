@@ -30,6 +30,7 @@ typedef struct {
   int isopenscratchpad;
   int isunglobal;
   int isglobal;
+  int isoverlay;
   int monitor;
   int offsetx;
   int offsety;
@@ -1130,6 +1131,7 @@ void parse_config_line(Config *config, const char *line) {
     rule->isopenscratchpad = -1;
     rule->isunglobal = -1;
     rule->isglobal = -1;
+    rule->isoverlay = -1;
     rule->isterm = -1;
     rule->noswallow = -1;
     rule->monitor = -1;
@@ -1200,6 +1202,8 @@ void parse_config_line(Config *config, const char *line) {
           rule->isunglobal = atoi(val);
         } else if (strcmp(key, "isglobal") == 0) {
           rule->isglobal = atoi(val);
+        } else if (strcmp(key, "isoverlay") == 0) {
+          rule->isoverlay = atoi(val);
         } else if (strcmp(key, "isterm") == 0) {
           rule->isterm = atoi(val);
         } else if (strcmp(key, "noswallow") == 0) {
