@@ -1375,8 +1375,8 @@ void client_apply_clip(Client *c) {
   scale_data.should_scale = true;
   scale_data.width = clip_box.width - 2 * c->bw;
   scale_data.height = clip_box.height - 2 * c->bw;
-  scale_data.width_scale = (float)scale_data.width / geometry.width;
-  scale_data.height_scale = (float)scale_data.height / geometry.height;
+  scale_data.width_scale = (float)scale_data.width / (geometry.width - offset.x);
+  scale_data.height_scale = (float)scale_data.height / (geometry.height - offset.y);
   scale_data.corner_location = current_corner_location;
   scale_data.percent = c->is_open_animation && animation_fade_in ? (double)c->animation.passed_frames / c->animation.total_frames : 1.0;
   scale_data.opacity = c->isfullscreen ? 1 : c == selmon->sel ? c->focused_opacity : c->unfocused_opacity;
@@ -5149,6 +5149,16 @@ void scene_buffer_apply_effect(struct wlr_scene_buffer *buffer, int sx, int sy,
     if (surface_height > scale_data->height &&
         wlr_subsurface_try_from_wlr_surface(surface) == NULL) {
       surface_height = scale_data->height;
+    }
+
+    if (surface_width > scale_data->width &&
+        wlr_subsurface_try_from_wlr_surface(surface) != NULL) {
+        return;
+    }
+
+    if (surface_height > scale_data->height &&
+        wlr_subsurface_try_from_wlr_surface(surface) != NULL) {
+        return;
     }
 
     if (surface_height > 0 && surface_width > 0) {
