@@ -1073,7 +1073,7 @@ void parse_config_line(Config *config, const char *line) {
     trim_whitespace(config->autostart[0]);
     trim_whitespace(config->autostart[1]);
     trim_whitespace(config->autostart[2]);
-  } else if (strcmp(key, "tags") == 0) {
+  } else if (strcmp(key, "tagrule") == 0) {
     config->tag_rules =
         realloc(config->tag_rules,
                 (config->tag_rules_count + 1) * sizeof(ConfigTagRule));
