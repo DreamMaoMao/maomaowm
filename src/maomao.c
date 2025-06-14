@@ -1128,7 +1128,7 @@ void apply_border(Client *c, struct wlr_box clip_box, int offsetx, int offsety) 
         c->fake_no_border = false;
     }
 
-    struct wlr_box geom = c->geom;
+    struct wlr_box geom = c->animation.current;
     int bw = c->bw;
 
     // Calculate how much the window is outside the monitor
@@ -1198,6 +1198,11 @@ void apply_border(Client *c, struct wlr_box clip_box, int offsetx, int offsety) 
 
     }
 
+    // Position the surface within the borders
+    wlr_scene_node_set_position(&c->scene_surface->node, 
+                               bw, 
+                               bw);
+
     // Set border sizes
     set_rect_size(c->border[0], top_width, top_height);        // Top
     set_rect_size(c->border[1], bottom_width, bottom_height);  // Bottom
@@ -1210,10 +1215,7 @@ void apply_border(Client *c, struct wlr_box clip_box, int offsetx, int offsety) 
     wlr_scene_node_set_position(&c->border[2]->node, left_x , left_y);
     wlr_scene_node_set_position(&c->border[3]->node, right_x, right_y);
 
-    // Position the surface within the borders
-    wlr_scene_node_set_position(&c->scene_surface->node, 
-                               bw + offsetx - outside_left, 
-                               bw + offsety - outside_top);
+
 }
 
 struct uvec2 clip_to_hide(Client *c, struct wlr_box *clip_box) {
