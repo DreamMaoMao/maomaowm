@@ -286,6 +286,7 @@ struct Client {
 	int nofadeout;
 	int no_force_center;
 	int isunglobal;
+	char oldmonname[128];
 };
 
 typedef struct {
@@ -650,6 +651,7 @@ static void handlecursoractivity(void);
 static int hidecursor(void *data);
 static bool check_hit_no_border(Client *c);
 static void reset_keyboard_layout(void);
+static void client_update_oldmonname_record(Client *c, Monitor *m);
 
 #include "data/static_keymap.h"
 #include "dispatch/dispatch.h"
@@ -2813,6 +2815,7 @@ buttonpress(struct wl_listener *listener, void *data) {
 				selmon->sel = NULL;
 			}
 			selmon = xytomon(cursor->x, cursor->y);
+			client_update_oldmonname_record(grabc, selmon);
 			setmon(grabc, selmon, 0, true);
 			reset_foreign_tolevel(grabc);
 			selmon->prevsel = selmon->sel;
@@ -3007,6 +3010,11 @@ void closemon(Monitor *m) {
 				setmon(c, selmon, c->tags, true);
 				reset_foreign_tolevel(c);
 			}
+
+			// remember client status in oldmon
+			if(c->isfloating)
+				c->oldgeom = c->geom;
+			client_update_oldmonname_record(c, m);
 		}
 	}
 	if (selmon) {
@@ -6700,6 +6708,14 @@ void tagsilent(const Arg *arg) {
 	arrange(target_client->mon, false);
 }
 
+void client_update_oldmonname_record(Client *c, Monitor *m) {
+	if(!c || c->iskilling || !client_surface(c)->mapped || c->mon == m)
+		return;
+	memset(c->oldmonname, 0, sizeof(c->oldmonname));
+	strncpy(c->oldmonname, m->wlr_output->name, sizeof(c->oldmonname) - 1);
+	c->oldmonname[sizeof(c->oldmonname) - 1] ='\0';	
+}
+
 void tagmon(const Arg *arg) {
 	Client *c = focustop(selmon);
 	Monitor *m;
@@ -6708,6 +6724,7 @@ void tagmon(const Arg *arg) {
 			selmon->sel = NULL;
 		}
 		m = dirtomon(arg->i);
+		client_update_oldmonname_record(c, m);
 		setmon(c, m, 0, true);
 		reset_foreign_tolevel(c);
 		// 重新计算居中的坐标
@@ -7288,9 +7305,23 @@ void updatemons(struct wl_listener *listener, void *data) {
 		config_head->state.x = m->m.x;
 		config_head->state.y = m->m.y;
 
-		if (!selmon) {
-			selmon = m;
+		selmon = m;
+
+		wl_list_for_each(c, &clients, link) {
+			if (c->mon && c->mon != m && client_surface(c)->mapped && strcmp(c->oldmonname, m->wlr_output->name) == 0) {
+				setmon(c, m, c->tags, true);
+				reset_foreign_tolevel(c);
+				if(c->isfloating)
+					resize(c,c->oldgeom,0);
+			}
 		}
+		arrange(m, false);
+		warp_cursor_to_selmon(m);
+		c = focustop(m);
+		if (!c)
+			m->sel = NULL;
+		else
+			focusclient(c, 1);
 	}
 
 	if (selmon && selmon->wlr_output->enabled) {
