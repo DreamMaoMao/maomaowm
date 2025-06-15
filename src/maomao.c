@@ -1787,12 +1787,13 @@ setclient_coordinate_center(Client *c, struct wlr_box geom, int offsetx,
 	struct wlr_box tempbox;
 	int offset = 0;
 	int len = 0;
+	Monitor *m = c->mon?c->mon:selmon;
 
 	unsigned int cbw = check_hit_no_border(c) ? c->bw : 0;
 
 	if (!c->no_force_center) {
-		tempbox.x = selmon->w.x + (selmon->w.width - geom.width) / 2;
-		tempbox.y = selmon->w.y + (selmon->w.height - geom.height) / 2;
+		tempbox.x = m->w.x + (m->w.width - geom.width) / 2;
+		tempbox.y = m->w.y + (m->w.height - geom.height) / 2;
 	} else {
 		tempbox.x = geom.x;
 		tempbox.y = geom.y;
@@ -1802,29 +1803,29 @@ setclient_coordinate_center(Client *c, struct wlr_box geom, int offsetx,
 	tempbox.height = geom.height;
 
 	if (offsetx != 0) {
-		len = selmon->w.width / 2;
+		len = m->w.width / 2;
 		offset = len * (offsetx / 100.0);
 		tempbox.x += offset;
 
 		// 限制窗口在屏幕内
-		if (tempbox.x < selmon->m.x) {
-			tempbox.x = selmon->m.x - cbw;
+		if (tempbox.x < m->m.x) {
+			tempbox.x = m->m.x - cbw;
 		}
-		if (tempbox.x + tempbox.width > selmon->m.x + selmon->m.width) {
-			tempbox.x = selmon->m.x + selmon->m.width - tempbox.width + cbw;
+		if (tempbox.x + tempbox.width > m->m.x + m->m.width) {
+			tempbox.x = m->m.x + m->m.width - tempbox.width + cbw;
 		}
 	}
 	if (offsety != 0) {
-		len = selmon->w.height;
+		len = m->w.height;
 		offset = len * (offsety / 100.0);
 		tempbox.y += offset;
 
 		// 限制窗口在屏幕内
-		if (tempbox.y < selmon->m.y) {
-			tempbox.y = selmon->m.y - cbw;
+		if (tempbox.y < m->m.y) {
+			tempbox.y = m->m.y - cbw;
 		}
-		if (tempbox.y + tempbox.height > selmon->m.y + selmon->m.height) {
-			tempbox.y = selmon->m.y + selmon->m.height - tempbox.height + cbw;
+		if (tempbox.y + tempbox.height > m->m.y + m->m.height) {
+			tempbox.y = m->m.y + m->m.height - tempbox.height + cbw;
 		}
 	}
 
@@ -3011,9 +3012,6 @@ void closemon(Monitor *m) {
 				reset_foreign_tolevel(c);
 			}
 
-			// remember client status in oldmon
-			if(c->isfloating)
-				c->oldgeom = c->geom;
 			client_update_oldmonname_record(c, m);
 		}
 	}
@@ -7312,7 +7310,7 @@ void updatemons(struct wl_listener *listener, void *data) {
 				setmon(c, m, c->tags, true);
 				reset_foreign_tolevel(c);
 				if(c->isfloating)
-					resize(c,c->oldgeom,0);
+					c->oldgeom = c->geom = setclient_coordinate_center(c, c->oldgeom, 0, 0);
 			}
 		}
 		arrange(m, false);
