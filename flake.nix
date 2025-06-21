@@ -3,10 +3,6 @@
     nixpkgs.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
     nixpkgs-wayland.url = "github:nix-community/nixpkgs-wayland";
     flake-parts.url = "github:hercules-ci/flake-parts";
-    treefmt-nix = {
-      url = "github:numtide/treefmt-nix";
-      inputs.nixpkgs.follows = "nixpkgs";
-    };
     mmsg = {
       url = "github:DreamMaoMao/mmsg";
       inputs.nixpkgs.follows = "nixpkgs";
@@ -16,7 +12,6 @@
   outputs = {
     self,
     flake-parts,
-    treefmt-nix,
     ...
   } @ inputs:
     flake-parts.lib.mkFlake {inherit inputs;} {
@@ -46,7 +41,6 @@
           nativeBuildInputs = old.nativeBuildInputs ++ [];
           buildInputs = old.buildInputs ++ [];
         };
-        treefmtEval = treefmt-nix.lib.evalModule pkgs ./treefmt.nix;
       in {
         packages.default = maomaowm;
         overlayAttrs = {
@@ -56,7 +50,7 @@
           inherit maomaowm;
         };
         devShells.default = maomaowm.overrideAttrs shellOverride;
-        formatter = treefmtEval.config.build.wrapper;
+        formatter = pkgs.alejandra;
       };
       systems = ["x86_64-linux" "aarch64-linux"];
     };

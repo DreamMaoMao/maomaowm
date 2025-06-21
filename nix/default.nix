@@ -1,5 +1,6 @@
 {
   lib,
+  fetchFromGitHub,
   libX11,
   libinput,
   libxcb,
@@ -20,6 +21,15 @@
   mmsg,
 }: let
   pname = "maomaowm";
+  # Use patched wlroots from github.com/DreamMaoMao/wlroots
+  wlroots-git = wlroots.overrideAttrs (final: prev: {
+    src = fetchFromGitHub {
+      owner = "DreamMaoMao";
+      repo = "wlroots";
+      rev = "afbb5b7c2b14152730b57aa11119b1b16a299d5b";
+      sha256 = "sha256-pVU+CuiqvduMTpsnDHX/+EWY2qxHX2lXKiVzdGtcnYY=";
+    };
+  });
 in
   stdenv.mkDerivation {
     inherit pname;
@@ -46,7 +56,7 @@ in
         pixman
         wayland
         wayland-protocols
-        wlroots
+        wlroots-git
       ]
       ++ lib.optionals enableXWayland [
         libX11
