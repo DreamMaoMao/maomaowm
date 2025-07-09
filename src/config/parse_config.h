@@ -192,6 +192,7 @@ typedef struct {
 	unsigned int numlockon;
 
 	/* Trackpad */
+	int disable_trackpad;
 	int tap_to_click;
 	int tap_and_drag;
 	int drag_lock;
@@ -1101,6 +1102,8 @@ void parse_config_line(Config *config, const char *line) {
 		config->repeat_rate = atoi(value);
 	} else if (strcmp(key, "repeat_delay") == 0) {
 		config->repeat_delay = atoi(value);
+	} else if (strcmp(key, "disable_trackpad") == 0) {
+		config->disable_trackpad = atoi(value);
 	} else if (strcmp(key, "tap_to_click") == 0) {
 		config->tap_to_click = atoi(value);
 	} else if (strcmp(key, "tap_and_drag") == 0) {
@@ -2111,6 +2114,7 @@ void override_config(void) {
 	numlockon = CLAMP_INT(config.numlockon, 0, 1);
 
 	// 触控板设置
+	disable_trackpad = CLAMP_INT(config.disable_trackpad, 0, 1);
 	tap_to_click = CLAMP_INT(config.tap_to_click, 0, 1);
 	tap_and_drag = CLAMP_INT(config.tap_and_drag, 0, 1);
 	drag_lock = CLAMP_INT(config.drag_lock, 0, 1);
@@ -2248,6 +2252,7 @@ void set_value_default() {
 	config.repeat_delay = repeat_delay;
 
 	/* Trackpad */
+	config.disable_trackpad = disable_trackpad;
 	config.tap_to_click = tap_to_click;
 	config.tap_and_drag = tap_and_drag;
 	config.drag_lock = drag_lock;

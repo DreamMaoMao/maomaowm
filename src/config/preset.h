@@ -119,6 +119,7 @@ int repeat_rate = 25;
 int repeat_delay = 600;
 
 /* Trackpad */
+int disable_trackpad = 0;
 int tap_to_click = 1;
 int tap_and_drag = 1;
 int drag_lock = 1;
