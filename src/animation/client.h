@@ -289,12 +289,14 @@ void apply_border(Client *c) {
 	int border_up_y = GEZERO(top_offset);
 
 	int border_down_x = GEZERO(left_offset);
-	int border_down_y = GEZERO(fullgeom.height - bw);
+	int border_down_y = GEZERO(fullgeom.height - bw) +
+						GEZERO(top_offset + bw - fullgeom.height);
 
 	int border_left_x = GEZERO(left_offset);
 	int border_left_y = GEZERO(top_offset);
 
-	int border_right_x = GEZERO(fullgeom.width - bw);
+	int border_right_x =
+		GEZERO(fullgeom.width - bw) + GEZERO(left_offset + bw - fullgeom.width);
 	int border_right_y = GEZERO(top_offset);
 
 	wlr_scene_node_set_position(&c->scene_surface->node, c->bw, c->bw);
@@ -363,7 +365,7 @@ struct ivec2 clip_to_hide(Client *c, struct wlr_box *clip_box) {
 	offset.width = offsetw;
 	offset.height = offseth;
 
-	if ((clip_box->width <= 0 || clip_box->height <= 0) &&
+	if ((clip_box->width + bw <= 0 || clip_box->height + bw <= 0) &&
 		(ISTILED(c) || c->animation.tagouting || c->animation.tagining)) {
 		c->is_clip_to_hide = true;
 		wlr_scene_node_set_enabled(&c->scene->node, false);
