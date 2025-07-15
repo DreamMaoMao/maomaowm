@@ -568,7 +568,7 @@ struct dwl_input_method_relay *dwl_im_relay_create() {
 	relay->popup_tree = wlr_scene_tree_create(&scene->tree);
 
 	relay->new_text_input.notify = handle_new_text_input;
-	wl_signal_add(&text_input_manager->events.new_text_input,
+	wl_signal_add(&text_input_manager->events.text_input,
 				  &relay->new_text_input);
 
 	relay->new_input_method.notify = handle_new_input_method;
