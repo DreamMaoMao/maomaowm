@@ -1,9 +1,43 @@
 ---
 title: Status Bar
-description: Configure Waybar for mangowm.
+description: Configure mangobar and Waybar for mangowm.
 ---
 
-## Module Configuration
+## Recommended: mangobar
+
+We recommend [mangobar](https://github.com/mangowm/mangobar), a dedicated status bar for mangowm built on `wlr-layer-shell`. It integrates directly with mangowm over IPC, so it stays in sync with your tags, layouts and windows. It ships with built-in modules for workspaces, layout, window title, keymode, keyboard layout, CPU/memory, brightness, volume, clock, network, battery, system tray, and user-defined `custom/<name>` modules.
+
+### Installation
+
+On Arch Linux, install the AUR package [`mangobar-git`](https://aur.archlinux.org/packages/mangobar-git):
+
+```sh
+yay -S mangobar-git
+```
+
+Or build from source:
+
+```sh
+git clone https://github.com/mangowm/mangobar.git
+cd mangobar
+meson setup build -Dprefix=/usr
+ninja -C build
+sudo ninja -C build install
+```
+
+### Usage
+
+Start `mangobar` in your mangowm configuration:
+
+```ini
+exec-once=mangobar
+```
+
+It reads its configuration from `$MANGOBAR_CONFIG` or `~/.config/mangobar/config.jsonc`, and its styling from `~/.config/mangobar/style.css`. See the [mangobar repository](https://github.com/mangowm/mangobar) for a complete reference and example configuration.
+
+---
+
+## Waybar Module Configuration
 
 ### `config.jsonc`
 

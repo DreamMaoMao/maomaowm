@@ -3552,6 +3552,76 @@ void client_replace(Client *c, Client *w, bool is_group_change_member,
 		client_park(w);
 }
 
+static int32_t monitor_move_direction(const Monitor *from, const Monitor *to) {
+	if (!from || !to || from == to)
+		return UNDIR;
+
+	int64_t dx = ((int64_t)to->m.x + to->m.width / 2) -
+				 ((int64_t)from->m.x + from->m.width / 2);
+	int64_t dy = ((int64_t)to->m.y + to->m.height / 2) -
+				 ((int64_t)from->m.y + from->m.height / 2);
+	int64_t adx = dx < 0 ? -dx : dx;
+	int64_t ady = dy < 0 ? -dy : dy;
+
+	if (!adx && !ady)
+		return UNDIR;
+	if (adx >= ady)
+		return dx > 0 ? RIGHT : LEFT;
+	return dy > 0 ? DOWN : UP;
+}
+
+bool client_jump_to_monitor(Client *c, Monitor *m, int32_t dir) {
+	if (!c || !c->mon || !m || c->mon == m)
+		return false;
+	if (!config.exchange_cross_monitor ||
+		monitor_move_direction(c->mon, m) != dir)
+		return false;
+
+	Monitor *old_mon = c->mon;
+	c->mon = m;
+	if (old_mon->sel == c)
+		old_mon->sel = NULL;
+	m->sel = c;
+	server.selected_monitor = m;
+
+	arrange(old_mon, false, false);
+	arrange(m, false, false);
+	return true;
+}
+
+void client_move_next_to(Client *c, Client *target, int32_t dir) {
+	if (!c || !c->mon || c == target)
+		return;
+
+	Monitor *src_mon = c->mon;
+	Monitor *dst_mon = target ? target->mon : monitor_from_direction(dir);
+	bool crossed = src_mon != dst_mon;
+
+	if (crossed && !client_jump_to_monitor(c, dst_mon, dir))
+		return;
+
+	if (!target)
+		return;
+
+	if (is_scroller_layout(c->mon)) {
+		exchange_two_scroller_clients(c, target);
+		return;
+	}
+
+	bool insert_before =
+		crossed ? (dir == RIGHT || dir == UP) : (dir == LEFT || dir == UP);
+
+	wl_list_remove(&c->link);
+	if (insert_before)
+		wl_list_insert(target->link.prev, &c->link);
+	else
+		wl_list_insert(&target->link, &c->link);
+
+	arrange(src_mon, false, false);
+	if (crossed)
+		arrange(c->mon, false, false);
+}
+
 void client_update_oldmonname_record(Client *c, Monitor *m) {
 	if (!c || c->iskilling || !client_surface(c)->mapped)
 		return;

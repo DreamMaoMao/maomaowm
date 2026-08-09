@@ -9,7 +9,7 @@ description: Advanced settings for XWayland, focus behavior, and system integrat
 | :--- | :--- | :--- |
 | `xwayland_persistence` | `1` | Keep XWayland running even when no X11 apps are open (reduces startup lag). |
 | `xwayland_ignore_scale` | `0` | DIsable global scale for xwayland.|
-| `syncobj_enable` | `0` | Enable `drm_syncobj` timeline support (helps with gaming stutter/lag). **Requires restart.** |
+| `syncobj_enable` | `1` | Enable `drm_syncobj` timeline support (helps with gaming stutter/lag). **Requires restart.** |
 | `allow_lock_transparent` | `0` | Allow the lock screen to be transparent. |
 | `allow_shortcuts_inhibit` | `1` | Allow shortcuts to be inhibited by clients. |
 
@@ -34,7 +34,7 @@ description: Advanced settings for XWayland, focus behavior, and system integrat
 | :--- | :--- | :--- |
 | `focus_cross_monitor` | `0` | Allow directional focus to cross monitor boundaries. |
 | `focusdir_only_zone_overlap` | `1` | When enabled, directional focus only selects windows that overlap the current window on the perpendicular axis (y for left/right, x for up/down); returns nothing if none qualify. |
-| `exchange_cross_monitor` | `0` | Allow exchanging clients across monitor boundaries. |
+| `exchange_cross_monitor` | `0` | Allow the `exchange_client` and `move_client` dispatchers to reach across monitor boundaries. With `exchange_client` the two windows swap monitors; with `move_client` a window that has no neighbor in the move direction moves onto the monitor lying in that direction. While disabled, both dispatchers keep the windows on the current monitor. |
 | `focus_cross_tag` | `0` | Allow directional focus to cross into other tags. |
 | `view_current_to_back` | `0` | Toggling the current tag switches back to the previously viewed tag. |
 | `scratchpad_cross_monitor` | `0` | Share the scratchpad pool across all monitors. |
