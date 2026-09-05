@@ -262,8 +262,10 @@ void buffer_set_effect(Client *c, BufferData data) {
 	if (c == grabc)
 		data.should_scale = false;
 
-	if (c->isfullscreen || (config.no_radius_when_single && c->mon &&
-							c->mon->visible_tiling_clients == 1))
+	if (c->isfullscreen ||
+		(config.no_radius_when_single && c->mon &&
+		 (c->ismaximizescreen ||
+		  (ISSCROLLTILED(c) && c->mon->visible_fake_tiling_clients == 1))))
 		data.corner_location = corner_radii_none();
 
 	if (config.blur && !c->noblur)
@@ -296,7 +298,9 @@ void client_draw_shadow(Client *c, struct ivec2 offsets) {
 	bool hit_no_border = check_hit_no_border(c);
 	struct fx_corner_radii current_corner_location =
 		c->isfullscreen || (config.no_radius_when_single && c->mon &&
-							c->mon->visible_tiling_clients == 1)
+							(c->ismaximizescreen ||
+							 (ISSCROLLTILED(c) &&
+							  c->mon->visible_fake_tiling_clients == 1)))
 			? corner_radii_none()
 			: set_client_corner_location(c);
 
@@ -624,7 +628,9 @@ void client_draw_border(Client *c, struct ivec2 offsets) {
 
 	struct fx_corner_radii current_corner_location =
 		c->isfullscreen || (config.no_radius_when_single && c->mon &&
-							c->mon->visible_tiling_clients == 1)
+							(c->ismaximizescreen ||
+							 (ISSCROLLTILED(c) &&
+							  c->mon->visible_fake_tiling_clients == 1)))
 			? corner_radii_none()
 			: set_client_corner_location(c);
 
