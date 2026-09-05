@@ -2970,10 +2970,14 @@ void setmaximizescreen(Client *c, int32_t maximizescreen, bool rearrange) {
 
 void reset_maximizescreen_size(Client *c) {
 	struct wlr_box geom;
-	geom.x = c->mon->w.x + config.gappoh;
-	geom.y = c->mon->w.y + config.gappov;
-	geom.width = c->mon->w.width - 2 * config.gappoh;
-	geom.height = c->mon->w.height - 2 * config.gappov;
+
+	int32_t cur_gappoh = (enablegaps && !config.smartgaps) ? c->mon->gappoh : 0;
+	int32_t cur_gappov = (enablegaps && !config.smartgaps) ? c->mon->gappov : 0;
+
+	geom.x = c->mon->w.x + cur_gappoh;
+	geom.y = c->mon->w.y + cur_gappov;
+	geom.width = c->mon->w.width - 2 * cur_gappoh;
+	geom.height = c->mon->w.height - 2 * cur_gappov;
 
 	if (c->group_next || c->group_prev) {
 		geom.height -= config.group_bar_height;
