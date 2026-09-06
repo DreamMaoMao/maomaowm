@@ -1715,7 +1715,42 @@ void toggle_special_tag_mon(Monitor *m) {
 				: (m->pertag->prevtag ? (1 << (m->pertag->prevtag - 1)) : 1);
 		client_switch_view(&(Arg){.ui = target}, true);
 	} else {
-		/* Switch to tag 0 */
+		Monitor *om;
+		Client *c;
+
+		/* Transfer layout tree state from any monitor that had it */
+		wl_list_for_each(om, &server.monitors, link) {
+			if (om != m && om->pertag && m->pertag) {
+				if (om->pertag->dwindle_root[0]) {
+					m->pertag->dwindle_root[0] = om->pertag->dwindle_root[0];
+					om->pertag->dwindle_root[0] = NULL;
+				}
+				if (om->pertag->scroller_state[0]) {
+					m->pertag->scroller_state[0] =
+						om->pertag->scroller_state[0];
+					om->pertag->scroller_state[0] = NULL;
+				}
+				if (is_special_active(om))
+					toggle_special_tag_mon(om);
+			}
+		}
+
+		/* Move all special clients to current monitor in one pass */
+		server.selected_monitor = m;
+		wl_list_for_each(c, &server.clients, link) {
+			if ((c->tags & TAG0_MASK) && c->mon != m) {
+				Monitor *oldmon = c->mon;
+				if (oldmon && oldmon->sel == c)
+					oldmon->sel = NULL;
+				c->mon = m;
+				reset_foreign_tolevel(c, oldmon, m);
+				if (c->isfloating)
+					c->float_geom = c->geom =
+						client_center_geometry(c, m, c->geom, 0, 0);
+			}
+		}
+
+		/* Switch to tag 0 and arrange once */
 		client_switch_view(&(Arg){.ui = TAG0_MASK}, true);
 	}
 }
