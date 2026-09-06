@@ -373,7 +373,7 @@ Client *switcher_client_at(double lx, double ly) {
 	return NULL;
 }
 
-void switcher_open(int scope) {
+void switcher_open(int scope, int dir) {
 	Client *c;
 	Monitor *m;
 	int n = 0;
@@ -425,8 +425,13 @@ void switcher_open(int scope) {
 	// The current window is at the focus_stack head (tiles[0]); selecting the
 	// second one and committing inserts it at the front, so the next open puts
 	// the original first as second, toggling between the two most recent
-	// windows.
-	switcher_state.index = switcher_state.count > 1 ? 1 : 0;
+	// windows. Forward (next) therefore starts at the second tile, while
+	// backward (prev) has to start from the tail (the least recent window)
+	// and walk in reverse.
+	if (switcher_state.count > 1)
+		switcher_state.index = dir < 0 ? switcher_state.count - 1 : 1;
+	else
+		switcher_state.index = 0;
 	switcher_layout();
 	switcher_apply_highlight();
 
@@ -453,12 +458,12 @@ void switcher(const Arg *arg) {
 	if (switcher_is_active()) {
 		if (scope != switcher_state.scope) {
 			switcher_close();
-			switcher_open(scope);
+			switcher_open(scope, dir);
 		} else {
 			switcher_cycle(dir);
 		}
 	} else {
-		switcher_open(scope);
+		switcher_open(scope, dir);
 	}
 }
 bool switcher_is_active(void) { return switcher_state.tree != NULL; }

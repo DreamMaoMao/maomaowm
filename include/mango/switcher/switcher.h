@@ -78,7 +78,7 @@ void switcher_remove_client(Client *c);
 void switcher_commit_client(Client *tc);
 void switcher_commit(void);
 Client *switcher_client_at(double lx, double ly);
-void switcher_open(int scope);
+void switcher_open(int scope, int dir);
 void switcher_cycle(int dir);
 void switcher(const Arg *arg);
 
