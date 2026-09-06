@@ -15,6 +15,7 @@
 #include <wlr/types/wlr_seat.h>
 #include <wlr/types/wlr_subcompositor.h>
 #include <wlr/types/wlr_xdg_shell.h>
+#include "mango/draw/texture.h"
 #ifdef XWAYLAND
 #include <wlr/xwayland.h>
 #endif
@@ -48,28 +49,28 @@ void set_rect_size(struct wlr_scene_rect *rect, int32_t width, int32_t height) {
 	wlr_scene_rect_set_size(rect, GEZERO(width), GEZERO(height));
 }
 struct fx_corner_radii set_client_corner_location(Client *c) {
-	struct fx_corner_radii current_corner_location =
-		corner_radii_all(config.border_radius);
+	int32_t radius = c->has_border_radius_override ? c->border_radius_override : config.border_radius;
+	struct fx_corner_radii current_corner_location = corner_radii_all(radius);
 
 	if (client_is_ignore_output_clip(c))
 		return current_corner_location;
 
 	struct wlr_box target_geom =
 		config.animations ? c->animation.current : c->geom;
-	if (target_geom.x + config.border_radius <= c->mon->m.x) {
+	if (target_geom.x + radius <= c->mon->m.x) {
 		current_corner_location.top_left = 0;
 		current_corner_location.bottom_left = 0;
 	}
-	if (target_geom.x + target_geom.width - config.border_radius >=
+	if (target_geom.x + target_geom.width - radius >=
 		c->mon->m.x + c->mon->m.width) {
 		current_corner_location.top_right = 0;
 		current_corner_location.bottom_right = 0;
 	}
-	if (target_geom.y + config.border_radius <= c->mon->m.y) {
+	if (target_geom.y + radius <= c->mon->m.y) {
 		current_corner_location.top_left = 0;
 		current_corner_location.top_right = 0;
 	}
-	if (target_geom.y + target_geom.height - config.border_radius >=
+	if (target_geom.y + target_geom.height - radius >=
 		c->mon->m.y + c->mon->m.height) {
 		current_corner_location.bottom_left = 0;
 		current_corner_location.bottom_right = 0;
@@ -316,6 +317,10 @@ void client_draw_shadow(Client *c, struct ivec2 offsets) {
 							c->mon->visible_tiling_clients == 1)
 			? corner_radii_none()
 			: set_client_corner_location(c);
+	if (c->shadow)
+		c->shadow->corner_radius =
+			c->has_border_radius_override ? c->border_radius_override
+										  : config.border_radius;
 
 	int32_t bw = (int32_t)c->bw;
 	int32_t bwoffset = bw != 0 && hit_no_border ? bw : 0;
@@ -583,28 +588,29 @@ void client_draw_split_border(Client *c, bool hit_no_border,
 	int32_t bw = (int32_t)c->bw;
 	int32_t left = offsets.x, right = offsets.width, top = offsets.y,
 			bottom = offsets.height;
+	int32_t radius = c->has_border_radius_override ? c->border_radius_override : config.border_radius;		
 
 	int32_t border_down_width =
-		GEZERO(fullgeom.width - 2 * config.border_radius -
-			   GEZERO((left + right) - config.border_radius));
+		GEZERO(fullgeom.width - 2 * radius -
+			   GEZERO((left + right) - radius));
 	int32_t border_down_height =
 		GEZERO(bw - bottom - GEZERO(top + bw - fullgeom.height));
 
 	int32_t border_right_width =
 		GEZERO(bw - right - GEZERO(left + bw - fullgeom.width));
 	int32_t border_right_height =
-		GEZERO(fullgeom.height - 2 * config.border_radius -
-			   GEZERO((top + bottom) - config.border_radius));
+		GEZERO(fullgeom.height - 2 * radius -
+			   GEZERO((top + bottom) - radius));
 
 	int32_t border_down_x =
-		GEZERO(config.border_radius + GEZERO(left - config.border_radius));
+		GEZERO(radius + GEZERO(left - radius));
 	int32_t border_down_y =
 		GEZERO(fullgeom.height - bw) + GEZERO(top + bw - fullgeom.height);
 
 	int32_t border_right_x =
 		GEZERO(fullgeom.width - bw) + GEZERO(left + bw - fullgeom.width);
 	int32_t border_right_y =
-		GEZERO(config.border_radius + GEZERO(top - config.border_radius));
+		GEZERO(radius + GEZERO(top - radius));
 
 	set_rect_size(c->splitindicator[0], border_down_width, border_down_height);
 	set_rect_size(c->splitindicator[1], border_right_width,
@@ -623,6 +629,8 @@ void client_draw_border(Client *c, struct ivec2 offsets) {
 			wlr_scene_node_set_enabled(&c->splitindicator[0]->node, false);
 			wlr_scene_node_set_enabled(&c->splitindicator[1]->node, false);
 			wlr_scene_node_set_enabled(&c->border->node, false);
+			wlr_scene_node_set_enabled(&c->active_texture->node, false);
+			wlr_scene_node_set_enabled(&c->inactive_texture->node, false);
 			wlr_scene_node_set_position(&c->scene_surface->node, 0, 0);
 		}
 		return;
@@ -644,7 +652,7 @@ void client_draw_border(Client *c, struct ivec2 offsets) {
 		c->bw = 0;
 		c->fake_no_border = true;
 	} else if (!c->isfullscreen && VISIBLEON(c, c->mon)) {
-		c->bw = c->isnoborder ? 0 : config.borderpx;
+		c->bw = c->isnoborder ? 0 : c->has_borderpx_override ? c->borderpx_override : config.borderpx;
 		c->fake_no_border = false;
 	}
 
@@ -684,7 +692,90 @@ void client_draw_border(Client *c, struct ivec2 offsets) {
 	wlr_scene_node_set_position(&c->border->node, rect_x, rect_y);
 	wlr_scene_rect_set_corner_radii(c->border, current_corner_location);
 	wlr_scene_rect_set_clipped_region(c->border, clipped_region);
+	texture_rerender(c);
 }
+
+struct wlr_buffer *texture_rerender(Client *target) {
+	if (!target->active_texture || !target->inactive_texture)
+		return NULL;
+
+	struct ivec2 offsets = compute_edge_offsets(target);
+	int32_t new_ring_width =
+		GEZERO(target->animation.current.width - offsets.x - offsets.width);
+	int32_t new_ring_height =
+		GEZERO(target->animation.current.height - offsets.y - offsets.height);
+
+	bool focused = server.selected_monitor &&
+				   target == server.selected_monitor->sel;
+
+	if (target->active_buf && target->inactive_buf &&
+		new_ring_width == target->texture_size.width &&
+		new_ring_height == target->texture_size.height) {
+		if (!target->opacity_animation.texture_crossfade_running) {
+		wlr_scene_node_set_enabled(&target->active_texture->node, focused);
+		wlr_scene_node_set_enabled(&target->inactive_texture->node, !focused);
+		}
+		return focused ? target->active_buf : target->inactive_buf;
+	}
+
+	struct wlr_buffer *new_active = NULL;
+	struct wlr_buffer *new_inactive = NULL;
+	bool has_active = false, has_inactive = false;
+	for (int i = 0; i < MANGO_TEXTURE_SLOTS; i++) {
+		has_active |= !texture_key_empty(&target->active_textures[i]);
+		has_inactive |= !texture_key_empty(&target->inactive_textures[i]);
+	}
+	if (has_active)
+		new_active =
+			texture_composite_slots(target->active_textures, target,
+									new_ring_width, new_ring_height);
+	if (has_inactive)
+		new_inactive =
+			texture_composite_slots(target->inactive_textures, target,
+									new_ring_width, new_ring_height);
+
+	if (target->active_buf)
+		wlr_buffer_drop(target->active_buf);
+	if (target->inactive_buf)
+		wlr_buffer_drop(target->inactive_buf);
+	target->active_buf = new_active;
+	target->inactive_buf = new_inactive;
+	target->texture_size.width = new_ring_width;
+	target->texture_size.height = new_ring_height;
+
+	struct fx_corner_radii corners =
+		target->isfullscreen || (config.no_radius_when_single && target->mon &&
+								 target->mon->visible_tiling_clients == 1)
+			? corner_radii_none()
+			: set_client_corner_location(target);
+
+	if (!target->opacity_animation.texture_crossfade_running) {
+	wlr_scene_node_set_enabled(&target->active_texture->node, focused && new_active);
+	wlr_scene_node_set_enabled(&target->inactive_texture->node,
+							   !focused && new_inactive);
+	}
+	
+	if (new_active) {
+		wlr_scene_buffer_set_buffer(target->active_texture, new_active);
+		wlr_scene_node_set_position(&target->active_texture->node, offsets.x,
+									offsets.y);
+		wlr_scene_buffer_set_corner_radii(target->active_texture, corners);
+	}
+	if (new_inactive) {
+		wlr_scene_buffer_set_buffer(target->inactive_texture, new_inactive);
+		wlr_scene_node_set_position(&target->inactive_texture->node, offsets.x,
+									offsets.y);
+		wlr_scene_buffer_set_corner_radii(target->inactive_texture, corners);
+	}
+	if (!target->opacity_animation.texture_crossfade_running) {
+		if (focused)
+			wlr_scene_node_raise_to_top(&target->active_texture->node);
+		else
+			wlr_scene_node_raise_to_top(&target->inactive_texture->node);
+	}
+	return focused ? target->active_buf : target->inactive_buf;
+}
+
 struct ivec2 clip_to_hide(Client *c, struct wlr_box *clip_box,
 						  struct ivec2 offsets) {
 	struct ivec2 offset = {0};
@@ -1178,6 +1269,10 @@ void client_animation_next_tick(Client *c) {
 			c->animation.tagouted = true;
 			c->animation.current = c->geom;
 		}
+		c->animation.current = c->animainit_geom = c->animation.initial =
+			c->geom;
+		client_apply_clip(c, 1.0);
+		client_draw_border(c, compute_edge_offsets(c));
 
 		Client *pointer_c = NULL;
 		double sx, sy;
@@ -1528,6 +1623,16 @@ void client_set_unfocused_opacity_animation(Client *c) {
 		   c->opacity_animation.current_border_color,
 		   sizeof(c->opacity_animation.initial_border_color));
 	c->opacity_animation.initial_opacity = c->opacity_animation.current_opacity;
+	if (c->active_buf && c->inactive_buf) {
+		c->opacity_animation.texture_crossfade_running = true;
+		c->opacity_animation.crossfade_is_focus = false;
+		wlr_scene_node_set_enabled(&c->active_texture->node, true);
+		wlr_scene_node_set_enabled(&c->inactive_texture->node, true);
+		wlr_scene_node_raise_to_top(&c->active_texture->node);
+		wlr_scene_node_raise_to_top(&c->inactive_texture->node);
+		wlr_scene_buffer_set_opacity(c->active_texture, 1.0f);
+		wlr_scene_buffer_set_opacity(c->inactive_texture, 0.0f);
+	}
 	c->opacity_animation.running = true;
 }
 void resize(Client *c, struct wlr_box geo, int32_t interact) {
@@ -1542,6 +1647,7 @@ void client_set_focused_opacity_animation(Client *c) {
 		client_update_border_color(c);
 		return;
 	}
+	
 
 	c->opacity_animation.duration = config.animation_duration_focus;
 	memcpy(c->opacity_animation.target_border_color, border_color,
@@ -1552,7 +1658,26 @@ void client_set_focused_opacity_animation(Client *c) {
 		   c->opacity_animation.current_border_color,
 		   sizeof(c->opacity_animation.initial_border_color));
 	c->opacity_animation.initial_opacity = c->opacity_animation.current_opacity;
+	if (c->active_buf && c->inactive_buf) {
+		c->opacity_animation.texture_crossfade_running = true;
+		c->opacity_animation.crossfade_is_focus = true;
+		wlr_scene_node_set_enabled(&c->active_texture->node, true);
+		wlr_scene_node_set_enabled(&c->inactive_texture->node, true);
+		wlr_scene_node_raise_to_top(&c->inactive_texture->node);
+		wlr_scene_node_raise_to_top(&c->active_texture->node);
+		wlr_scene_buffer_set_opacity(c->active_texture, 0.0f);
+		wlr_scene_buffer_set_opacity(c->inactive_texture, 1.0f);
+	}
 	c->opacity_animation.running = true;
+}
+
+static void texture_crossfade_finish(Client *c, bool focused) {
+	c->opacity_animation.texture_crossfade_running = false;
+	wlr_scene_node_set_enabled(&c->active_texture->node, focused);
+	wlr_scene_node_set_enabled(&c->inactive_texture->node, !focused);
+	wlr_scene_node_raise_to_top(focused ? &c->active_texture->node : &c->inactive_texture->node);
+	wlr_scene_buffer_set_opacity(c->active_texture, focused ? 1.0f : 0.0f);
+	wlr_scene_buffer_set_opacity(c->inactive_texture, focused ? 0.0f : 1.0f);
 }
 
 bool client_apply_focus_opacity(Client *c) {
@@ -1568,6 +1693,7 @@ bool client_apply_focus_opacity(Client *c) {
 		c->opacity_animation.running = false;
 		client_set_opacity(c, 1);
 	} else if (c->animation.running && c->animation.action == OPEN) {
+		texture_crossfade_finish(c, c == server.selected_monitor->sel);
 		c->opacity_animation.running = false;
 		struct timespec now;
 		clock_gettime(CLOCK_MONOTONIC, &now);
@@ -1605,6 +1731,7 @@ bool client_apply_focus_opacity(Client *c) {
 			wlr_scene_blur_set_alpha(c->blur, blur_val);
 		}
 		client_set_border_color(c, c->opacity_animation.target_border_color);
+		
 	} else if (config.animations && c->opacity_animation.running) {
 		struct timespec now;
 		clock_gettime(CLOCK_MONOTONIC, &now);
@@ -1625,7 +1752,7 @@ bool client_apply_focus_opacity(Client *c) {
 				eased_progress;
 		client_set_opacity(c, c->opacity_animation.current_opacity);
 
-		for (int32_t i = 0; i < 4; i++) {
+		for (int32_t i = 0; i < MANGO_COLOR_COMPONENTS; i++) {
 			c->opacity_animation.current_border_color[i] =
 				c->opacity_animation.initial_border_color[i] +
 				(c->opacity_animation.target_border_color[i] -
@@ -1633,18 +1760,36 @@ bool client_apply_focus_opacity(Client *c) {
 					eased_progress;
 		}
 		client_set_border_color(c, c->opacity_animation.current_border_color);
-		if (linear_progress >= 1.0f)
+
+		if (c->opacity_animation.texture_crossfade_running) {
+			float in = eased_progress;
+			float out = 1.0f - eased_progress;
+			if (c->opacity_animation.crossfade_is_focus) {
+				// opacity on outgoing is multiplied to avoid alpha-bleed.
+				wlr_scene_buffer_set_opacity(c->active_texture, in);
+				wlr_scene_buffer_set_opacity(c->inactive_texture, MIN(out * 2.0f, 1.0f));
+			} else {
+				wlr_scene_buffer_set_opacity(c->inactive_texture, in);
+				wlr_scene_buffer_set_opacity(c->active_texture, MIN(out * 2.0f, 1.0f));
+			}
+			
+		}
+		if (linear_progress >= 1.0f) {
 			c->opacity_animation.running = false;
-		else
+			texture_crossfade_finish(c, c == server.selected_monitor->sel);
+		} else {
 			return true;
+		}
 	} else if (c == server.selected_monitor->sel) {
 		c->opacity_animation.running = false;
+		texture_crossfade_finish(c, true);
 		c->opacity_animation.current_opacity = c->focused_opacity;
 		memcpy(c->opacity_animation.current_border_color, border_color,
 			   sizeof(c->opacity_animation.current_border_color));
 		client_set_opacity(c, c->focused_opacity);
 	} else {
 		c->opacity_animation.running = false;
+		texture_crossfade_finish(c, false);
 		c->opacity_animation.current_opacity = c->unfocused_opacity;
 		memcpy(c->opacity_animation.current_border_color, border_color,
 			   sizeof(c->opacity_animation.current_border_color));

@@ -134,6 +134,20 @@ bindr=Super,Super_L,spawn,rofi -show run
 | `groupfocus` | `prev/next`  | Focus group member by direction. |
 | `groupleave` | -  | Leave group. |
 
+### Visuals
+| Command | Param | Description |
+| :--- | :--- | :--- |
+| `set_active_texture` | `type,slot,opts` | set the active border texture (see [border texture](/docs/visuals/effects#border-textures))|
+| `set_inactive_texture` | `type,slot,opts` | set the inactive border texture (see [border texture](/docs/visuals/effects#border-textures))|
+| `rerender_texture` | - | immediately trigger a re-render of the border texture (see [border texture](/docs/visuals/effects#border-textures))| 
+| `set_focus_override` | `0xRRGGBBAA` | overrides focused border color |
+| `clear_focus_override` | - | clears the focused border color override |
+| `set_border_override` | `0xRRGGBBAA` | overrides unfocused border color |
+| `clear_border_override` | - | clears the unfocused border color override |
+| `set_border_px` | `0-999` | overrides the border thickness, set to -1 to reset to default |
+| `set_border_radius` | `0-999` | overrides the corner radius, set to -1 to reset to default |
+
+
 ### Tags & Monitors
 
 | Command | Param | Description |

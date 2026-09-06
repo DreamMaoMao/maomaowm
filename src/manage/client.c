@@ -308,8 +308,65 @@ void client_send_close(Client *c) {
 #endif
 	wlr_xdg_toplevel_send_close(c->surface.xdg->toplevel);
 }
-void client_set_border_color(Client *c, const float color[4]) {
+void client_set_border_color(Client *c, const float color[MANGO_COLOR_COMPONENTS]) {
 	wlr_scene_rect_set_color(c->border, color);
+}
+
+void client_clear_texture(BorderTextureKey *texture) {
+	texture_key_destroy(texture);
+}
+
+void client_set_texture(Client *target, bool state, int slot,
+						const BorderTextureKey *source) {
+	BorderTextureKey *target_texture = state
+		? &target->active_textures[slot]
+		: &target->inactive_textures[slot];
+	client_clear_texture(target_texture);
+	if (!source || texture_key_empty(source))
+		return;
+	texture_key_copy(source, target_texture);
+}
+
+
+void client_current_textures(const Client *c, bool active,
+							 BorderTextureKey out[MANGO_TEXTURE_SLOTS]) {
+	for (int i = 0; i < MANGO_TEXTURE_SLOTS; i++)
+		out[i] = active ? c->active_textures[i] : c->inactive_textures[i];
+}
+
+void client_texture_invalidate(Client *c) {
+	c->texture_size.width = 0;
+	c->texture_size.height = 0;
+	texture_rerender(c);
+}
+
+void client_texture_from_string(Client *c, bool state, int slot, const char *type,
+								const char *opt) {
+	opt = opt ? opt : "";
+	if (type && type[0] != '\0') {
+		size_t length = strlen(type) + 1 + strlen(opt) + 1;
+		char *value = malloc(length);
+		snprintf(value, length, "%s,%s", type, opt);
+		BorderTextureKey parsed = {0};
+		bool success = texture_parse_value(value, &parsed);
+		free(value);
+		if (success) {
+			client_set_texture(c, state, slot, &parsed);
+			texture_key_destroy(&parsed);
+		}
+	} else {
+		client_set_texture(c, state, slot,
+						   state ? &config.active_textures[slot]
+								 : &config.inactive_textures[slot]);
+	}
+	client_texture_invalidate(c);
+}
+
+bool texture_no_input(struct wlr_scene_buffer *buffer, double *sx, double *sy) {
+	(void)buffer;
+	(void)sx;
+	(void)sy;
+	return false;
 }
 
 void client_set_fullscreen(Client *c, int32_t fullscreen) {
@@ -1070,7 +1127,7 @@ Client *get_next_stack_client(Client *c, bool reverse) {
 float *get_border_color(Client *c) {
 
 	if (c->mon != server.selected_monitor) {
-		return config.bordercolor;
+		return c->has_border_color_override ? c->border_color_override : config.bordercolor;
 	} else if (c->isurgent) {
 		return config.urgentcolor;
 	} else if (c->is_in_scratchpad && server.selected_monitor &&
@@ -1086,9 +1143,9 @@ float *get_border_color(Client *c) {
 			   c == server.selected_monitor->sel) {
 		return config.maximizescreencolor;
 	} else if (server.selected_monitor && c == server.selected_monitor->sel) {
-		return config.focuscolor;
+		return c->has_focus_color_override ? c->focus_color_override : config.focuscolor;
 	} else {
-		return config.bordercolor;
+		return c->has_border_color_override ? c->border_color_override : config.bordercolor;
 	}
 }
 
@@ -1225,6 +1282,32 @@ void apply_rule_properties(Client *c, const ConfigWinRule *r) {
 
 	APPLY_STRING_PROP(c, r, animation_type_open);
 	APPLY_STRING_PROP(c, r, animation_type_close);
+	if (r->borderpx >= 0) {
+		c->borderpx_override = (uint32_t)r->borderpx;
+		c->has_borderpx_override = true;
+	}
+	if (r->border_radius >= 0) {
+		c->border_radius_override = r->border_radius;
+		c->has_border_radius_override = true;
+	}
+	if (r->focus_color_override[0] || r->focus_color_override[1] ||
+		r->focus_color_override[2] || r->focus_color_override[3]) {
+		memcpy(c->focus_color_override, r->focus_color_override,
+			   sizeof(c->focus_color_override));
+		c->has_focus_color_override = true;
+	}
+	if (r->border_color_override[0] || r->border_color_override[1] ||
+		r->border_color_override[2] || r->border_color_override[3]) {
+		memcpy(c->border_color_override, r->border_color_override,
+			   sizeof(c->border_color_override));
+		c->has_border_color_override = true;
+	}
+	for (int i = 0; i < MANGO_TEXTURE_SLOTS; i++) {
+		if (!texture_key_empty(&r->active_textures[i]))
+			client_set_texture(c, true, i, &r->active_textures[i]);
+		if (!texture_key_empty(&r->inactive_textures[i]))
+			client_set_texture(c, false, i, &r->inactive_textures[i]);
+	}
 }
 void set_float_malposition(Client *tc) {
 	Client *c = NULL;
@@ -1305,6 +1388,12 @@ void client_apply_rules(Client *c) {
 		return;
 
 	parent = client_get_parent(c);
+
+	// seed textures from global defaults
+	for (int i = 0; i < MANGO_TEXTURE_SLOTS; i++) {
+		client_set_texture(c, true, i, &config.active_textures[i]);
+		client_set_texture(c, false, i, &config.inactive_textures[i]);
+	}
 
 	Monitor *mon =
 		parent && parent->mon ? parent->mon : server.selected_monitor;
@@ -1743,6 +1832,10 @@ void init_client_properties(Client *c) {
 	c->xwl_req_h = 0;
 #endif
 	c->blur_opacity = 1.0f;
+	c->has_focus_color_override = false;
+	c->has_border_color_override = false;
+	c->has_borderpx_override = false;
+	c->has_border_radius_override = false;
 	c->is_logic_hide = false;
 	c->isgroupfocusing = false;
 	c->group_prev = NULL;
@@ -1952,6 +2045,16 @@ handle_client_map(struct wl_listener *listener, void *data) {
 	wlr_scene_rect_set_corner_radii(c->border,
 									corner_radii_all(config.border_radius));
 	wlr_scene_node_set_enabled(&c->border->node, true);
+
+	c->inactive_texture = wlr_scene_buffer_create(c->scene, NULL);
+	c->inactive_texture->node.data = c;
+	c->inactive_texture->point_accepts_input = texture_no_input;
+	wlr_scene_node_set_enabled(&c->inactive_texture->node, false);
+
+	c->active_texture = wlr_scene_buffer_create(c->scene, NULL);
+	c->active_texture->node.data = c;
+	c->active_texture->point_accepts_input = texture_no_input;
+	wlr_scene_node_raise_to_top(&c->active_texture->node);
 
 	c->shadow =
 		wlr_scene_shadow_create(c->scene, 0, 0, config.border_radius,
@@ -2255,8 +2358,11 @@ void handle_client_unmap(struct wl_listener *listener, void *data) {
 	init_client_properties(c);
 
 	wlr_scene_node_destroy(&c->scene->node);
+	c->active_texture = NULL;
+	c->inactive_texture = NULL;
 	printstatus(IPC_WATCH_ARRANGGE);
 	pointer_process_motion(0, NULL, 0, 0, 0, 0);
+	texture_collect_garbage(false);
 }
 
 void // 0.7 custom
@@ -2292,6 +2398,18 @@ handle_client_destroy(struct wl_listener *listener, void *data) {
 		wl_list_remove(&c->set_decoration_mode.link);
 	}
 	switcher_remove_client(c);
+	for (int i = 0; i < MANGO_TEXTURE_SLOTS; i++) {
+		client_clear_texture(&c->active_textures[i]);
+		client_clear_texture(&c->inactive_textures[i]);
+	}
+	if (c->active_buf)
+		wlr_buffer_drop(c->active_buf);
+	if (c->inactive_buf)
+		wlr_buffer_drop(c->inactive_buf);
+	if (c->active_texture)
+		wlr_scene_node_destroy(&c->active_texture->node);
+	if (c->inactive_texture)
+		wlr_scene_node_destroy(&c->inactive_texture->node);
 	free(c);
 }
 
@@ -2486,6 +2604,13 @@ void client_focus(Client *c, int32_t lift) {
 		}
 
 		client_set_focused_opacity_animation(c);
+
+		if (last_focus_client && last_focus_client != c)
+			client_texture_invalidate(last_focus_client);
+		client_texture_invalidate(c);
+		// might need disable if it causes performance issues, GC every focus
+		// change.
+		texture_collect_garbage(false);
 
 		// decide whether need to re-arrange
 
@@ -2974,7 +3099,7 @@ void client_apply_fullscreen(
 			resize(c, c->mon->m, 1);
 
 	} else {
-		c->bw = c->isnoborder ? 0 : config.borderpx;
+		c->bw = c->isnoborder ? 0 : c->has_borderpx_override ? c->borderpx_override : config.borderpx;
 		if (c->isfloating)
 			client_set_floating(c, 1);
 	}
@@ -3032,7 +3157,7 @@ void client_set_maximize_screen(Client *c, int32_t maximizescreen,
 		if (!is_scroller_layout(c->mon) || c->isfloating)
 			resize(c, maximizescreen_box, 0);
 	} else {
-		c->bw = c->isnoborder ? 0 : config.borderpx;
+		c->bw = c->isnoborder ? 0 : c->has_borderpx_override ? c->borderpx_override : config.borderpx;
 		if (c->isfloating)
 			client_set_floating(c, 1);
 	}
@@ -3183,7 +3308,7 @@ void show_scratchpad(Client *c) {
 	if (c->isfullscreen || c->ismaximizescreen) {
 		client_pending_fullscreen_state(c, 0);
 		client_pending_maximized_state(c, 0);
-		c->bw = c->isnoborder ? 0 : config.borderpx;
+		c->bw = c->isnoborder ? 0 : c->has_borderpx_override ? c->borderpx_override : config.borderpx;
 	}
 
 	/* return if fullscreen */
