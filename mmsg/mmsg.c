@@ -7,7 +7,7 @@
 #include <sys/un.h>
 #include <unistd.h>
 
-#include "../src/common/log.h"
+#include "mango/common/log.h"
 
 static void usage(void) {
 	printf("Usage: mmsg <command> [args...]\n\n");

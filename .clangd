@@ -1,4 +1,8 @@
 CompileFlags:
   Add:
-    - -include
-    - ./src/mango.c
+    - -DWLR_USE_UNSTABLE
+  CompilationDatabase: build
+
+# This file is generate at build time
+Diagnostics:
+  Suppress: ['"wlr-layer-shell-unstable-v1-protocol.h" file not found']

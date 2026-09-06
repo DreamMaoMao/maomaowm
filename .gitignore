@@ -9,3 +9,6 @@ util.o
 *-protocol.h
 *-protocol.c
 *-protocol.o
+
+.envrc
+.direnv

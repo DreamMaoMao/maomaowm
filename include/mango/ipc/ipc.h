@@ -1,0 +1,80 @@
+#ifndef ___IPC_H__
+#define ___IPC_H__
+
+#include <cjson/cJSON.h>
+#include <stdint.h>
+#include <wayland-util.h>
+#include "mango/mango.h"
+
+struct ipc_client_state {
+	int fd;
+	struct wl_event_source *source;
+	struct wl_event_loop *loop;
+	char *buf;
+	size_t buf_len;
+	size_t buf_cap;
+};
+struct ipc_watch_client {
+	struct wl_list link;
+	int fd;
+	struct wl_event_source *source;
+	enum ipc_watch_type type;
+	union {
+		struct {
+			char name[64];
+		} monitor;
+		struct {
+			uint32_t id;
+		} client;
+		struct {
+			char mon_name[64];
+		} tags;
+	} target;
+};
+
+void ipc_init(struct wl_event_loop *event_loop);
+void ipc_remove_watch_client(struct ipc_watch_client *wc);
+void ipc_cleanup(void);
+
+void ipc_notify_json_to_fd(int fd, cJSON *json);
+void ipc_notify_monitor(Monitor *m);
+void ipc_notify_last_surface_ws_name(Monitor *m);
+void ipc_notify_focusing_client(void);
+void ipc_notify_device_event(struct wlr_input_device *dev);
+void ipc_notify_client(Client *c);
+void ipc_notify_tags(Monitor *m);
+void ipc_notify_all_monitors(void);
+void ipc_notify_all_clients(void);
+void ipc_notify_all_tags(void);
+void ipc_notify_keymode(void);
+void ipc_notify_kb_layout(void);
+/* ---------- Watch 模式支持 ---------- */
+void ipc_notify_json_to_fd(int fd, cJSON *json);
+
+cJSON *tags_mask_to_array(uint32_t tagmask);
+cJSON *build_tags_json(Monitor *m);
+cJSON *monitor_active_tags(Monitor *m);
+cJSON *build_client_json(Client *c);
+cJSON *build_monitor_json(Monitor *m);
+cJSON *build_all_tags_entry(Monitor *m);
+cJSON *build_all_tags_response(void);
+cJSON *build_monitor_tags_response(Monitor *m);
+cJSON *build_layouts_response(void);
+
+void printstatus(enum ipc_watch_type type);
+void handle_print_status(struct wl_listener *listener, void *data);
+
+void send_static_json(int fd, const char *json_str);
+
+/* ---------- 一次性命令处理 ---------- */
+void handle_command(int client_fd, const char *cmd_raw);
+
+/* 向 watch all-devices 客户端推送最后触发事件的设备 */
+
+int ipc_watch_data_handler(int fd, uint32_t mask, void *data);
+bool handle_watch_command(int fd, const char *cmd,
+						  struct ipc_client_state *client);
+
+/* ---------- Socket 事件处理 ---------- */
+int ipc_handle_client_data(int fd, uint32_t mask, void *data);
+#endif
