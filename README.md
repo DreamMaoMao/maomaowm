@@ -16,7 +16,9 @@
 
 https://github.com/user-attachments/assets/bb83004a-0563-4b48-ad89-6461a9b78b1f
 
-https://github.com/user-attachments/assets/f6af5b70-0f2e-4ef3-ba40-349e8666fc9d
+https://github.com/user-attachments/assets/be85e13f-7798-456d-957e-f8931687392e
+
+
 
 > See all layouts in action at [mangowm.github.io](https://mangowm.github.io/)
 
@@ -24,7 +26,7 @@ https://github.com/user-attachments/assets/f6af5b70-0f2e-4ef3-ba40-349e8666fc9d
 
 Mango starts where dwl ends. It keeps the lightweight, fast-build philosophy while adding the features that make a compositor actually usable day-to-day — without the bloat.
 
-- **Lightweight & fast** — as lean as dwl, builds in seconds, no functionality compromised
+- **Lightweight & fast** — as lean as dwl, no functionality compromised
 - **Excellent xwayland support** — run X11 apps without friction(Supports scale without blurring)
 - **Tags, not workspaces** — each tag maintains its own independent window layout
 - **Smooth animations** — window open/move/close, tag transitions, layer surfaces
