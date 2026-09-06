@@ -1,17 +1,27 @@
 #include "mango/ext-protocol/xdg-output.h"
-#include "mango/common/globals.h"
+#include "mango/common/server.h"
+#include "mango/config/parse_config.h"
 
-/* XWayland 的 X server 也是一个 wayland 客户端。每次发送时动态判断，
- * 避免在资源创建时缓存导致 xwayland 重启/初始化时序问题 */
+static struct wl_global *xdg_output_global;
+static struct wl_list xdg_outputs;
+static const struct zxdg_output_v1_interface xdg_output_impl;
+static const struct zxdg_output_manager_v1_interface xdg_output_manager_impl;
+
+/*
+ * The XWayland X server is itself a Wayland client; decide dynamically on each
+ * send instead of caching at resource creation to avoid XWayland restart/init
+ * ordering issues.
+ */
 bool xdg_output_resource_is_xwayland(struct wl_resource *resource) {
 #ifdef XWAYLAND
-	if (xwayland && xwayland->server &&
-		xwayland->server->client == wl_resource_get_client(resource))
+	if (server.xwayland && server.xwayland->server &&
+		server.xwayland->server->client == wl_resource_get_client(resource))
 		return true;
 #endif
 	return false;
 }
-/* 从当前输出状态计算逻辑值与物理(含旋转)值 */
+/* Computes logical and physical (rotation-aware) values from the current output
+ * state. */
 void xdg_output_get_values(struct MangoXDGOutput *output, int32_t *lx,
 						   int32_t *ly, int32_t *lw, int32_t *lh, int32_t *px,
 						   int32_t *py, int32_t *pw, int32_t *ph) {
@@ -25,31 +35,38 @@ void xdg_output_get_values(struct MangoXDGOutput *output, int32_t *lx,
 	float scale =
 		output->wlr_output->scale > 0.f ? output->wlr_output->scale : 1.f;
 
-	/* 逻辑尺寸 = 变换后（含旋转）的有效分辨率 ÷ scale，与
-	 * wl_output.mode/transform/scale 严格一致，避免依赖 m->m（布局缓存）。
-	 * 注意不能直接用 wlr_output->width/height：它们是未旋转的模式尺寸，
-	 * 旋转 90/270 时会导致逻辑宽高不交换，grim/slurp 等按 xdg-output
-	 * 逻辑尺寸计算截图/选区就会得到未旋转的缓冲区。 */
+	/*
+	 * Logical size = transformed (rotation-aware) effective resolution / scale,
+	 * kept strictly consistent with wl_output.mode/transform/scale instead of
+	 * relying on m->m (layout cache). wlr_output->width/height cannot be used
+	 * directly: they are unrotated mode sizes, so with 90/270 rotation the
+	 * logical width/height would not swap and tools like grim/slurp that
+	 * compute screenshots/selections from xdg-output logical sizes would
+	 * capture an unrotated buffer.
+	 */
 	int32_t tw, th;
 
-	// 获取未经过缩放，但是经过旋转后的物理分辨率
+	// Gets the physical resolution after rotation, without scaling.
 	wlr_output_transformed_resolution(output->wlr_output, &tw, &th);
 
-	// 对于wayland应用，应该使用逻辑分辨率，也就是缩放后的宽高
+	// Wayland apps should use the logical resolution, i.e. the scaled
+	// width/height.
 	int32_t w = (int32_t)roundf(tw / scale);
 	int32_t h = (int32_t)roundf(th / scale);
 
-	// wayland应用缩放后使用的逻辑分辨率和坐标，和wlroots原先实现一致
+	// Logical resolution/coordinates used by scaled Wayland apps, matching the
+	// original wlroots implementation.
 	*lx = x;
 	*ly = y;
 	*lw = w;
 	*lh = h;
 
-	// xwayland缩放后的坐标需要映射回实际物理显示器的坐标，用于欺骗xwayland应用它们还处于
-	// 原先的物理分辨率中
+	// xwayland-scaled coordinates must be mapped back to actual physical
+	// monitor coordinates to trick XWayland apps into thinking they are still
+	// at their original physical resolution.
 	*px = (int32_t)roundf(x * scale);
 	*py = (int32_t)roundf(y * scale);
-	*pw = tw; // 直接使用物理分辨率的宽高
+	*pw = tw; // Uses the physical resolution width/height directly.
 	*ph = th;
 }
 void xdg_output_send_details(struct MangoXDGOutput *output,
@@ -60,14 +77,18 @@ void xdg_output_send_details(struct MangoXDGOutput *output,
 	int32_t x, y, w, h;
 	if (xdg_output_resource_is_xwayland(resource) &&
 		config.xwayland_ignore_scale) {
-		/* 欺骗 XWayland：mango 把 X11 窗口放在 逻辑×scale 的物理坐标空间，
-		 * 因此告诉 XWayland 屏幕原点在 逻辑×scale、矩形为物理(含旋转)尺寸 */
+		/*
+		 * Tricks XWayland: mango places X11 windows in a physical coordinate
+		 * space of logical*scale, so tell XWayland the screen origin is at
+		 * logical*scale and the rectangle is physical (rotation-aware).
+		 */
 		x = px;
 		y = py;
 		w = pw;
 		h = ph;
 	} else {
-		/* xwayland_ignore_scale=0：与普通客户端一样用逻辑坐标 */
+		/* xwayland_ignore_scale=0: use logical coordinates like normal clients.
+		 */
 		x = lx;
 		y = ly;
 		w = lw;
@@ -81,7 +102,8 @@ void xdg_output_send_details(struct MangoXDGOutput *output,
 		MANGO_XDG_OUTPUT_DONE_DEPRECATED_SINCE_VERSION)
 		zxdg_output_v1_send_done(resource);
 
-	/* 同步已发送的逻辑值，供 xdg_output_update() 做变化判断 */
+	/* Syncs the last sent logical values for change detection in
+	 * xdg_output_update(). */
 	output->last_lx = lx;
 	output->last_ly = ly;
 	output->last_lw = lw;
@@ -95,13 +117,16 @@ void xdg_output_send_details(struct MangoXDGOutput *output,
 		output->xwl_sent = true;
 	}
 }
-/* 普通客户端视角的逻辑值是否与上次发送时不同 */
+/* Whether the logical values seen by normal clients differ from the last send.
+ */
 bool xdg_output_logical_changed(struct MangoXDGOutput *output) {
 	int32_t lx, ly, lw, lh, px, py, pw, ph;
 	xdg_output_get_values(output, &lx, &ly, &lw, &lh, &px, &py, &pw, &ph);
 
-	/* 从未向任何客户端发送过（无 zxdg_output_v1 资源）时无基线，
-	 * 不视为变化，避免无谓调度 wl_output.done */
+	/*
+	 * Without a baseline (no zxdg_output_v1 resource was ever bound) treat it
+	 * as unchanged to avoid scheduling a useless wl_output.done.
+	 */
 	if (!output->sent)
 		return false;
 
@@ -109,9 +134,12 @@ bool xdg_output_logical_changed(struct MangoXDGOutput *output) {
 		   output->last_lw != lw || output->last_lh != lh;
 }
 
-/* XWayland 视角的物理值是否与上次发送时不同。
- * 独立比较物理值基线并就地更新（X server 通常不绑定 zxdg_output_v1，
- * 不能依赖 xwl_sent 判断），仅在物理值真正变化时才补发 done。 */
+/*
+ * Whether the physical values seen by XWayland differ from the last send.
+ * The physical baseline is compared independently and updated in place (the X
+ * server usually does not bind zxdg_output_v1, so xwl_sent cannot be relied
+ * on); done is only re-sent when physical values actually change.
+ */
 bool xdg_output_xwayland_changed(struct MangoXDGOutput *output) {
 	int32_t lx, ly, lw, lh, px, py, pw, ph;
 	xdg_output_get_values(output, &lx, &ly, &lw, &lh, &px, &py, &pw, &ph);
@@ -125,9 +153,13 @@ bool xdg_output_xwayland_changed(struct MangoXDGOutput *output) {
 	return changed;
 }
 
-/* 更新该输出的 xdg-output 详情,XWayland 资源无条件重发（mango 的
- * XWayland 坐标模型依赖每次布局/配置变化后都收到 position/size，即使
- * 数值未变）；普通客户端仅在逻辑值变化时重发，与 wlroots 标准实现一致。 */
+/*
+ * Updates the xdg-output details for this output. XWayland resources are always
+ * re-sent (mango coordinates XWayland based on receiving position/size after
+ * every layout/config change, even when values are unchanged); normal clients
+ * are only re-sent when logical values change, matching the wlroots standard
+ * implementation.
+ */
 void xdg_output_update(struct MangoXDGOutput *output) {
 	bool logical_changed = xdg_output_logical_changed(output);
 	struct MangoXDGOutputResource *res;
@@ -138,25 +170,25 @@ void xdg_output_update(struct MangoXDGOutput *output) {
 	}
 }
 
-void xdg_output_resource_handle_destroy(struct wl_resource *resource) {
+void handle_xdg_output_resource_destroy(struct wl_resource *resource) {
 	struct MangoXDGOutputResource *res = wl_resource_get_user_data(resource);
 	if (!res)
 		return;
 	wl_list_remove(&res->link);
 	free(res);
 }
-void xdg_output_handle_destroy(struct wl_client *client,
+void handle_xdg_output_destroy(struct wl_client *client,
 							   struct wl_resource *resource) {
 	wl_resource_destroy(resource);
 }
 
-void xdg_output_manager_handle_destroy(struct wl_client *client,
+void handle_xdg_output_manager_destroy(struct wl_client *client,
 									   struct wl_resource *resource) {
 	wl_resource_destroy(resource);
 }
 
-/* 输出描述变化（version>=3 的客户端需要重发） */
-void xdg_output_handle_description(struct wl_listener *listener, void *data) {
+/* Output description changed (clients with version >= 3 need a resend). */
+void handle_xdg_output_description(struct wl_listener *listener, void *data) {
 	struct MangoXDGOutput *output =
 		wl_container_of(listener, output, description);
 	struct wlr_output *wlr_output = output->wlr_output;
@@ -186,16 +218,19 @@ struct MangoXDGOutput *xdg_output_create(struct wlr_output *wlr_output) {
 		return NULL;
 	output->wlr_output = wlr_output;
 	wl_list_init(&output->resources);
-	output->description.notify = xdg_output_handle_description;
+	output->description.notify = handle_xdg_output_description;
 	wl_signal_add(&wlr_output->events.description, &output->description);
 	wl_list_insert(&xdg_outputs, &output->link);
 	return output;
 }
 
 void xdg_output_destroy(struct MangoXDGOutput *output) {
-	/* 惰性化所有资源：zxdg_output_v1 由客户端创建，只有客户端能销毁。
-	 * 直接销毁会让 libwayland 为该 id 发 delete_id，客户端在自身 destroy
-	 * 请求仍在途时复用该 id，下一个请求会命中未知对象。 */
+	/*
+	 * Makes all resources inert: zxdg_output_v1 is created by clients and only
+	 * clients can destroy it. Destroying it directly makes libwayland send
+	 * delete_id for that id; if the client reuses the id while its own destroy
+	 * request is still in flight, the next request hits an unknown object.
+	 */
 	struct MangoXDGOutputResource *res, *tmp;
 	wl_list_for_each_safe(res, tmp, &output->resources, link) {
 		wl_resource_set_user_data(res->resource, NULL);
@@ -206,9 +241,10 @@ void xdg_output_destroy(struct MangoXDGOutput *output) {
 	wl_list_remove(&output->link);
 	free(output);
 }
-void xdg_output_manager_handle_get_xdg_output(
-	struct wl_client *client, struct wl_resource *manager_resource, uint32_t id,
-	struct wl_resource *output_resource) {
+void handle_xdg_output_manager_get_output(struct wl_client *client,
+										  struct wl_resource *manager_resource,
+										  uint32_t id,
+										  struct wl_resource *output_resource) {
 	struct wlr_output *wlr_output = wlr_output_from_resource(output_resource);
 
 	struct wl_resource *resource =
@@ -219,10 +255,10 @@ void xdg_output_manager_handle_get_xdg_output(
 		return;
 	}
 
-	/* 无效输出：保持惰性，不发送任何事件 */
+	/* Invalid output: keep it inert and send no events. */
 	if (!wlr_output) {
 		wl_resource_set_implementation(resource, &xdg_output_impl, NULL,
-									   xdg_output_resource_handle_destroy);
+									   handle_xdg_output_resource_destroy);
 		return;
 	}
 
@@ -244,7 +280,7 @@ void xdg_output_manager_handle_get_xdg_output(
 	res->resource = resource;
 	wl_list_insert(&output->resources, &res->link);
 	wl_resource_set_implementation(resource, &xdg_output_impl, res,
-								   xdg_output_resource_handle_destroy);
+								   handle_xdg_output_resource_destroy);
 
 	uint32_t version = wl_resource_get_version(resource);
 	if (version >= ZXDG_OUTPUT_V1_NAME_SINCE_VERSION && wlr_output->name)
@@ -271,12 +307,16 @@ void xdg_output_manager_bind(struct wl_client *client, void *data,
 	wl_resource_set_implementation(resource, &xdg_output_manager_impl, NULL,
 								   NULL);
 }
-/* 更新所有输出的 xdg-output 详情，并在值真正变化时调度 wl_output.done。
- * done 是客户端应用 wl_output/xdg-output 变更的事务边界：wlroots 只在
- * mode/scale/geometry 变化时自行调度，纯布局移动时需要这里补上。
- * 注意 done 会广播给该输出上的所有 wl_output 客户端，因此只在值变化时才发；
- * 若只有 XWayland 视角的值变了（逻辑布局没变），则只给 XWayland 的 wl_output
- * 资源补 done， 避免无谓打扰普通客户端。 */
+/*
+ * Updates xdg-output details for all outputs and schedules wl_output.done when
+ * values actually change. done is the transaction boundary at which clients
+ * apply wl_output/xdg-output changes: wlroots only schedules it itself on
+ * mode/scale/geometry changes, so pure layout moves need it added here. done is
+ * broadcast to every wl_output client on the output, so it is only sent when
+ * values change; if only the XWayland-side values changed (logical layout
+ * unchanged), done is sent only to the XWayland wl_output resource to avoid
+ * disturbing normal clients.
+ */
 void xdg_output_update_all(void) {
 	struct MangoXDGOutput *output, *tmp;
 	wl_list_for_each_safe(output, tmp, &xdg_outputs, link) {
@@ -298,8 +338,11 @@ void xdg_output_update_all(void) {
 		}
 	}
 }
-/* 输出被移除时，让对应的 xdg-output 资源变为惰性，而不是销毁它。
- * 该函数在 cleanupmon()（wlr_output destroy 监听器）中调用，保证幂等。 */
+/*
+ * When an output is removed, makes its xdg-output resources inert instead of
+ * destroying them. Called from cleanup_monitor() (the wlr_output destroy
+ * listener); idempotent.
+ */
 void xdg_output_cleanup_output(struct wlr_output *wlr_output) {
 	struct MangoXDGOutput *output = xdg_output_find(wlr_output);
 	if (output)
@@ -308,21 +351,21 @@ void xdg_output_cleanup_output(struct wlr_output *wlr_output) {
 
 void xdg_output_init(void) {
 	wl_list_init(&xdg_outputs);
-	xdg_output_global = wl_global_create(dpy, &zxdg_output_manager_v1_interface,
-										 MANGO_XDG_OUTPUT_MANAGER_VERSION, NULL,
-										 xdg_output_manager_bind);
+	xdg_output_global = wl_global_create(
+		server.display, &zxdg_output_manager_v1_interface,
+		MANGO_XDG_OUTPUT_MANAGER_VERSION, NULL, xdg_output_manager_bind);
 	if (!xdg_output_global)
 		wlr_log(WLR_ERROR, "failed to create zxdg_output_manager_v1 global");
 }
 
-struct wl_global *xdg_output_global;
-struct wl_list xdg_outputs;
+static struct wl_global *xdg_output_global;
+static struct wl_list xdg_outputs;
 
-const struct zxdg_output_v1_interface xdg_output_impl = {
-	.destroy = xdg_output_handle_destroy,
+static const struct zxdg_output_v1_interface xdg_output_impl = {
+	.destroy = handle_xdg_output_destroy,
 };
 
-const struct zxdg_output_manager_v1_interface xdg_output_manager_impl = {
-	.destroy = xdg_output_manager_handle_destroy,
-	.get_xdg_output = xdg_output_manager_handle_get_xdg_output,
+static const struct zxdg_output_manager_v1_interface xdg_output_manager_impl = {
+	.destroy = handle_xdg_output_manager_destroy,
+	.get_xdg_output = handle_xdg_output_manager_get_output,
 };

@@ -4,41 +4,45 @@
 #include "mango/mango.h"
 #include <sys/types.h>
 
-pid_t getparentprocess(pid_t p);
-int32_t isdescprocess(pid_t p, pid_t c);
+pid_t get_parent_process(pid_t p);
+int32_t is_descendant_process(pid_t p, pid_t c);
 void get_layout_abbr(char *abbr, const char *full_name);
-Client *xytoclient(double x, double y);
+Client *client_at_point(double x, double y);
 bool layer_ignores_focus(LayerSurface *l);
-void xytonode(double x, double y, struct wlr_surface **psurface, Client **pc,
-			  LayerSurface **pl, MangoGroupBar **gb, double *nx, double *ny);
+void node_at_point(double x, double y, struct wlr_surface **psurface,
+				   Client **pc, LayerSurface **pl, MangoGroupBar **gb,
+				   double *nx, double *ny);
 
 /*
- * 额外协议：xdg-decoration、session lock、drm lease、image capture、
- * idle inhibit、seat selection（剪切板）等杂项协议处理。
+ * Extra protocol handlers: xdg-decoration, session lock, drm lease,
+ * image capture, idle inhibit, and seat selection (clipboard).
  */
-void checkidleinhibitor(struct wlr_surface *exclude);
-void destroydecoration(struct wl_listener *listener, void *data);
-void createdecoration(struct wl_listener *listener, void *data);
-void createidleinhibitor(struct wl_listener *listener, void *data);
-void createlocksurface(struct wl_listener *listener, void *data);
-void destroyidleinhibitor(struct wl_listener *listener, void *data);
-void destroylock(SessionLock *lock, int32_t unlock);
-void destroylocksurface(struct wl_listener *listener, void *data);
-void destroysessionlock(struct wl_listener *listener, void *data);
-void locksession(struct wl_listener *listener, void *data);
+void check_idle_inhibitor(struct wlr_surface *exclude);
+void handle_xdg_decoration_destroy(struct wl_listener *listener, void *data);
+void handle_new_xdg_decoration(struct wl_listener *listener, void *data);
+void handle_new_idle_inhibitor(struct wl_listener *listener, void *data);
+void handle_session_lock_new_surface(struct wl_listener *listener, void *data);
+void handle_idle_inhibitor_destroy(struct wl_listener *listener, void *data);
+void session_lock_cleanup(SessionLock *lock, int32_t unlock);
+void handle_session_lock_surface_destroy(struct wl_listener *listener,
+										 void *data);
+void handle_session_lock_destroy(struct wl_listener *listener, void *data);
+void handle_new_session_lock(struct wl_listener *listener, void *data);
 void handle_new_foreign_toplevel_capture_request(struct wl_listener *listener,
 												 void *data);
-// 会话销毁时的回调
+// Callback when a capture session is destroyed
 void handle_session_destroy(struct wl_listener *listener, void *data);
-// 新会话创建时的回调
-void handle_iamge_copy_capture_new_session(struct wl_listener *listener,
-										   void *data);
-void requestdecorationmode(struct wl_listener *listener, void *data);
-void requestdrmlease(struct wl_listener *listener, void *data);
-void setpsel(struct wl_listener *listener, void *data);
-void setsel(struct wl_listener *listener, void *data);
+// Callback when a new capture session is created
+void handle_ext_image_copy_capture_new_session(struct wl_listener *listener,
+											   void *data);
+void handle_xdg_decoration_mode_request(struct wl_listener *listener,
+										void *data);
+void handle_drm_lease_request(struct wl_listener *listener, void *data);
+void handle_request_set_primary_selection(struct wl_listener *listener,
+										  void *data);
+void handle_request_set_selection(struct wl_listener *listener, void *data);
 void check_keep_idle_inhibit(Client *c);
-int32_t keep_idle_inhibit(void *data);
-void unlocksession(struct wl_listener *listener, void *data);
+int32_t idle_keep_inhibit(void *data);
+void handle_session_lock_unlock(struct wl_listener *listener, void *data);
 
 #endif

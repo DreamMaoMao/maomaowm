@@ -1,13 +1,12 @@
 #include "mango/input/device.h"
-#include "mango/mango.h"
 #include "mango/input/keyboard.h"
 #include "mango/input/tablet.h"
 #include "mango/input/pointer.h"
 #include "mango/input/touch.h"
 #include "mango/input/switch.h"
-#include "mango/common/globals.h"
+#include "mango/common/server.h"
 
-void destroyinputdevice(struct wl_listener *listener, void *data) {
+void handle_input_device_destroy(struct wl_listener *listener, void *data) {
 	InputDevice *input_dev =
 		wl_container_of(listener, input_dev, destroy_listener);
 
@@ -32,7 +31,7 @@ void destroyinputdevice(struct wl_listener *listener, void *data) {
 	free(input_dev);
 }
 
-void inputdevice(struct wl_listener *listener, void *data) {
+void handle_new_input_device(struct wl_listener *listener, void *data) {
 	/* This event is raised by the backend when a new input device becomes
 	 * available.
 	 * when the backend is a headless backend, this event will never be
@@ -43,22 +42,22 @@ void inputdevice(struct wl_listener *listener, void *data) {
 
 	switch (device->type) {
 	case WLR_INPUT_DEVICE_KEYBOARD:
-		createkeyboard(wlr_keyboard_from_input_device(device));
+		keyboard_create(wlr_keyboard_from_input_device(device));
 		break;
 	case WLR_INPUT_DEVICE_TABLET:
-		createtablet(device);
+		tablet_create(device);
 		break;
 	case WLR_INPUT_DEVICE_TABLET_PAD:
-		createtabletpad(device);
+		tablet_pad_create(device);
 		break;
 	case WLR_INPUT_DEVICE_POINTER:
-		createpointer(wlr_pointer_from_input_device(device));
+		pointer_create(wlr_pointer_from_input_device(device));
 		break;
 	case WLR_INPUT_DEVICE_TOUCH:
-		createtouch(wlr_touch_from_input_device(device));
+		touch_create(wlr_touch_from_input_device(device));
 		break;
 	case WLR_INPUT_DEVICE_SWITCH:
-		createswitch(wlr_switch_from_input_device(device));
+		switch_create(wlr_switch_from_input_device(device));
 		break;
 	default:
 		/* TODO handle other input device types */
@@ -71,8 +70,8 @@ void inputdevice(struct wl_listener *listener, void *data) {
 	 */
 	/* TODO do we actually require a cursor? */
 	caps = WL_SEAT_CAPABILITY_POINTER | WL_SEAT_CAPABILITY_TOUCH;
-	if (!wl_list_empty(&kb_group->wlr_group->devices) ||
-		!wl_list_empty(&standalone_keyboards))
+	if (!wl_list_empty(&server.keyboard_group->wlr_group->devices) ||
+		!wl_list_empty(&server.standalone_keyboards))
 		caps |= WL_SEAT_CAPABILITY_KEYBOARD;
-	wlr_seat_set_capabilities(seat, caps);
+	wlr_seat_set_capabilities(server.seat, caps);
 }

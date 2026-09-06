@@ -15,10 +15,10 @@ endif
 prefix = get_option('prefix')
 sysconfdir = get_option('sysconfdir')
 
-# 如果 sysconfdir 以 prefix 开头，去掉 prefix
+# If sysconfdir starts with prefix, strip the prefix.
 if sysconfdir.startswith(prefix) and not is_nixos
   sysconfdir = sysconfdir.substring(prefix.length())
-  # 确保 sysconfdir 是绝对路径
+  # Ensure sysconfdir is an absolute path.
   if not sysconfdir.startswith('/')
     sysconfdir = '/' + sysconfdir
   endif

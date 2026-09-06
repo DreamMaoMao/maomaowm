@@ -62,7 +62,7 @@ int32_t regex_match(const char *pattern, const char *str) {
 	}
 
 	pcre2_code *re = pcre2_compile((PCRE2_SPTR)pattern, PCRE2_ZERO_TERMINATED,
-								   PCRE2_UTF, // 启用 UTF-8 支持
+								   PCRE2_UTF, // Enables UTF-8 support.
 								   &errnum, &erroffset, NULL);
 	if (!re) {
 		PCRE2_UCHAR errbuf[256];
@@ -185,21 +185,21 @@ void wl_list_swap(struct wl_list *l1, struct wl_list *l2) {
 	struct wl_list *tmp1_next = l1->next;
 	struct wl_list *tmp2_next = l2->next;
 
-	if (l1->next == l2) { /* l1 -> l2 相邻 */
+	if (l1->next == l2) { /* l1 -> l2 are adjacent. */
 		l1->next = l2->next;
 		l1->prev = l2;
 		l2->next = l1;
 		l2->prev = tmp1_prev;
 		tmp1_prev->next = l2;
 		tmp2_next->prev = l1;
-	} else if (l2->next == l1) { /* l2 -> l1 相邻 */
+	} else if (l2->next == l1) { /* l2 -> l1 are adjacent. */
 		l2->next = l1->next;
 		l2->prev = l1;
 		l1->next = l2;
 		l1->prev = tmp2_prev;
 		tmp2_prev->next = l1;
 		tmp1_next->prev = l2;
-	} else { /* 不相邻 */
+	} else { /* Not adjacent. */
 		l2->next = tmp1_next;
 		l2->prev = tmp1_prev;
 		l1->next = tmp2_next;

@@ -9,7 +9,7 @@
 #include <wayland-server-core.h>
 #include <wlr/interfaces/wlr_buffer.h>
 
-GHashTable *font_desc_cache = NULL;
+static GHashTable *font_desc_cache = NULL;
 
 PangoFontDescription *get_cached_font_desc(const char *font_desc) {
 	if (!font_desc_cache) {
@@ -52,7 +52,7 @@ bool text_buffer_begin_data_ptr_access(struct wlr_buffer *wlr_buffer,
 
 void text_buffer_end_data_ptr_access(struct wlr_buffer *wlr_buffer) {}
 
-const struct wlr_buffer_impl text_buffer_impl = {
+static const struct wlr_buffer_impl text_buffer_impl = {
 	.destroy = text_buffer_destroy,
 	.begin_data_ptr_access = text_buffer_begin_data_ptr_access,
 	.end_data_ptr_access = text_buffer_end_data_ptr_access,
@@ -181,7 +181,7 @@ void get_text_pixel_size(MangoJumpLabel *node, const char *text, float scale,
 
 void draw_rounded_rect(cairo_t *cr, double x, double y, double w, double h,
 					   double r) {
-	// 宽高非正时不绘制任何东西
+	// Draws nothing when width/height are not positive.
 	if (w <= 0.0 || h <= 0.0)
 		return;
 
@@ -201,7 +201,7 @@ void mango_jump_label_node_update(MangoJumpLabel *node, const char *text,
 	if (scale <= 0.0f)
 		scale = 1.0f;
 
-	// 脏检查
+	// Dirty check.
 	if (node->cached_scale == scale && node->cached_font_desc &&
 		strcmp(node->cached_font_desc, node->font_desc) == 0 &&
 		node->cached_text && strcmp(node->cached_text, text) == 0 &&
@@ -223,7 +223,7 @@ void mango_jump_label_node_update(MangoJumpLabel *node, const char *text,
 		return;
 	}
 
-	// 更新缓存
+	// Updates the cache.
 	g_free(node->cached_text);
 	node->cached_text = g_strdup(text);
 	g_free(node->cached_font_desc);
@@ -267,7 +267,7 @@ void mango_jump_label_node_update(MangoJumpLabel *node, const char *text,
 	int32_t box_logical_w = logical_text_w + 2 * node->padding_x;
 	int32_t box_logical_h = logical_text_h + 2 * node->padding_y;
 
-	// 物理像素尺寸包含边框,避免边框越界
+	// Physical pixel size includes the border to avoid drawing outside it.
 	int32_t required_pixel_w =
 		(int32_t)((box_logical_w + 2 * node->border_width) * scale + 0.5f);
 	int32_t required_pixel_h =
@@ -344,7 +344,7 @@ void mango_jump_label_node_update(MangoJumpLabel *node, const char *text,
 		}
 	}
 
-	// 文本绘制仅在背景区域有有效空间时进行
+	// Text is drawn only when the background area has valid space.
 	if (bg_w > 0.0 && bg_h > 0.0) {
 		cairo_save(cr);
 		double text_x = (node->border_width + node->padding_x) * scale;
@@ -378,9 +378,10 @@ void mango_jump_label_node_update(MangoJumpLabel *node, const char *text,
 		double bw = bg_w + border;
 		double bh = bg_h + border;
 
-		// 确保边框矩形不越界且宽高为正
+		// Ensures the border rectangle stays in bounds and has positive
+		// width/height.
 		if (bx < 0.0) {
-			bw += bx; // bx 为负，bw 缩小
+			bw += bx; // bx is negative, so bw shrinks.
 			bx = 0.0;
 		}
 		if (by < 0.0) {
@@ -564,10 +565,10 @@ void mango_group_bar_update(MangoGroupBar *node, const char *text,
 	char *safe_text = g_strdup(text);
 
 	g_free(node->last_text);
-	node->last_text = safe_text; // 所有权转移
+	node->last_text = safe_text; // Ownership transfer.
 	node->last_scale = scale;
 
-	// 脏检查
+	// Dirty check.
 	if (node->cached_scale == scale && node->cached_font_desc &&
 		strcmp(node->cached_font_desc, node->font_desc) == 0 &&
 		node->cached_text && strcmp(node->cached_text, safe_text) == 0 &&
@@ -591,7 +592,7 @@ void mango_group_bar_update(MangoGroupBar *node, const char *text,
 		return;
 	}
 
-	// 更新缓存
+	// Updates the cache.
 	g_free(node->cached_text);
 	node->cached_text = g_strdup(safe_text);
 
@@ -637,13 +638,15 @@ void mango_group_bar_update(MangoGroupBar *node, const char *text,
 	if (box_logical_h < 0)
 		box_logical_h = 0;
 
-	// surface 物理尺寸包含边框，避免边框绘制越界
+	// Surface physical size includes the border to avoid drawing outside it.
 	int32_t required_pixel_w = (int32_t)(node->target_width * scale + 0.5f);
 	int32_t required_pixel_h = (int32_t)(node->target_height * scale + 0.5f);
-	// 如果边框会伸出 target 区域，则扩展 surface 尺寸以完全容纳
+	// If the border would extend beyond the target area, grow the surface size
+	// to fully contain it.
 	double border_phys = node->border_width * scale;
 	if (border_phys > 0.0) {
-		// 边框描边会向外延伸 half line width，所以需要额外空间
+		// The border stroke extends outward by half the line width, so extra
+		// space is needed.
 		int extra_w = (int32_t)ceil(border_phys * 0.5);
 		int extra_h = (int32_t)ceil(border_phys * 0.5);
 		required_pixel_w += extra_w;
@@ -719,7 +722,7 @@ void mango_group_bar_update(MangoGroupBar *node, const char *text,
 		}
 	}
 
-	// 仅在背景区域有空间时进行
+	// Only runs when the background area has space.
 	if (bg_w > 0.0 && bg_h > 0.0) {
 		int32_t text_area_logical_w = box_logical_w - 2 * node->padding_x;
 		int32_t text_area_logical_h = box_logical_h - 2 * node->padding_y;
@@ -772,7 +775,8 @@ void mango_group_bar_update(MangoGroupBar *node, const char *text,
 		double bw = bg_w + border_phys;
 		double bh = bg_h + border_phys;
 
-		// 确保边框矩形不越界且宽高为正
+		// Ensures the border rectangle stays in bounds and has positive
+		// width/height.
 		if (bx < 0.0) {
 			bw += bx;
 			bx = 0.0;

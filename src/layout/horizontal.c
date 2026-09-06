@@ -1,10 +1,10 @@
 #include "mango/layout/horizontal.h"
-#include "mango/common/globals.h"
+#include "mango/common/server.h"
 #include "mango/manage/client.h"
 #include "mango/manage/monitor.h"
 
 void tile(Monitor *m) {
-	int32_t i, n = 0, h, r, ie = enablegaps, mw, my, ty;
+	int32_t i, n = 0, h, r, ie = server.enable_gaps, mw, my, ty;
 	Client *c = NULL;
 	Client *fc = NULL;
 	double mfact = 0;
@@ -19,10 +19,10 @@ void tile(Monitor *m) {
 	if (n == 0)
 		return;
 
-	int32_t cur_gappiv = enablegaps ? m->gappiv : 0;
-	int32_t cur_gappih = enablegaps ? m->gappih : 0;
-	int32_t cur_gappov = enablegaps ? m->gappov : 0;
-	int32_t cur_gappoh = enablegaps ? m->gappoh : 0;
+	int32_t cur_gappiv = server.enable_gaps ? m->gappiv : 0;
+	int32_t cur_gappih = server.enable_gaps ? m->gappih : 0;
+	int32_t cur_gappov = server.enable_gaps ? m->gappov : 0;
+	int32_t cur_gappoh = server.enable_gaps ? m->gappoh : 0;
 
 	cur_gappiv = config.smartgaps && m->visible_fake_tiling_clients == 1
 					 ? 0
@@ -37,7 +37,7 @@ void tile(Monitor *m) {
 					 ? 0
 					 : cur_gappoh;
 
-	wl_list_for_each(fc, &clients, link) {
+	wl_list_for_each(fc, &server.clients, link) {
 		if (VISIBLEON(fc, m) && ISFAKETILED(fc))
 			break;
 	}
@@ -63,7 +63,7 @@ void tile(Monitor *m) {
 		(m->w.height - 2 * cur_gappov - cur_gappiv * ie * (stack_num - 1));
 	float slave_surplus_ratio = 1.0;
 
-	wl_list_for_each(c, &clients, link) {
+	wl_list_for_each(c, &server.clients, link) {
 		if (!VISIBLEON(c, m) || !ISFAKETILED(c))
 			continue;
 		if (i < m->pertag->nmasters[get_mon_curtag(m)]) {
@@ -89,7 +89,8 @@ void tile(Monitor *m) {
 												.width = mw - cur_gappih * ie,
 												.height = h},
 							   0);
-			my += h + cur_gappiv * ie; // 使用理论高度累加
+			my += h +
+				  cur_gappiv * ie; // Accumulates using the theoretical height.
 		} else {
 			r = n - i;
 			if (c->stack_inner_per > 0.0f) {
@@ -114,14 +115,15 @@ void tile(Monitor *m) {
 								 .width = m->w.width - mw - 2 * cur_gappoh,
 								 .height = h},
 				0);
-			ty += h + cur_gappiv * ie; // 使用理论高度累加
+			ty += h +
+				  cur_gappiv * ie; // Accumulates using the theoretical height.
 		}
 		i++;
 	}
 }
 
 void right_tile(Monitor *m) {
-	int32_t i, n = 0, h, r, ie = enablegaps, mw, my, ty;
+	int32_t i, n = 0, h, r, ie = server.enable_gaps, mw, my, ty;
 	Client *c = NULL;
 	Client *fc = NULL;
 	double mfact = 0;
@@ -136,10 +138,10 @@ void right_tile(Monitor *m) {
 	if (n == 0)
 		return;
 
-	int32_t cur_gappiv = enablegaps ? m->gappiv : 0;
-	int32_t cur_gappih = enablegaps ? m->gappih : 0;
-	int32_t cur_gappov = enablegaps ? m->gappov : 0;
-	int32_t cur_gappoh = enablegaps ? m->gappoh : 0;
+	int32_t cur_gappiv = server.enable_gaps ? m->gappiv : 0;
+	int32_t cur_gappih = server.enable_gaps ? m->gappih : 0;
+	int32_t cur_gappov = server.enable_gaps ? m->gappov : 0;
+	int32_t cur_gappoh = server.enable_gaps ? m->gappoh : 0;
 
 	cur_gappiv = config.smartgaps && m->visible_fake_tiling_clients == 1
 					 ? 0
@@ -154,7 +156,7 @@ void right_tile(Monitor *m) {
 					 ? 0
 					 : cur_gappoh;
 
-	wl_list_for_each(fc, &clients, link) {
+	wl_list_for_each(fc, &server.clients, link) {
 		if (VISIBLEON(fc, m) && ISFAKETILED(fc))
 			break;
 	}
@@ -180,7 +182,7 @@ void right_tile(Monitor *m) {
 		(m->w.height - 2 * cur_gappov - cur_gappiv * ie * (stack_num - 1));
 	float slave_surplus_ratio = 1.0;
 
-	wl_list_for_each(c, &clients, link) {
+	wl_list_for_each(c, &server.clients, link) {
 		if (!VISIBLEON(c, m) || !ISFAKETILED(c))
 			continue;
 		if (i < m->pertag->nmasters[get_mon_curtag(m)]) {
@@ -208,7 +210,8 @@ void right_tile(Monitor *m) {
 												.width = mw - cur_gappih * ie,
 												.height = h},
 							   0);
-			my += h + cur_gappiv * ie; // 使用理论高度累加
+			my += h +
+				  cur_gappiv * ie; // Accumulates using the theoretical height.
 		} else {
 			r = n - i;
 			if (c->stack_inner_per > 0.0f) {
@@ -233,13 +236,14 @@ void right_tile(Monitor *m) {
 								 .width = m->w.width - mw - 2 * cur_gappoh,
 								 .height = h},
 				0);
-			ty += h + cur_gappiv * ie; // 使用理论高度累加
+			ty += h +
+				  cur_gappiv * ie; // Accumulates using the theoretical height.
 		}
 		i++;
 	}
 }
 void center_tile(Monitor *m) {
-	int32_t i, n = 0, h, r, ie = enablegaps, mw, mx, my, oty, ety, tw;
+	int32_t i, n = 0, h, r, ie = server.enable_gaps, mw, mx, my, oty, ety, tw;
 	Client *c = NULL;
 	Client *fc = NULL;
 	double mfact = 0;
@@ -254,19 +258,23 @@ void center_tile(Monitor *m) {
 	if (n == 0)
 		return;
 
-	// 获取第一个可见的平铺客户端用于主区域宽度百分比
-	wl_list_for_each(fc, &clients, link) {
+	// Gets the first visible tiled client for the master area width percentage.
+	wl_list_for_each(fc, &server.clients, link) {
 		if (VISIBLEON(fc, m) && ISFAKETILED(fc))
 			break;
 	}
 
-	// 间隙参数处理
-	int32_t cur_gappiv = enablegaps ? m->gappiv : 0; // 内部垂直间隙
-	int32_t cur_gappih = enablegaps ? m->gappih : 0; // 内部水平间隙
-	int32_t cur_gappov = enablegaps ? m->gappov : 0; // 外部垂直间隙
-	int32_t cur_gappoh = enablegaps ? m->gappoh : 0; // 外部水平间隙
+	// Gap parameter handling.
+	int32_t cur_gappiv =
+		server.enable_gaps ? m->gappiv : 0; // Inner vertical gap.
+	int32_t cur_gappih =
+		server.enable_gaps ? m->gappih : 0; // Inner horizontal gap.
+	int32_t cur_gappov =
+		server.enable_gaps ? m->gappov : 0; // Outer vertical gap.
+	int32_t cur_gappoh =
+		server.enable_gaps ? m->gappoh : 0; // Outer horizontal gap.
 
-	// 智能间隙处理
+	// Smart gap handling.
 	cur_gappiv = config.smartgaps && m->visible_fake_tiling_clients == 1
 					 ? 0
 					 : cur_gappiv;
@@ -284,13 +292,13 @@ void center_tile(Monitor *m) {
 	mfact = fc->master_mfact_per > 0.0f ? fc->master_mfact_per
 										: m->pertag->mfacts[get_mon_curtag(m)];
 
-	// 初始化区域
+	// Initializes the area.
 	mw = m->w.width;
 	mx = cur_gappoh;
 	my = cur_gappov;
 	tw = mw;
 
-	// 判断是否需要主区域铺满
+	// Decides whether the master area should fill the width.
 	int32_t should_overspread =
 		config.center_master_overspread && (n <= nmasters);
 
@@ -327,32 +335,33 @@ void center_tile(Monitor *m) {
 		 cur_gappiv * ie * (stack_num > 0 ? stack_num - 1 : 0));
 
 	if (n > nmasters || !should_overspread) {
-		// 计算主区域宽度（居中模式）
+		// Computes the master area width (centered mode).
 		mw = nmasters ? (m->w.width - 2 * cur_gappoh - cur_gappih * ie) * mfact
 					  : 0;
 
 		if (n - nmasters > 1) {
-			// 多个堆叠窗口：主区域居中，左右两侧各有一个堆叠区域
+			// Multiple stack windows: master centered, one stack area on each
+			// side.
 			tw = (m->w.width - mw) / 2 - cur_gappoh - cur_gappih * ie;
 			mx = cur_gappoh + tw + cur_gappih * ie;
 		} else if (n - nmasters == 1) {
-			// 单个堆叠窗口的处理
+			// Single stack window handling.
 			if (config.center_when_single_stack) {
-				// stack在右边，master居中，左边空着
+				// Stack on the right, master centered, left empty.
 				tw = (m->w.width - mw) / 2 - cur_gappoh - cur_gappih * ie;
 				mx = cur_gappoh + tw + cur_gappih * ie;
 			} else {
-				// stack在右边，master在左边
+				// Stack on the right, master on the left.
 				tw = m->w.width - mw - 2 * cur_gappoh - cur_gappih * ie;
 				mx = cur_gappoh;
 			}
 		} else {
-			// 只有主区域窗口：居中显示
+			// Only master-area windows: centered display.
 			tw = (m->w.width - mw) / 2 - cur_gappoh - cur_gappih * ie;
 			mx = cur_gappoh + tw + cur_gappih * ie;
 		}
 	} else {
-		// 主区域铺满模式（只有主区域窗口时）
+		// Master fill mode (only master-area windows).
 		mw = m->w.width - 2 * cur_gappoh;
 		mx = cur_gappoh;
 		tw = 0;
@@ -362,12 +371,12 @@ void center_tile(Monitor *m) {
 	ety = cur_gappov;
 
 	i = 0;
-	wl_list_for_each(c, &clients, link) {
+	wl_list_for_each(c, &server.clients, link) {
 		if (!VISIBLEON(c, m) || !ISFAKETILED(c))
 			continue;
 
 		if (i < nmasters) {
-			// 主区域窗口
+			// Master-area windows.
 			r = MANGO_MIN(n, nmasters) - i;
 			if (c->master_inner_per > 0.0f) {
 				h = master_surplus_height * c->master_inner_per /
@@ -397,13 +406,14 @@ void center_tile(Monitor *m) {
 												.width = mw,
 												.height = h},
 							   0);
-			my += h + cur_gappiv * ie; // 使用理论高度累加
+			my += h +
+				  cur_gappiv * ie; // Accumulates using the theoretical height.
 		} else {
-			// 堆叠区域窗口
+			// Stack-area windows.
 			int32_t stack_index = i - nmasters;
 
 			if (n - nmasters == 1) {
-				// 单个堆叠窗口
+				// Single stack window.
 				r = n - i;
 				if (c->stack_inner_per > 0.0f) {
 					h = init_single_stack_surplus * c->stack_inner_per;
@@ -438,11 +448,12 @@ void center_tile(Monitor *m) {
 								   0);
 				ety += h + cur_gappiv * ie;
 			} else {
-				// 多个堆叠窗口：交替放在左右两侧
+				// Multiple stack windows: alternated on the left and right
+				// sides.
 				r = (n - i + 1) / 2;
 
 				if ((stack_index % 2) ^ (n % 2 == 0)) {
-					// 右侧堆叠窗口
+					// Right stack windows.
 					if (c->stack_inner_per > 0.0f) {
 						h = slave_right_surplus_height * c->stack_inner_per /
 							slave_right_surplus_ratio;
@@ -476,7 +487,7 @@ void center_tile(Monitor *m) {
 									   0);
 					ety += h + cur_gappiv * ie;
 				} else {
-					// 左侧堆叠窗口
+					// Left stack windows.
 					if (c->stack_inner_per > 0.0f) {
 						h = slave_left_surplus_height * c->stack_inner_per /
 							slave_left_surplus_ratio;
@@ -523,9 +534,9 @@ void deck(Monitor *m) {
 	float mfact;
 	uint32_t nmasters = m->pertag->nmasters[get_mon_curtag(m)];
 
-	int32_t cur_gappih = enablegaps ? m->gappih : 0;
-	int32_t cur_gappoh = enablegaps ? m->gappoh : 0;
-	int32_t cur_gappov = enablegaps ? m->gappov : 0;
+	int32_t cur_gappih = server.enable_gaps ? m->gappih : 0;
+	int32_t cur_gappoh = server.enable_gaps ? m->gappoh : 0;
+	int32_t cur_gappov = server.enable_gaps ? m->gappov : 0;
 
 	cur_gappih = config.smartgaps && m->visible_fake_tiling_clients == 1
 					 ? 0
@@ -542,7 +553,7 @@ void deck(Monitor *m) {
 	if (n == 0)
 		return;
 
-	wl_list_for_each(fc, &clients, link) {
+	wl_list_for_each(fc, &server.clients, link) {
 		if (VISIBLEON(fc, m) && ISFAKETILED(fc))
 			break;
 	}
@@ -556,7 +567,7 @@ void deck(Monitor *m) {
 		mw = m->w.width - 2 * cur_gappoh;
 
 	i = my = 0;
-	wl_list_for_each(c, &clients, link) {
+	wl_list_for_each(c, &server.clients, link) {
 		if (!VISIBLEON(c, m) || !ISFAKETILED(c))
 			continue;
 		if (i < nmasters) {
@@ -581,7 +592,7 @@ void deck(Monitor *m) {
 										  cur_gappih,
 								 .height = m->w.height - 2 * cur_gappov},
 				0);
-			if (c == focustop(m))
+			if (c == client_focus_top(m))
 				wlr_scene_node_raise_to_top(&c->scene->node);
 		}
 		i++;
@@ -593,8 +604,8 @@ monocle(Monitor *m) {
 	Client *c = NULL;
 	struct wlr_box geom;
 
-	int32_t cur_gappov = enablegaps ? m->gappov : 0;
-	int32_t cur_gappoh = enablegaps ? m->gappoh : 0;
+	int32_t cur_gappov = server.enable_gaps ? m->gappov : 0;
+	int32_t cur_gappoh = server.enable_gaps ? m->gappoh : 0;
 
 	cur_gappoh = config.smartgaps && m->visible_fake_tiling_clients == 1
 					 ? 0
@@ -603,7 +614,7 @@ monocle(Monitor *m) {
 					 ? 0
 					 : cur_gappov;
 
-	wl_list_for_each(c, &clients, link) {
+	wl_list_for_each(c, &server.clients, link) {
 		if (!VISIBLEON(c, m) || !ISFAKETILED(c))
 			continue;
 		geom.x = m->w.x + cur_gappoh;
@@ -614,15 +625,15 @@ monocle(Monitor *m) {
 	}
 }
 
-// 网格布局窗口大小和位置计算
+// Computes grid layout window sizes and positions.
 void grid(Monitor *m) {
 	int32_t i, n;
 	int32_t cw, ch;
 	int32_t cols, rows, overcols;
 	Client *c = NULL;
 	n = 0;
-	int32_t target_gappo = enablegaps ? config.gappoh : 0;
-	int32_t target_gappi = enablegaps ? config.gappih : 0;
+	int32_t target_gappo = server.enable_gaps ? config.gappoh : 0;
+	int32_t target_gappi = server.enable_gaps ? config.gappih : 0;
 	float single_width_ratio = 0.9;
 	float single_height_ratio = 0.9;
 	struct wlr_box target_geom;
@@ -633,7 +644,7 @@ void grid(Monitor *m) {
 		return;
 
 	if (n == 1) {
-		wl_list_for_each(c, &clients, link) {
+		wl_list_for_each(c, &server.clients, link) {
 			if (c->mon != m)
 				continue;
 			if (VISIBLEON(c, m) && !c->isunglobal &&
@@ -653,9 +664,9 @@ void grid(Monitor *m) {
 
 	if (n == 2) {
 		float col_pers[2] = {1.0f, 1.0f};
-		// 先提取这两个窗口现有的列比例
+		// First extracts the existing column ratios of these two windows.
 		i = 0;
-		wl_list_for_each(c, &clients, link) {
+		wl_list_for_each(c, &server.clients, link) {
 			if (c->mon != m)
 				continue;
 			if (VISIBLEON(c, m) && !c->isunglobal &&
@@ -670,11 +681,11 @@ void grid(Monitor *m) {
 
 		float sum_col = col_pers[0] + col_pers[1];
 		float avail_w = m->w.width - 2 * target_gappo - target_gappi;
-		ch =
-			(m->w.height - 2 * target_gappo) * 0.65; // 依然保持 0.65 的美观高度
+		ch = (m->w.height - 2 * target_gappo) *
+			 0.65; // Keeps the pleasing height of 0.65.
 
 		i = 0;
-		wl_list_for_each(c, &clients, link) {
+		wl_list_for_each(c, &server.clients, link) {
 			if (c->mon != m)
 				continue;
 			if (VISIBLEON(c, m) && !c->isunglobal &&
@@ -685,13 +696,15 @@ void grid(Monitor *m) {
 				c->grid_col_per = col_pers[i];
 				c->grid_row_per = 1.0f;
 
-				// 根据分配的权重动态计算当前窗口的宽度
+				// Computes the current window width dynamically from the
+				// assigned weight.
 				cw = avail_w * (col_pers[i] / sum_col);
 
 				if (i == 0) {
 					target_geom.x = m->w.x + target_gappo;
 				} else if (i == 1) {
-					// 第二个窗口的 X 坐标紧跟第一个窗口后面
+					// The second window X coordinate follows right after the
+					// first window.
 					float cw0 = avail_w * (col_pers[0] / sum_col);
 					target_geom.x = m->w.x + target_gappo + cw0 + target_gappi;
 				}
@@ -705,7 +718,7 @@ void grid(Monitor *m) {
 		return;
 	}
 
-	// 计算列数和行数
+	// Computes the column and row counts.
 	for (cols = 0; cols <= n / 2; cols++) {
 		if (cols * cols >= n)
 			break;
@@ -725,9 +738,9 @@ void grid(Monitor *m) {
 	for (i = 0; i < rows; i++)
 		row_pers[i] = 1.0f;
 
-	// 提取首个窗口比例
+	// Extracts the first window ratio.
 	i = 0;
-	wl_list_for_each(c, &clients, link) {
+	wl_list_for_each(c, &server.clients, link) {
 		if (c->mon != m)
 			continue;
 		if (VISIBLEON(c, m) && !c->isunglobal &&
@@ -753,9 +766,9 @@ void grid(Monitor *m) {
 	float avail_w = m->w.width - 2 * target_gappo - (cols - 1) * target_gappi;
 	float avail_h = m->w.height - 2 * target_gappo - (rows - 1) * target_gappi;
 
-	// 分配位置与尺寸
+	// Assigns positions and sizes.
 	i = 0;
-	wl_list_for_each(c, &clients, link) {
+	wl_list_for_each(c, &server.clients, link) {
 		if (c->mon != m)
 			continue;
 		if (VISIBLEON(c, m) && !c->isunglobal &&
@@ -763,13 +776,13 @@ void grid(Monitor *m) {
 			int32_t c_idx = i % cols;
 			int32_t r_idx = i / cols;
 
-			// 矫正属性及标记索引
+			// Fixes properties and marks indices.
 			c->grid_col_per = col_pers[c_idx];
 			c->grid_row_per = row_pers[r_idx];
 			c->grid_col_idx = c_idx;
 			c->grid_row_idx = r_idx;
 
-			// X 坐标及宽度计算
+			// X coordinate and width computation.
 			float fl_cx = m->w.x + target_gappo;
 			float fl_cw = 0.0f;
 
@@ -792,7 +805,7 @@ void grid(Monitor *m) {
 							: avail_w * (col_pers[c_idx] / sum_col);
 			}
 
-			// Y 坐标及高度计算
+			// Y coordinate and height computation.
 			float fl_cy = m->w.y + target_gappo;
 			for (int j = 0; j < r_idx; j++)
 				fl_cy += avail_h * (row_pers[j] / sum_row) + target_gappi;
@@ -821,17 +834,17 @@ void fair(Monitor *m) {
 	if (n == 0)
 		return;
 
-	// 获取间距配置
-	int32_t cur_gappiv = enablegaps ? m->gappiv : 0;
-	int32_t cur_gappih = enablegaps ? m->gappih : 0;
-	int32_t cur_gappov = enablegaps ? m->gappov : 0;
-	int32_t cur_gappoh = enablegaps ? m->gappoh : 0;
+	// Gets the gap config.
+	int32_t cur_gappiv = server.enable_gaps ? m->gappiv : 0;
+	int32_t cur_gappih = server.enable_gaps ? m->gappih : 0;
+	int32_t cur_gappov = server.enable_gaps ? m->gappov : 0;
+	int32_t cur_gappoh = server.enable_gaps ? m->gappoh : 0;
 
 	if (config.smartgaps && n == 1) {
 		cur_gappiv = cur_gappih = cur_gappov = cur_gappoh = 0;
 	}
 
-	// 计算网格行列数
+	// Computes grid row/column counts.
 	int32_t cols;
 	for (cols = 0; cols <= n; cols++) {
 		if (cols * cols >= n)
@@ -844,7 +857,7 @@ void fair(Monitor *m) {
 	int32_t first_group_count = first_group_cols * base_rows;
 	int32_t max_rows = base_rows + (remainder > 0 ? 1 : 0);
 
-	// 将有效客户端存入数组
+	// Stores valid clients in an array.
 	Client **arr = calloc(n, sizeof(*arr));
 	float *col_pers = calloc(cols, sizeof(*col_pers));
 	float *row_pers = calloc(max_rows, sizeof(*row_pers));
@@ -868,21 +881,21 @@ void fair(Monitor *m) {
 		return;
 	}
 	int32_t arr_idx = 0;
-	wl_list_for_each(c, &clients, link) {
+	wl_list_for_each(c, &server.clients, link) {
 		if (VISIBLEON(c, m) && ISFAKETILED(c)) {
 			arr[arr_idx++] = c;
 			if (arr_idx >= n)
-				break; // 安全边界
+				break; // Safe bounds.
 		}
 	}
 
-	// 初始化比例数组
+	// Initializes the ratio array.
 	for (i = 0; i < cols; i++)
 		col_pers[i] = 0.0f;
 	for (i = 0; i < max_rows; i++)
 		row_pers[i] = 0.0f;
 
-	// 直接基于数组进行两遍比例锁定
+	// Two ratio-locking passes directly over the array.
 	for (i = 0; i < n; i++) {
 		c = arr[i];
 		int32_t col_idx =
@@ -914,7 +927,7 @@ void fair(Monitor *m) {
 			row_pers[row_idx] = c->grid_row_per;
 	}
 
-	// 兜底策略与总权重计算
+	// Fallback strategy and total weight computation.
 	float sum_col = 0.0f;
 	for (i = 0; i < cols; i++) {
 		if (col_pers[i] == 0.0f)
@@ -926,7 +939,7 @@ void fair(Monitor *m) {
 			row_pers[i] = 1.0f;
 	}
 
-	// 预计算所有列的 X 坐标和宽度
+	// Precomputes X coordinates and widths of all columns.
 	float avail_w = m->w.width - 2 * cur_gappoh - (cols - 1) * cur_gappih;
 	float next_x = m->w.x + cur_gappoh;
 	for (i = 0; i < cols; i++) {
@@ -936,7 +949,8 @@ void fair(Monitor *m) {
 		next_x += col_w[i] + cur_gappih;
 	}
 
-	// 预计算两组不同的行几何参数（解决不同列行数不一致的问题）
+	// Precomputes two sets of row geometry (handles columns with different row
+	// counts).
 	float sum_row_base = 0.0f;
 	for (i = 0; i < base_rows; i++)
 		sum_row_base += row_pers[i];
@@ -967,7 +981,7 @@ void fair(Monitor *m) {
 		}
 	}
 
-	// 最终渲染布局
+	// Final rendered layout.
 	for (i = 0; i < n; i++) {
 		c = arr[i];
 		int32_t col_idx, row_idx;

@@ -1,13 +1,13 @@
 #include "mango/layout/dwindle.h"
-#include "mango/common/globals.h"
+#include "mango/common/server.h"
 #include "mango/manage/client.h"
 #include "mango/common/util.h"
 #include "mango/manage/monitor.h"
 
-DwindleNode *dwindle_locked_h_node = NULL;
-DwindleNode *dwindle_locked_v_node = NULL;
+static DwindleNode *locked_horizontal_node = NULL;
+static DwindleNode *locked_vertical_node = NULL;
 
-// 统计同方向上的节点总和 (N_old)
+// Counts nodes in the same direction (N_old).
 int count_block_items(DwindleNode *node, bool split_h) {
 	if (!node)
 		return 0;
@@ -49,10 +49,10 @@ void dwindle_remove(DwindleNode **root, Client *c) {
 
 	DwindleNode *parent = leaf->parent;
 
-	if (dwindle_locked_h_node == leaf || dwindle_locked_h_node == parent)
-		dwindle_locked_h_node = NULL;
-	if (dwindle_locked_v_node == leaf || dwindle_locked_v_node == parent)
-		dwindle_locked_v_node = NULL;
+	if (locked_horizontal_node == leaf || locked_horizontal_node == parent)
+		locked_horizontal_node = NULL;
+	if (locked_vertical_node == leaf || locked_vertical_node == parent)
+		locked_vertical_node = NULL;
 
 	if (!parent) {
 		free(leaf);
@@ -60,12 +60,12 @@ void dwindle_remove(DwindleNode **root, Client *c) {
 		return;
 	}
 
-	// 开始删除空间的比例回退逻辑
+	// Starts the proportional rollback for the removed space.
 
-	// 查找连续的同方向块路径
+	// Finds the contiguous same-direction block path.
 	if (config.dwindle_manual_split) {
 		bool split_h = parent->split_h;
-		/* 第一遍统计同方向块路径长度 */
+		/* First pass: measure the same-direction block path length. */
 		int path_len = 1; /* parent */
 		DwindleNode *cnt = parent->parent;
 		while (cnt && cnt->split_h == split_h) {
@@ -84,7 +84,7 @@ void dwindle_remove(DwindleNode **root, Client *c) {
 				curr = curr->parent;
 			}
 
-			// 计算各祖先的旧绝对占比
+			// Computes the old absolute ratio of each ancestor.
 			p[path_len - 1] = 1.0f;
 			for (int i = path_len - 1; i > 0; i--) {
 				DwindleNode *S = path[i];
@@ -95,14 +95,16 @@ void dwindle_remove(DwindleNode **root, Client *c) {
 					p[i - 1] = p[i] * (1.0f - S->ratio);
 			}
 
-			// 计算即将被删除的叶子节点，在该方向块中所占的绝对面积比例 (P_del)
+			// Computes the absolute area ratio (P_del) that the removed leaf
+			// occupies in its direction block.
 			float p_del =
 				p[0] * (parent->first == leaf ? parent->ratio
 											  : (1.0f - parent->ratio));
 			if (p_del > 0.999f)
-				p_del = 0.999f; // 兜底
+				p_del = 0.999f; // Fallback.
 
-			// 重算祖先比例：将 P_del 空出来的空间，按原定比例无缝分配给其他窗口
+			// Recomputes ancestor ratios: distribute the space freed by P_del
+			// seamlessly to the other windows using their original ratios.
 			for (int i = path_len - 1; i > 0; i--) {
 				DwindleNode *S = path[i];
 				DwindleNode *child = path[i - 1];
@@ -129,9 +131,9 @@ void dwindle_remove(DwindleNode **root, Client *c) {
 		free(p);
 	}
 
-	// 比例重算结束
+	// Ratio recomputation finished.
 
-	// 基础的二叉树摘除节点逻辑
+	// Basic binary-tree node removal logic.
 	DwindleNode *sibling =
 		(parent->first == leaf) ? parent->second : parent->first;
 	DwindleNode *grandparent = parent->parent;
@@ -199,10 +201,12 @@ DwindleNode *dwindle_new_leaf(Client *c) {
 	return n;
 }
 
-// 向上查找方向块路径，并计算每个祖先节点的绝对占比
+// Walks up the direction block path and computes the absolute ratio of each
+// ancestor.
 int get_block_path_and_ratios(DwindleNode *target, bool split_h,
 							  DwindleNode ***path, float **p) {
-	/* 第一遍统计同方向块深度，据此动态分配 */
+	/* First pass: measure the same-direction block depth and allocate
+	 * dynamically from it. */
 	int depth = 1;
 	DwindleNode *curr = target->parent;
 	while (curr && curr->split_h == split_h) {
@@ -223,7 +227,7 @@ int get_block_path_and_ratios(DwindleNode *target, bool split_h,
 		curr = curr->parent;
 	}
 
-	(*p)[path_len - 1] = 1.0f; // 方向块根节点占比为 100%
+	(*p)[path_len - 1] = 1.0f; // The direction block root ratio is 100%.
 	for (int i = path_len - 1; i > 0; i--) {
 		DwindleNode *S = (*path)[i];
 		DwindleNode *child = (*path)[i - 1];
@@ -249,7 +253,8 @@ void dwindle_insert(DwindleNode **root, Client *new_c, Client *focused,
 	if (!target)
 		target = dwindle_first_leaf(*root);
 
-	// ================= 保持其他窗口比例缩减逻辑 =================
+	// ================= Keep other windows proportional when shrinking
+	// =================
 	if (config.dwindle_manual_split) {
 		DwindleNode **path = NULL;
 		float *p = NULL;
@@ -303,7 +308,7 @@ void dwindle_insert(DwindleNode **root, Client *new_c, Client *focused,
 		split->second = new_leaf;
 	}
 
-	// 通用逻辑
+	// Generic logic.
 	split->ratio = ratio;
 
 	split->parent = target->parent;
@@ -366,69 +371,69 @@ void dwindle_resize_client(Monitor *m, Client *c) {
 	if (!leaf)
 		return;
 
-	if (!start_drag_window) {
-		start_drag_window = true;
-		dwindle_locked_h_node = NULL;
-		dwindle_locked_v_node = NULL;
-		drag_begin_cursorx = cursor->x;
-		drag_begin_cursory = cursor->y;
+	if (!server.start_drag_window) {
+		server.start_drag_window = true;
+		locked_horizontal_node = NULL;
+		locked_vertical_node = NULL;
+		server.drag_begin_cursor_x = server.cursor->x;
+		server.drag_begin_cursor_y = server.cursor->y;
 		DwindleNode *node = leaf->parent;
 		while (node) {
-			if (node->split_h && !dwindle_locked_h_node) {
-				dwindle_locked_h_node = node;
+			if (node->split_h && !locked_horizontal_node) {
+				locked_horizontal_node = node;
 				node->drag_init_ratio = node->ratio;
 			}
-			if (!node->split_h && !dwindle_locked_v_node) {
-				dwindle_locked_v_node = node;
+			if (!node->split_h && !locked_vertical_node) {
+				locked_vertical_node = node;
 				node->drag_init_ratio = node->ratio;
 			}
-			if (dwindle_locked_h_node && dwindle_locked_v_node)
+			if (locked_horizontal_node && locked_vertical_node)
 				break;
 			node = node->parent;
 		}
 	}
 
-	if (!dwindle_locked_h_node && !dwindle_locked_v_node)
+	if (!locked_horizontal_node && !locked_vertical_node)
 		return;
 
-	if (dwindle_locked_h_node) {
-		float cw = (float)MANGO_MAX(1, dwindle_locked_h_node->container_w);
-		float ox = (float)(cursor->x - drag_begin_cursorx);
+	if (locked_horizontal_node) {
+		float cw = (float)MANGO_MAX(1, locked_horizontal_node->container_w);
+		float ox = (float)(server.cursor->x - server.drag_begin_cursor_x);
 		if (config.dwindle_smart_resize) {
 			/* Move the boundary toward the cursor: invert direction when
 			 * the drag started on the right side of the split line. */
-			float split_x = dwindle_locked_h_node->container_x +
-							cw * dwindle_locked_h_node->drag_init_ratio;
-			if (drag_begin_cursorx >= split_x)
+			float split_x = locked_horizontal_node->container_x +
+							cw * locked_horizontal_node->drag_init_ratio;
+			if (server.drag_begin_cursor_x >= split_x)
 				ox = -ox;
 		}
-		dwindle_locked_h_node->ratio =
-			dwindle_locked_h_node->drag_init_ratio + ox / cw;
-		dwindle_locked_h_node->ratio =
-			CLAMP_FLOAT(dwindle_locked_h_node->ratio, 0.05f, 0.95f);
+		locked_horizontal_node->ratio =
+			locked_horizontal_node->drag_init_ratio + ox / cw;
+		locked_horizontal_node->ratio =
+			CLAMP_FLOAT(locked_horizontal_node->ratio, 0.05f, 0.95f);
 	}
 
-	if (dwindle_locked_v_node) {
-		float ch = (float)MANGO_MAX(1, dwindle_locked_v_node->container_h);
-		float oy = (float)(cursor->y - drag_begin_cursory);
+	if (locked_vertical_node) {
+		float ch = (float)MANGO_MAX(1, locked_vertical_node->container_h);
+		float oy = (float)(server.cursor->y - server.drag_begin_cursor_y);
 		if (config.dwindle_smart_resize) {
 			/* Same logic for the vertical split line. */
-			float split_y = dwindle_locked_v_node->container_y +
-							ch * dwindle_locked_v_node->drag_init_ratio;
-			if (drag_begin_cursory >= split_y)
+			float split_y = locked_vertical_node->container_y +
+							ch * locked_vertical_node->drag_init_ratio;
+			if (server.drag_begin_cursor_y >= split_y)
 				oy = -oy;
 		}
-		dwindle_locked_v_node->ratio =
-			dwindle_locked_v_node->drag_init_ratio + oy / ch;
-		dwindle_locked_v_node->ratio =
-			CLAMP_FLOAT(dwindle_locked_v_node->ratio, 0.05f, 0.95f);
+		locked_vertical_node->ratio =
+			locked_vertical_node->drag_init_ratio + oy / ch;
+		locked_vertical_node->ratio =
+			CLAMP_FLOAT(locked_vertical_node->ratio, 0.05f, 0.95f);
 	}
 
 	int32_t n = m->visible_tiling_clients;
-	int32_t gap_ih = enablegaps ? m->gappih : 0;
-	int32_t gap_iv = enablegaps ? m->gappiv : 0;
-	int32_t gap_oh = enablegaps ? m->gappoh : 0;
-	int32_t gap_ov = enablegaps ? m->gappov : 0;
+	int32_t gap_ih = server.enable_gaps ? m->gappih : 0;
+	int32_t gap_iv = server.enable_gaps ? m->gappiv : 0;
+	int32_t gap_oh = server.enable_gaps ? m->gappoh : 0;
+	int32_t gap_ov = server.enable_gaps ? m->gappov : 0;
 	if (config.smartgaps && n == 1)
 		gap_ih = gap_iv = gap_oh = gap_ov = 0;
 
@@ -473,10 +478,10 @@ void dwindle_resize_client_step(Monitor *m, Client *c, int32_t dx, int32_t dy) {
 	}
 
 	int32_t n_clients = m->visible_tiling_clients;
-	int32_t gap_ih = enablegaps ? m->gappih : 0;
-	int32_t gap_iv = enablegaps ? m->gappiv : 0;
-	int32_t gap_oh = enablegaps ? m->gappoh : 0;
-	int32_t gap_ov = enablegaps ? m->gappov : 0;
+	int32_t gap_ih = server.enable_gaps ? m->gappih : 0;
+	int32_t gap_iv = server.enable_gaps ? m->gappiv : 0;
+	int32_t gap_oh = server.enable_gaps ? m->gappoh : 0;
+	int32_t gap_ov = server.enable_gaps ? m->gappov : 0;
 	if (config.smartgaps && n_clients == 1)
 		gap_ih = gap_iv = gap_oh = gap_ov = 0;
 
@@ -487,7 +492,7 @@ void dwindle_resize_client_step(Monitor *m, Client *c, int32_t dx, int32_t dy) {
 
 void dwindle_remove_client(Client *c) {
 	Monitor *m;
-	wl_list_for_each(m, &mons, link) {
+	wl_list_for_each(m, &server.monitors, link) {
 		for (uint32_t t = 0; t < PERTAG_SLOTS; t++)
 			dwindle_remove(&m->pertag->dwindle_root[t], c);
 	}
@@ -509,8 +514,8 @@ void dwindle_insert_with_config(DwindleNode **root, Client *new_c,
 	double fcy = fg->y + fg->height * 0.5;
 
 	if (config.dwindle_smart_split) {
-		double nx = (cursor->x - fcx) / (fg->width * 0.5);
-		double ny = (cursor->y - fcy) / (fg->height * 0.5);
+		double nx = (server.cursor->x - fcx) / (fg->width * 0.5);
+		double ny = (server.cursor->y - fcy) / (fg->height * 0.5);
 
 		if (fabs(ny) > fabs(nx)) {
 			split_h = false;	 // vertical split
@@ -527,12 +532,12 @@ void dwindle_insert_with_config(DwindleNode **root, Client *new_c,
 
 		if (likely_h) {
 			if (config.dwindle_hsplit == 0)
-				as_first = (cursor->x < fcx);
+				as_first = (server.cursor->x < fcx);
 			else
 				as_first = (config.dwindle_hsplit == 2);
 		} else {
 			if (config.dwindle_vsplit == 0)
-				as_first = (cursor->y < fcy);
+				as_first = (server.cursor->y < fcy);
 			else
 				as_first = (config.dwindle_vsplit == 2);
 		}
@@ -542,13 +547,15 @@ void dwindle_insert_with_config(DwindleNode **root, Client *new_c,
 	if (!target && *root)
 		target = dwindle_first_leaf(*root);
 
-	// 当且仅当 manual_split=1 时，计算精确的 1/N 新节点比例
+	// Computes the exact 1/N ratio for the new node if and only if
+	// manual_split=1.
 	if (config.dwindle_manual_split && target) {
 		split_h = target->custom_leaf_split_h;
 		lock = true;
 		as_first = false;
 
-		// ================= 计算新节点的 1/N 比例 =================
+		// ================= Compute the 1/N ratio of the new node
+		// =================
 		DwindleNode **path = NULL;
 		float *p = NULL;
 		int path_len = get_block_path_and_ratios(target, split_h, &path, &p);
@@ -579,7 +586,7 @@ void dwindle_insert_with_config(DwindleNode **root, Client *new_c,
 		// =========================================================
 	}
 
-	// 调用通用插入函数
+	// Calls the generic insert function.
 	dwindle_insert(root, new_c, focused, ratio, as_first, split_h, lock);
 }
 
@@ -592,10 +599,11 @@ void dwindle(Monitor *m) {
 	DwindleNode **root = &m->pertag->dwindle_root[tag];
 	float ratio = config.dwindle_split_ratio;
 
-	/* 统计全局客户端总数，作为动态数组的安全容量上界 */
+	/* Counts all clients as the safe capacity upper bound for the dynamic
+	 * array. */
 	int32_t total_clients = 0;
 	Client *c;
-	wl_list_for_each(c, &clients, link) total_clients++;
+	wl_list_for_each(c, &server.clients, link) total_clients++;
 
 	Client **vis = calloc(total_clients ? total_clients : 1, sizeof(*vis));
 	DwindleNode **leaves =
@@ -609,12 +617,12 @@ void dwindle(Monitor *m) {
 	}
 
 	int32_t count = 0;
-	wl_list_for_each(c, &clients, link) {
+	wl_list_for_each(c, &server.clients, link) {
 		if (VISIBLEON(c, m) && ISTILED(c))
 			vis[count++] = c;
 	}
 
-	// 清理树中已不存在的客户端
+	// Removes clients that no longer exist from the tree.
 	int32_t lc = 0;
 	int32_t sp = 0;
 	if (*root)
@@ -647,8 +655,9 @@ void dwindle(Monitor *m) {
 		}
 	}
 
-	// 获得焦点客户端，若为空则用第一个可见平铺客户端兜底
-	Client *focused = focustop(m);
+	// Gets the focused client, falling back to the first visible tiled client
+	// if none.
+	Client *focused = client_focus_top(m);
 	if (focused && !dwindle_find_leaf(*root, focused))
 		focused = m->sel;
 
@@ -660,10 +669,10 @@ void dwindle(Monitor *m) {
 			dwindle_insert_with_config(root, vis[i], focused, ratio);
 	}
 
-	int32_t gap_ih = enablegaps ? m->gappih : 0;
-	int32_t gap_iv = enablegaps ? m->gappiv : 0;
-	int32_t gap_oh = enablegaps ? m->gappoh : 0;
-	int32_t gap_ov = enablegaps ? m->gappov : 0;
+	int32_t gap_ih = server.enable_gaps ? m->gappih : 0;
+	int32_t gap_iv = server.enable_gaps ? m->gappiv : 0;
+	int32_t gap_oh = server.enable_gaps ? m->gappoh : 0;
+	int32_t gap_ov = server.enable_gaps ? m->gappov : 0;
 	if (config.smartgaps && n == 1)
 		gap_ih = gap_iv = gap_oh = gap_ov = 0;
 

@@ -3,8 +3,8 @@
 
 #include <wayland-server-core.h>
 
-void destroyinputdevice(struct wl_listener *listener, void *data);
+void handle_input_device_destroy(struct wl_listener *listener, void *data);
 
-void inputdevice(struct wl_listener *listener, void *data);
+void handle_new_input_device(struct wl_listener *listener, void *data);
 
 #endif

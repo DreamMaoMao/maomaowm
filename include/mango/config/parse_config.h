@@ -4,29 +4,25 @@
 #include "mango/mango.h"
 #include <stdbool.h>
 #include <stdint.h>
-// #include <scenefx-0.5/scenefx/types/fx/blur_data.h> // Why has it been added
-// by @Wateir in the first place ?
 #include <xkbcommon/xkbcommon.h>
 
 #include "mango/draw/text-node.h"
 
 /* Macros */
-// 整数版本 - 截断小数部分
+// Integer version: truncates the fractional part.
 #define CLAMP_INT(x, min, max)                                                 \
 	((int32_t)(x) < (int32_t)(min)                                             \
 		 ? (int32_t)(min)                                                      \
 		 : ((int32_t)(x) > (int32_t)(max) ? (int32_t)(max) : (int32_t)(x)))
 
-// 浮点数版本 - 保留小数部分
+// Float version: keeps the fractional part.
 #define CLAMP_FLOAT(x, min, max)                                               \
 	((x) < (min) ? (min) : ((x) > (max) ? (max) : (x)))
 
 /* Variables */
-// 默认跳转标签字符序列（静态数组，未配置 jump_labels 时使用）
+// Default jump-label character sequence (static array, used when jump_labels is
+// not configured).
 extern const char default_jump_labels[];
-extern char **file_paths;
-extern int file_paths_count;
-extern int current_file_index;
 
 /* Enums */
 enum { NUM_TYPE_MINUS, NUM_TYPE_PLUS, NUM_TYPE_DEFAULT };
@@ -165,7 +161,7 @@ typedef struct {
 } ConfigTagRule;
 
 typedef struct {
-	char *layer_name; // 布局名称
+	char *layer_name; // Layout name
 	char *animation_type_open;
 	char *animation_type_close;
 	int32_t shield_when_capture;
@@ -173,12 +169,16 @@ typedef struct {
 } ConfigLayerRule;
 
 typedef struct {
-	/* 匹配条件：name 匹配设备名或 vendor:product:name 标识符；
-	 * type 匹配 keyboard/pointer/touchpad/touch/switch/tablet/pad */
+	/*
+	 * Match condition: name matches the device name or the vendor:product:name
+	 * identifier; type matches
+	 * keyboard/pointer/touchpad/touch/switch/tablet/pad.
+	 */
 	char *name;
 	char type[32];
 
-	/* 键盘参数（-1 / 空串 表示未设置，沿用全局默认） */
+	/* Keyboard parameters (-1 / empty string means unset and falls back to the
+	 * global default). */
 	int32_t repeat_rate;
 	int32_t repeat_delay;
 	char kb_rules[128];
@@ -187,7 +187,7 @@ typedef struct {
 	char kb_variant[128];
 	char kb_options[128];
 
-	/* 鼠标/触摸板 libinput 参数 */
+	/* Mouse / touchpad libinput parameters. */
 	int32_t natural_scrolling;
 	int32_t accel_profile;
 	double accel_speed;
@@ -311,7 +311,7 @@ typedef struct {
 	uint32_t new_is_master;
 	float default_mfact;
 	uint32_t default_nmaster;
-	int32_t tag_num;	// 可配置的 tag 数量,范围 1..tag_num_MAX
+	int32_t tag_num;	// Configurable tag count, range 1..tag_num_MAX.
 	int32_t tag_gather; // Compact tags to remove gaps
 	int32_t center_master_overspread;
 	int32_t center_when_single_stack;
@@ -358,7 +358,7 @@ typedef struct {
 	uint32_t mouse_accel_profile;
 	double mouse_accel_speed;
 	double axis_scroll_factor;
-	/* 鼠标独立参数 */
+	/* Mouse-specific parameters. */
 	int32_t mouse_left_handed;
 	int32_t mouse_middle_button_emulation;
 	uint32_t mouse_scroll_method;
@@ -379,7 +379,7 @@ typedef struct {
 	int32_t tap_and_drag;
 	int32_t drag_lock;
 	uint32_t button_map;
-	/* 触摸板独立参数 */
+	/* Touchpad-specific parameters. */
 	int32_t trackpad_left_handed;
 	int32_t trackpad_middle_button_emulation;
 	int32_t trackpad_disable_while_typing;
@@ -422,20 +422,20 @@ typedef struct {
 	int32_t log_level;
 	uint32_t capslock;
 
-	ConfigTagRule *tag_rules; // 动态数组
-	int32_t tag_rules_count;  // 数量
+	ConfigTagRule *tag_rules; // dynamic array
+	int32_t tag_rules_count;  // count
 
-	ConfigLayerRule *layer_rules; // 动态数组
-	int32_t layer_rules_count;	  // 数量
+	ConfigLayerRule *layer_rules; // dynamic array
+	int32_t layer_rules_count;	  // count
 
 	ConfigWinRule *window_rules;
 	int32_t window_rules_count;
 
-	ConfigMonitorRule *monitor_rules; // 动态数组
-	int32_t monitor_rules_count;	  // 条数
+	ConfigMonitorRule *monitor_rules; // dynamic array
+	int32_t monitor_rules_count;	  // count
 
-	ConfigDeviceRule *device_rules; // 动态数组
-	int32_t device_rules_count;		// 条数
+	ConfigDeviceRule *device_rules; // dynamic array
+	int32_t device_rules_count;		// count
 
 	KeyBinding *key_bindings;
 	int32_t key_bindings_count;
@@ -492,6 +492,9 @@ typedef struct {
 	int32_t hdr_depth;
 } Config;
 
+/* Global config instance. */
+extern Config config;
+
 typedef struct {
 	const char *mode;
 	bool iscommonmode;
@@ -507,7 +510,7 @@ void standalone_keyboard_apply_config(KeyboardGroup *group,
 void create_standalone_keyboard(InputDevice *input_dev,
 								struct wlr_keyboard *keyboard,
 								ConfigDeviceRule *rule);
-void destroy_standalone_keyboard(struct wl_listener *listener, void *data);
+void handle_standalone_keyboard_destroy(struct wl_listener *listener, void *data);
 
 bool apply_rule_to_state(Monitor *m, const ConfigMonitorRule *rule,
 						 struct wlr_output_state *state);

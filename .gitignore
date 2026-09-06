@@ -3,7 +3,7 @@
 /result
 /build
 config.h
-mango
+/mango
 mango.o
 util.o
 *-protocol.h
@@ -12,3 +12,5 @@ util.o
 
 .envrc
 .direnv
+
+			 .envrc.direnv

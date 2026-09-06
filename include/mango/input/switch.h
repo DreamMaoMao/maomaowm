@@ -3,7 +3,7 @@
 
 #include "mango/mango.h"
 
-void switch_toggle(struct wl_listener *listener, void *data);
-void createswitch(struct wlr_switch *switch_device);
+void handle_switch_toggle(struct wl_listener *listener, void *data);
+void switch_create(struct wlr_switch *switch_device);
 
 #endif
