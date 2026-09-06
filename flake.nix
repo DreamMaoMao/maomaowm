@@ -36,7 +36,7 @@
             scenefx = inputs.scenefx.packages.${pkgs.stdenv.hostPlatform.system}.default;
           };
           shellOverride = old: {
-            nativeBuildInputs = old.nativeBuildInputs ++ [ ];
+            nativeBuildInputs = old.nativeBuildInputs ++ [ pkgs.clang-tools ];
             buildInputs = old.buildInputs ++ [ ];
           };
         in
