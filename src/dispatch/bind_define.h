@@ -557,6 +557,18 @@ void killclient(const Arg *arg) {
 		if (arg->i == FORCE) {
 			client_pending_force_kill(c);
 		} else {
+			if (config.smartkill && c->mon && !c->isglobal && !c->isunglobal &&
+				!c->is_in_scratchpad) {
+				uint32_t newtags =
+					c->tags & ~(c->mon->tagset[c->mon->seltags] & TAGMASK);
+				if (newtags && newtags != c->tags) {
+					c->tags = newtags;
+					focusclient(focustop(c->mon), 1);
+					arrange(c->mon, false, false);
+					printstatus(IPC_WATCH_ARRANGGE);
+					return;
+				}
+			}
 			pending_kill_client(c);
 		}
 	}

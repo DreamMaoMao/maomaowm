@@ -95,7 +95,7 @@ bindr=Super,Super_L,spawn,rofi -show run
 
 | Command | Param | Description |
 | :--- | :--- | :--- |
-| `killclient` | `force` | Close the focused window. If `force` is specified, sends `SIGKILL`. |
+| `killclient` | `force` | Close the focused window. If `force` is specified, sends `SIGKILL`. With `smartkill=1`, a window on multiple tags is first detached from all viewed tags and only closed if no other tags remain (`force` always kills). |
 | `togglefloating` | - | Toggle floating state. |
 | `toggle_all_floating` | - | Toggle all visible clients floating state. |
 | `togglefullscreen` | - | Toggle fullscreen. |

@@ -361,6 +361,7 @@ typedef struct {
 
 	uint32_t axis_bind_apply_timeout;
 	uint32_t focus_on_activate;
+	int32_t smartkill;
 	int32_t idleinhibit_ignore_visible;
 	int32_t sloppyfocus;
 	int32_t warpcursor;
@@ -2036,6 +2037,8 @@ bool parse_option(Config *config, char *key, char *value, int line_number) {
 		config->axis_bind_apply_timeout = atoi(value);
 	} else if (strcmp(key, "focus_on_activate") == 0) {
 		config->focus_on_activate = atoi(value);
+	} else if (strcmp(key, "smartkill") == 0) {
+		config->smartkill = atoi(value);
 	} else if (strcmp(key, "numlockon") == 0) {
 		config->numlockon = atoi(value);
 	} else if (strcmp(key, "idleinhibit_ignore_visible") == 0) {
@@ -4357,6 +4360,7 @@ void override_config(void) {
 	config.axis_bind_apply_timeout =
 		CLAMP_INT(config.axis_bind_apply_timeout, 0, 1000);
 	config.focus_on_activate = CLAMP_INT(config.focus_on_activate, 0, 1);
+	config.smartkill = CLAMP_INT(config.smartkill, 0, 1);
 	config.idleinhibit_ignore_visible =
 		CLAMP_INT(config.idleinhibit_ignore_visible, 0, 1);
 	config.sloppyfocus = CLAMP_INT(config.sloppyfocus, 0, 1);
@@ -4516,6 +4520,7 @@ void set_value_default() {
 
 	config.axis_bind_apply_timeout = 100;
 	config.focus_on_activate = 1;
+	config.smartkill = 0;
 	config.new_is_master = 1;
 	config.default_mfact = 0.55f;
 	config.default_nmaster = 1;
