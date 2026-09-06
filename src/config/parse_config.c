@@ -2524,6 +2524,9 @@ int32_t parse_fold_state(const char *str) {
 
 // 辅助函数：检查字符串是否以指定的前缀开头（忽略大小写）
 char *combine_args_until_empty(char *values[], int count) {
+	if (count <= 0)
+		return strdup("");
+
 	// find the first empty string
 	int first_empty = count;
 	for (int i = 0; i < count; i++) {
@@ -2541,15 +2544,15 @@ char *combine_args_until_empty(char *values[], int count) {
 	}
 
 	// 	calculate the total length
-	size_t total_len = 0;
+	size_t total_len = 1; /* NUL terminator */
 	for (int i = 0; i < first_empty; i++) {
 		total_len += strlen(values[i]);
 	}
 	// 	plus the number of commas (first_empty-1 commas)
-	total_len += (first_empty - 1);
+	total_len += (size_t)(first_empty - 1);
 
 	// 	allocate memory and concatenate
-	char *combined = malloc(total_len + 1);
+	char *combined = malloc(total_len);
 	if (combined == NULL) {
 		return strdup("");
 	}
