@@ -77,6 +77,7 @@ void smart_resize_window(const Arg *arg);
 void center_window(const Arg *arg);
 void bind_to_view(const Arg *arg);
 void toggle_tag(const Arg *arg);
+void back_n_fourth(const Arg *arg);
 void toggle_view(const Arg *arg);
 void tag(const Arg *arg);
 void combo_view(const Arg *arg);

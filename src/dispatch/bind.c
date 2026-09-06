@@ -1911,6 +1911,27 @@ void toggle_tag(const Arg *arg) {
 	return;
 }
 
+void back_n_fourth(const Arg *arg) {
+	if (!server.selected_monitor || server.selected_monitor->isoverview)
+		return;
+
+	Monitor *m = server.selected_monitor;
+
+	uint32_t prev_set = m->tagset[m->seltags ^ 1] & TAGMASK;
+	uint32_t target =
+		prev_set ? prev_set
+				 : (m->pertag->prevtag ? (1u << (m->pertag->prevtag - 1)) : 0);
+
+	if (!target)
+		return;
+	// nothing to toggle
+	if (target == (m->tagset[m->seltags] & TAGMASK))
+		return;
+
+	client_switch_view(&(Arg){.ui = target}, true);
+	return;
+}
+
 void toggle_view(const Arg *arg) {
 	if (!server.selected_monitor)
 		return;

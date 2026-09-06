@@ -4778,6 +4778,8 @@ FuncType parse_func_name(char *func_name, Arg *arg, char *arg_value,
 	} else if (strcmp(func_name, "toggletag") == 0) {
 		func = toggle_tag;
 		(*arg).ui = parse_tag_mask(arg_value);
+	} else if (strcmp(func_name, "back_n_fourth") == 0) {
+		func = back_n_fourth;
 	} else if (strcmp(func_name, "toggleview") == 0) {
 		func = toggle_view;
 		(*arg).ui = parse_tag_mask(arg_value);
