@@ -174,8 +174,8 @@ enum { VERTICAL, HORIZONTAL };
 enum { SWIPE_UP, SWIPE_DOWN, SWIPE_LEFT, SWIPE_RIGHT };
 enum { CurNormal, CurPressed, CurMove, CurResize }; /* cursor */
 enum {
-    XDGShell,
-    LayerShell,
+	XDGShell,
+	LayerShell,
 	X11,
 	Snapshot,
 	XdgPopup,
@@ -195,10 +195,20 @@ enum {
 #endif
 
 enum {
-    LyrBg, LyrBottom, LyrTile, LyrMaximize, LyrTop,
-    LyrSpecialDim, LyrSpecialTile, LyrSpecialMaximize, LyrSpecialTop,
-    LyrFadeOut, LyrOverlay, LyrIMPopup, LyrBlock,
-    NUM_LAYERS
+	LyrBg,
+	LyrBottom,
+	LyrTile,
+	LyrMaximize,
+	LyrTop,
+	LyrSpecialDim,
+	LyrSpecialTile,
+	LyrSpecialMaximize,
+	LyrSpecialTop,
+	LyrFadeOut,
+	LyrOverlay,
+	LyrIMPopup,
+	LyrBlock,
+	NUM_LAYERS
 };
 
 enum { UP, DOWN, LEFT, RIGHT, UNDIR }; /* smartmovewin */
@@ -210,7 +220,7 @@ enum { STATE_UNSPECIFIED = 0, STATE_ENABLED, STATE_DISABLED };
 enum { FORCE, UNFORCE };
 
 enum tearing_mode {
-    TEARING_DISABLED = 0,
+	TEARING_DISABLED = 0,
 	TEARING_ENABLED,
 	TEARING_FULLSCREEN_ONLY,
 };
@@ -686,10 +696,8 @@ typedef struct {
 	struct wl_listener destroy;
 } SnapshotMetadata;
 
-
 // Skipping functions
 // TODO Rearrenging correctly
-
 
 struct LastCursor {
 	enum wp_cursor_shape_device_v1_shape shape;
@@ -721,7 +729,6 @@ struct Pertag {
 	struct TagScrollerState *scroller_state[PERTAG_SLOTS];
 };
 
-
 // Functions declaration of mango.c
 
 void createnotify(struct wl_listener *listener, void *data);
@@ -742,8 +749,8 @@ void update_scroller_state(Monitor *m);
 
 void set_activation_env();
 
-void run (char * startup_cmd, int readiness_fd);
+void run(char *startup_cmd, int readiness_fd);
 
-int32_t main(int32_t argc, char * argv[]);
+int32_t main(int32_t argc, char *argv[]);
 
 #endif
