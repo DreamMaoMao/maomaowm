@@ -8,9 +8,6 @@
 
 #define ARRAY_SIZE(arr) (sizeof(arr) / sizeof((arr)[0]))
 
-extern uint32_t output_formats_8bit[10];
-extern uint32_t output_formats_10bit[8];
-
 /* Declarations */
 
 bool output_set_render_format(Monitor *m, uint32_t candidates[], size_t count,
@@ -25,6 +22,6 @@ void output_state_setup_hdr(Monitor *m, bool silent,
 							struct wlr_output_state *state);
 /* togglehdr[,on|off|toggle][,<monitor name>|all] -- apply to one output */
 bool togglehdr_output(Monitor *target, bool want);
-void togglehdr(const Arg *arg);
+void toggle_hdr(const Arg *arg);
 
 #endif

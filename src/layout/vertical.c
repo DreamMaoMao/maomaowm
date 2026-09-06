@@ -1,10 +1,10 @@
 #include "mango/layout/vertical.h"
-#include "mango/common/globals.h"
+#include "mango/common/server.h"
 #include "mango/manage/client.h"
 #include "mango/manage/monitor.h"
 
 void vertical_tile(Monitor *m) {
-	int32_t i, n = 0, w, r, ie = enablegaps, mh, mx, tx;
+	int32_t i, n = 0, w, r, ie = server.enable_gaps, mh, mx, tx;
 	Client *c = NULL;
 	Client *fc = NULL;
 	double mfact = 0;
@@ -19,10 +19,10 @@ void vertical_tile(Monitor *m) {
 	if (n == 0)
 		return;
 
-	int32_t cur_gapih = enablegaps ? m->gappih : 0;
-	int32_t cur_gapiv = enablegaps ? m->gappiv : 0;
-	int32_t cur_gapoh = enablegaps ? m->gappoh : 0;
-	int32_t cur_gapov = enablegaps ? m->gappov : 0;
+	int32_t cur_gapih = server.enable_gaps ? m->gappih : 0;
+	int32_t cur_gapiv = server.enable_gaps ? m->gappiv : 0;
+	int32_t cur_gapoh = server.enable_gaps ? m->gappoh : 0;
+	int32_t cur_gapov = server.enable_gaps ? m->gappov : 0;
 
 	cur_gapih =
 		config.smartgaps && m->visible_fake_tiling_clients == 1 ? 0 : cur_gapih;
@@ -33,7 +33,7 @@ void vertical_tile(Monitor *m) {
 	cur_gapov =
 		config.smartgaps && m->visible_fake_tiling_clients == 1 ? 0 : cur_gapov;
 
-	wl_list_for_each(fc, &clients, link) {
+	wl_list_for_each(fc, &server.clients, link) {
 		if (VISIBLEON(fc, m) && ISFAKETILED(fc))
 			break;
 	}
@@ -59,7 +59,7 @@ void vertical_tile(Monitor *m) {
 		(m->w.width - 2 * cur_gapoh - cur_gapih * ie * (stack_num - 1));
 	float slave_surplus_ratio = 1.0;
 
-	wl_list_for_each(c, &clients, link) {
+	wl_list_for_each(c, &server.clients, link) {
 		if (!VISIBLEON(c, m) || !ISFAKETILED(c))
 			continue;
 		if (i < m->pertag->nmasters[get_mon_curtag(m)]) {
@@ -84,7 +84,8 @@ void vertical_tile(Monitor *m) {
 												.width = w,
 												.height = mh - cur_gapiv * ie},
 							   0);
-			mx += w + cur_gapih * ie; // 使用理论宽度累加
+			mx +=
+				w + cur_gapih * ie; // Accumulates using the theoretical width.
 		} else {
 			r = n - i;
 			if (c->stack_inner_per > 0.0f) {
@@ -108,7 +109,8 @@ void vertical_tile(Monitor *m) {
 								 .width = w,
 								 .height = m->w.height - mh - 2 * cur_gapov},
 				0);
-			tx += w + cur_gapih * ie; // 使用理论宽度累加
+			tx +=
+				w + cur_gapih * ie; // Accumulates using the theoretical width.
 		}
 		i++;
 	}
@@ -122,9 +124,9 @@ void vertical_deck(Monitor *m) {
 	float mfact;
 	uint32_t nmasters = m->pertag->nmasters[get_mon_curtag(m)];
 
-	int32_t cur_gappiv = enablegaps ? m->gappiv : 0;
-	int32_t cur_gappoh = enablegaps ? m->gappoh : 0;
-	int32_t cur_gappov = enablegaps ? m->gappov : 0;
+	int32_t cur_gappiv = server.enable_gaps ? m->gappiv : 0;
+	int32_t cur_gappoh = server.enable_gaps ? m->gappoh : 0;
+	int32_t cur_gappov = server.enable_gaps ? m->gappov : 0;
 
 	cur_gappiv = config.smartgaps && m->visible_fake_tiling_clients == 1
 					 ? 0
@@ -141,7 +143,7 @@ void vertical_deck(Monitor *m) {
 	if (n == 0)
 		return;
 
-	wl_list_for_each(fc, &clients, link) {
+	wl_list_for_each(fc, &server.clients, link) {
 		if (VISIBLEON(fc, m) && ISFAKETILED(fc))
 			break;
 	}
@@ -155,7 +157,7 @@ void vertical_deck(Monitor *m) {
 		mh = m->w.height - 2 * cur_gappov;
 
 	i = mx = 0;
-	wl_list_for_each(c, &clients, link) {
+	wl_list_for_each(c, &server.clients, link) {
 		if (!VISIBLEON(c, m) || !ISFAKETILED(c))
 			continue;
 		if (i < nmasters) {
@@ -179,7 +181,7 @@ void vertical_deck(Monitor *m) {
 								 .height = m->w.height - mh - 2 * cur_gappov -
 										   cur_gappiv},
 				0);
-			if (c == focustop(m))
+			if (c == client_focus_top(m))
 				wlr_scene_node_raise_to_top(&c->scene->node);
 		}
 		i++;
@@ -191,8 +193,8 @@ void vertical_grid(Monitor *m) {
 	int32_t cw, ch;
 	int32_t rows, cols, overrows;
 	Client *c = NULL;
-	int32_t target_gappo = enablegaps ? config.gappov : 0;
-	int32_t target_gappi = enablegaps ? config.gappiv : 0;
+	int32_t target_gappo = server.enable_gaps ? config.gappov : 0;
+	int32_t target_gappi = server.enable_gaps ? config.gappiv : 0;
 	float single_width_ratio = 0.9;
 	float single_height_ratio = 0.9;
 	struct wlr_box target_geom;
@@ -202,7 +204,7 @@ void vertical_grid(Monitor *m) {
 		return;
 
 	if (n == 1) {
-		wl_list_for_each(c, &clients, link) {
+		wl_list_for_each(c, &server.clients, link) {
 			if (c->mon != m)
 				continue;
 			if (VISIBLEON(c, m) && !c->isunglobal &&
@@ -221,9 +223,9 @@ void vertical_grid(Monitor *m) {
 
 	if (n == 2) {
 		float row_pers[2] = {1.0f, 1.0f};
-		// 先提取这两个窗口现有的行比例
+		// First extracts the existing row ratios of these two windows.
 		i = 0;
-		wl_list_for_each(c, &clients, link) {
+		wl_list_for_each(c, &server.clients, link) {
 			if (c->mon != m)
 				continue;
 			if (VISIBLEON(c, m) && !c->isunglobal &&
@@ -237,10 +239,11 @@ void vertical_grid(Monitor *m) {
 
 		float sum_row = row_pers[0] + row_pers[1];
 		float avail_h = m->w.height - 2 * target_gappo - target_gappi;
-		cw = (m->w.width - 2 * target_gappo) * 0.65; // 依然保持 0.65 的美观宽度
+		cw = (m->w.width - 2 * target_gappo) *
+			 0.65; // Keeps the pleasing width of 0.65.
 
 		i = 0;
-		wl_list_for_each(c, &clients, link) {
+		wl_list_for_each(c, &server.clients, link) {
 			if (c->mon != m)
 				continue;
 			if (VISIBLEON(c, m) && !c->isunglobal &&
@@ -250,14 +253,16 @@ void vertical_grid(Monitor *m) {
 				c->grid_col_per = 1.0f;
 				c->grid_row_per = row_pers[i];
 
-				// 根据分配的权重动态计算当前窗口的高度
+				// Computes the current window height dynamically from the
+				// assigned weight.
 				ch = avail_h * (row_pers[i] / sum_row);
 
 				target_geom.x = m->w.x + (m->w.width - cw) / 2 + target_gappo;
 				if (i == 0) {
 					target_geom.y = m->w.y + target_gappo;
 				} else if (i == 1) {
-					// 第二个窗口的 Y 坐标紧跟第一个窗口下面
+					// The second window Y coordinate follows right after the
+					// first window.
 					float ch0 = avail_h * (row_pers[0] / sum_row);
 					target_geom.y = m->w.y + target_gappo + ch0 + target_gappi;
 				}
@@ -289,7 +294,7 @@ void vertical_grid(Monitor *m) {
 		row_pers[i] = 1.0f;
 
 	i = 0;
-	wl_list_for_each(c, &clients, link) {
+	wl_list_for_each(c, &server.clients, link) {
 		if (c->mon != m)
 			continue;
 		if (VISIBLEON(c, m) && !c->isunglobal &&
@@ -316,7 +321,7 @@ void vertical_grid(Monitor *m) {
 	float avail_h = m->w.height - 2 * target_gappo - (rows - 1) * target_gappi;
 
 	i = 0;
-	wl_list_for_each(c, &clients, link) {
+	wl_list_for_each(c, &server.clients, link) {
 		if (c->mon != m)
 			continue;
 		if (VISIBLEON(c, m) && !c->isunglobal &&
@@ -379,10 +384,10 @@ void vertical_fair(Monitor *m) {
 	if (n == 0)
 		return;
 
-	int32_t cur_gappiv = enablegaps ? m->gappiv : 0;
-	int32_t cur_gappih = enablegaps ? m->gappih : 0;
-	int32_t cur_gappov = enablegaps ? m->gappov : 0;
-	int32_t cur_gappoh = enablegaps ? m->gappoh : 0;
+	int32_t cur_gappiv = server.enable_gaps ? m->gappiv : 0;
+	int32_t cur_gappih = server.enable_gaps ? m->gappih : 0;
+	int32_t cur_gappov = server.enable_gaps ? m->gappov : 0;
+	int32_t cur_gappoh = server.enable_gaps ? m->gappoh : 0;
 
 	if (config.smartgaps && n == 1) {
 		cur_gappiv = cur_gappih = cur_gappov = cur_gappoh = 0;
@@ -423,7 +428,7 @@ void vertical_fair(Monitor *m) {
 		return;
 	}
 	int32_t arr_idx = 0;
-	wl_list_for_each(c, &clients, link) {
+	wl_list_for_each(c, &server.clients, link) {
 		if (VISIBLEON(c, m) && ISFAKETILED(c)) {
 			arr[arr_idx++] = c;
 			if (arr_idx >= n)

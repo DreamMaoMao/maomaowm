@@ -4,8 +4,10 @@
 
 #define MODKEY WLR_MODIFIER_ALT
 
-/* 最大可配置的 tag 数量：决定静态数组大小（Pertag 等），同时受 uint32_t
- * 位宽限制 */
+/*
+ * Maximum configurable tag count: determines static array sizes (e.g. Pertag)
+ * and is limited by the uint32_t bit width.
+ */
 #define tag_num_MAX 31
 extern const char *tags[tag_num_MAX];
 extern const struct xkb_rule_names xkb_fallback_rules;

@@ -1,18 +1,13 @@
 #include "mango/ext-protocol/text-input.h"
-#include "mango/mango.h"
-#include "mango/common/globals.h"
+#include "mango/common/server.h"
 #include "mango/manage/monitor.h"
 #include "mango/common/util.h"
 
 #include <assert.h>
 
-struct wlr_input_method_manager_v2 *input_method_manager;
-struct wlr_text_input_manager_v3 *text_input_manager;
-struct mango_input_method_relay *mango_input_method_relay;
-
 Monitor *output_from_wlr_output(struct wlr_output *wlr_output) {
 	Monitor *m = NULL;
-	wl_list_for_each(m, &mons, link) {
+	wl_list_for_each(m, &server.monitors, link) {
 		if (m->wlr_output == wlr_output) {
 			return m;
 		}
@@ -36,7 +31,7 @@ bool is_keyboard_emulated_by_input_method(
 struct wlr_input_method_keyboard_grab_v2 *
 get_keyboard_grab(KeyboardGroup *keyboard) {
 	struct wlr_input_method_v2 *input_method =
-		mango_input_method_relay->input_method;
+		server.input_method_relay->input_method;
 	if (!input_method || !input_method->keyboard_grab) {
 		return NULL;
 	}
@@ -178,7 +173,8 @@ void update_popup_position(struct mango_input_method_popup *popup) {
 	if (!output_is_usable(output)) {
 		return;
 	}
-	wlr_output_layout_get_box(output_layout, output->wlr_output, &output_box);
+	wlr_output_layout_get_box(server.output_layout, output->wlr_output,
+							  &output_box);
 
 	pointer_rules = (struct wlr_xdg_positioner_rules){
 		.anchor_rect = cursor_rect,
@@ -263,7 +259,7 @@ void handle_input_method_grab_keyboard(struct wl_listener *listener,
 		wl_container_of(listener, relay, input_method_grab_keyboard);
 	struct wlr_input_method_keyboard_grab_v2 *keyboard_grab = data;
 
-	struct wlr_keyboard *active_keyboard = wlr_seat_get_keyboard(seat);
+	struct wlr_keyboard *active_keyboard = wlr_seat_get_keyboard(server.seat);
 
 	if (!is_keyboard_emulated_by_input_method(active_keyboard,
 											  relay->input_method)) {
@@ -320,7 +316,7 @@ void handle_input_method_new_popup_surface(struct wl_listener *listener,
 	wl_signal_add(&popup->popup_surface->surface->events.commit,
 				  &popup->commit);
 
-	popup->tree = wlr_scene_tree_create(layers[LyrIMPopup]);
+	popup->tree = wlr_scene_tree_create(server.layers[LyrIMPopup]);
 	popup->scene_surface = wlr_scene_subsurface_tree_create(
 		popup->tree, popup->popup_surface->surface);
 
@@ -335,7 +331,7 @@ void handle_new_input_method(struct wl_listener *listener, void *data) {
 	struct mango_input_method_relay *relay =
 		wl_container_of(listener, relay, new_input_method);
 	struct wlr_input_method_v2 *input_method = data;
-	if (seat != input_method->seat) {
+	if (server.seat != input_method->seat) {
 		return;
 	}
 
@@ -435,7 +431,7 @@ void handle_new_text_input(struct wl_listener *listener, void *data) {
 	struct wlr_text_input_v3 *wlr_text_input = data;
 	struct text_input *text_input = ecalloc(1, sizeof(struct text_input));
 
-	if (seat != wlr_text_input->seat) {
+	if (server.seat != wlr_text_input->seat) {
 		return;
 	}
 
@@ -470,14 +466,14 @@ struct mango_input_method_relay *mango_im_relay_create() {
 		ecalloc(1, sizeof(struct mango_input_method_relay));
 	wl_list_init(&relay->text_inputs);
 	wl_list_init(&relay->popups);
-	relay->popup_tree = wlr_scene_tree_create(&scene->tree);
+	relay->popup_tree = wlr_scene_tree_create(&server.scene->tree);
 
 	relay->new_text_input.notify = handle_new_text_input;
-	wl_signal_add(&text_input_manager->events.new_text_input,
+	wl_signal_add(&server.text_input_manager->events.new_text_input,
 				  &relay->new_text_input);
 
 	relay->new_input_method.notify = handle_new_input_method;
-	wl_signal_add(&input_method_manager->events.new_input_method,
+	wl_signal_add(&server.input_method_manager->events.new_input_method,
 				  &relay->new_input_method);
 
 	relay->focused_surface_destroy.notify = handle_focused_surface_destroy;
