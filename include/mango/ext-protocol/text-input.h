@@ -52,11 +52,8 @@ struct text_input {
 	struct wl_listener destroy;
 };
 
-extern struct wlr_input_method_manager_v2 *input_method_manager;
-extern struct wlr_text_input_manager_v3 *text_input_manager;
-extern struct mango_input_method_relay *mango_input_method_relay;
-
-/*-------------------封装给外部调用-------------------------------*/
+/* ------------------- API for external callers -------------------------------
+ */
 bool mango_im_keyboard_grab_forward_key(KeyboardGroup *keyboard,
 										struct wlr_keyboard_key_event *event);
 
@@ -70,7 +67,7 @@ void mango_im_relay_set_focus(struct mango_input_method_relay *relay,
 							  struct wlr_surface *surface);
 /*----------------------------------------------------------*/
 
-/*------------------协议内部代码------------------------------*/
+/* ------------------ Protocol internal code ------------------------------ */
 Monitor *output_from_wlr_output(struct wlr_output *wlr_output);
 bool output_is_usable(Monitor *m);
 bool is_keyboard_emulated_by_input_method(

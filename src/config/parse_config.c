@@ -7,10 +7,9 @@
 #include <stdint.h>
 #include <string.h>
 
-#include "mango/mango.h"
 #include "mango/common/log.h"
 #include "mango/dispatch/bind.h"
-#include "mango/common/globals.h"
+#include "mango/common/server.h"
 #include "mango/ext-protocol/hdr.h"
 #include "mango/layout/arrange.h"
 #include "mango/layout/layout.h"
@@ -26,20 +25,32 @@
 #define SYSCONFDIR "/etc"
 #endif
 
-// 修改后的宏定义
+/* Global config instance. */
+Config config;
+
+/* Default jump-label character sequence (used when jump_labels is not
+ * configured). */
+const char default_jump_labels[] = "HJKLASDFGQWERTYUIOPZXCVBNM";
+
+/* Config file loading state. */
+static char **file_paths = NULL;
+static int file_paths_count = 0;
+static int current_file_index = -1;
+
+// Macro definitions.
 #define CHVT(n)                                                                \
 	{                                                                          \
 		WLR_MODIFIER_CTRL | WLR_MODIFIER_ALT,                                  \
-			{.keysym = XKB_KEY_XF86Switch_VT_##n, .type = KEY_TYPE_SYM}, chvt, \
-		{                                                                      \
+			{.keysym = XKB_KEY_XF86Switch_VT_##n, .type = KEY_TYPE_SYM},       \
+			change_vt, {                                                       \
 			.ui = (n)                                                          \
 		}                                                                      \
 	}
 
-// 默认按键绑定数组
-KeyBinding default_key_bindings[] = {CHVT(1), CHVT(2),	CHVT(3),  CHVT(4),
-									 CHVT(5), CHVT(6),	CHVT(7),  CHVT(8),
-									 CHVT(9), CHVT(10), CHVT(11), CHVT(12)};
+// Default key binding array.
+static KeyBinding default_key_bindings[] = {
+	CHVT(1), CHVT(2), CHVT(3), CHVT(4),	 CHVT(5),  CHVT(6),
+	CHVT(7), CHVT(8), CHVT(9), CHVT(10), CHVT(11), CHVT(12)};
 
 bool apply_rule_to_state(Monitor *m, const ConfigMonitorRule *rule,
 						 struct wlr_output_state *state);
@@ -103,7 +114,7 @@ int32_t parse_double_array(const char *input, double *output,
 	char *token;
 	int32_t count = 0;
 
-	// 先清空整个数组
+	// Clear the whole array first.
 	memset(output, 0, max_count * sizeof(double));
 
 	token = strtok(dup, ",");
@@ -125,8 +136,8 @@ int32_t parse_double_array(const char *input, double *output,
 			free(dup);
 			return -1;
 		}
-		output[count] = val; // 赋值到当前count位置
-		count++;			 // 然后才自增
+		output[count] = val; // Assign at the current count position.
+		count++;			 // Then increment.
 		token = strtok(NULL, ",");
 	}
 
@@ -134,12 +145,12 @@ int32_t parse_double_array(const char *input, double *output,
 	return count;
 }
 
-// 清理字符串中的不可见字符（包括 \r, \n, 空格等）
+// Removes invisible characters from the string (including \r, \n, spaces).
 char *sanitize_string(char *str) {
-	// 去除首部不可见字符
+	// Removes leading invisible characters.
 	while (*str != '\0' && !isprint((unsigned char)*str))
 		str++;
-	// 去除尾部不可见字符
+	// Removes trailing invisible characters.
 	char *end = str + strlen(str) - 1;
 	while (end > str && !isprint((unsigned char)*end))
 		end--;
@@ -147,16 +158,16 @@ char *sanitize_string(char *str) {
 	return str;
 }
 
-// 解析bind组合字符串
+// Parses the bind combination string.
 void parse_bind_flags(const char *str, KeyBinding *kb) {
-	// 检查是否以"bind"开头
+	// Checks whether it starts with "bind".
 	if (strncmp(str, "bind", 4) != 0) {
 		return;
 	}
 
-	const char *suffix = str + 4; // 跳过"bind"
+	const char *suffix = str + 4; // Skips "bind".
 
-	// 遍历后缀字符
+	// Walks the remaining suffix characters.
 	for (int32_t i = 0; suffix[i] != '\0'; i++) {
 		switch (suffix[i]) {
 		case 's':
@@ -197,7 +208,7 @@ void set_binding_keymode(Config *config, char mode[28], bool *iscommonmode,
 }
 
 int32_t parse_circle_direction(const char *str) {
-	// 将输入字符串转换为小写
+	// Converts the input string to lowercase.
 
 	char lowerStr[10];
 	int32_t i = 0;
@@ -207,7 +218,7 @@ int32_t parse_circle_direction(const char *str) {
 	}
 	lowerStr[i] = '\0';
 
-	// 根据转换后的小写字符串返回对应的枚举值
+	// Returns the matching enum value from the lowercased string.
 	if (strcmp(lowerStr, "next") == 0) {
 		return NEXT;
 	} else {
@@ -216,7 +227,7 @@ int32_t parse_circle_direction(const char *str) {
 }
 
 int32_t parse_direction(const char *str) {
-	// 将输入字符串转换为小写
+	// Converts the input string to lowercase.
 	char lowerStr[10];
 	int32_t i = 0;
 	while (str[i] && i < 9) {
@@ -225,7 +236,7 @@ int32_t parse_direction(const char *str) {
 	}
 	lowerStr[i] = '\0';
 
-	// 根据转换后的小写字符串返回对应的枚举值
+	// Returns the matching enum value from the lowercased string.
 	if (strcmp(lowerStr, "up") == 0) {
 		return UP;
 	} else if (strcmp(lowerStr, "down") == 0) {
@@ -248,7 +259,8 @@ int64_t parse_color(const char *hex_str) {
 	return hex_num;
 }
 
-// 辅助函数：检查字符串是否以指定的前缀开头（忽略大小写）
+// Helper: checks whether a string starts with the given prefix
+// (case-insensitive).
 bool starts_with_ignore_case(const char *str, const char *prefix) {
 	while (*prefix) {
 		if (tolower(*str) != tolower(*prefix)) {
@@ -260,7 +272,7 @@ bool starts_with_ignore_case(const char *str, const char *prefix) {
 	return true;
 }
 
-// 定义辅助函数：在 keymap 中查找 keysym 对应的多个 keycode
+// Helper: finds all keycodes for a keysym in the keymap.
 void cleanup_config_keymap(void) {
 	if (config.keymap != NULL) {
 		xkb_keymap_unref(config.keymap);
@@ -273,7 +285,7 @@ void cleanup_config_keymap(void) {
 }
 
 void create_config_keymap(void) {
-	// 初始化 xkb 上下文和 keymap
+	// Initializes the xkb context and keymap.
 
 	if (config.ctx == NULL) {
 		config.ctx = xkb_context_new(XKB_CONTEXT_NO_FLAGS);
@@ -578,16 +590,17 @@ bool parse_option(Config *config, char *key, char *value, int line_number) {
 				sizeof(config->xkb_rules_options) - 1);
 		config->xkb_rules_options[sizeof(config->xkb_rules_options) - 1] = '\0';
 	} else if (strcmp(key, "scroller_proportion_preset") == 0) {
-		// 1. 统计 value 中有多少个逗号，确定需要解析的浮点数个数
-		int32_t count = 0; // 初始化为 0
+		// 1. Counts commas in value to determine how many floats to parse.
+		int32_t count = 0; // Initialized to 0.
 		for (const char *p = value; *p; p++) {
 			if (*p == ',')
 				count++;
 		}
-		int32_t float_count = count + 1; // 浮点数的数量是逗号数量加 1
+		int32_t float_count = count + 1; // Float count is comma count + 1.
 
-		// 2. 动态分配内存，存储浮点数
-		// 先释放旧的内存（防止重复设置该选项时内存泄漏）
+		// 2. Allocates memory for the floats.
+		// Frees the old memory first (avoids leaks when the option is set
+		// repeatedly).
 		if (config->scroller_proportion_preset) {
 			free(config->scroller_proportion_preset);
 			config->scroller_proportion_preset = NULL;
@@ -602,9 +615,9 @@ bool parse_option(Config *config, char *key, char *value, int line_number) {
 			return false;
 		}
 
-		// 3. 解析 value 中的浮点数
-		char *value_copy =
-			strdup(value); // 复制 value，因为 strtok 会修改原字符串
+		// 3. Parses the floats in value.
+		char *value_copy = strdup(
+			value); // Copies value because strtok modifies the original string.
 		char *token = strtok(value_copy, ",");
 		int32_t i = 0;
 		float value_set;
@@ -631,33 +644,36 @@ bool parse_option(Config *config, char *key, char *value, int line_number) {
 			i++;
 		}
 
-		// 4. 检查解析的浮点数数量是否匹配
+		// 4. Checks that the parsed float count matches.
 		if (i != float_count) {
 			mango_error(false, WLR_ERROR,
 						"Invalid "
 						"scroller_proportion_preset format: %s\n",
 						value);
 			free(value_copy);
-			free(config->scroller_proportion_preset);  // 释放已分配的内存
-			config->scroller_proportion_preset = NULL; // 防止野指针
+			free(config->scroller_proportion_preset); // Frees the allocated
+													  // memory.
+			config->scroller_proportion_preset =
+				NULL; // Prevents a dangling pointer.
 			config->scroller_proportion_preset_count = 0;
 			return false;
 		}
 		config->scroller_proportion_preset_count = float_count;
 
-		// 5. 释放临时复制的字符串
+		// 5. Frees the temporary string copy.
 		free(value_copy);
 	} else if (strcmp(key, "circle_layout") == 0) {
-		// 1. 统计 value 中有多少个逗号，确定需要解析的字符串个数
-		int32_t count = 0; // 初始化为 0
+		// 1. Counts commas in value to determine how many strings to parse.
+		int32_t count = 0; // Initialized to 0.
 		for (const char *p = value; *p; p++) {
 			if (*p == ',')
 				count++;
 		}
-		int32_t string_count = count + 1; // 字符串的数量是逗号数量加 1
+		int32_t string_count = count + 1; // String count is comma count + 1.
 
-		// 2. 动态分配内存，存储字符串指针
-		// 先释放旧的内存（防止重复设置该选项时内存泄漏）
+		// 2. Allocates memory for the string pointers.
+		// Frees the old memory first (avoids leaks when the option is set
+		// repeatedly).
 		if (config->circle_layout) {
 			for (int32_t j = 0; j < config->circle_layout_count; j++) {
 				if (config->circle_layout[j])
@@ -676,14 +692,14 @@ bool parse_option(Config *config, char *key, char *value, int line_number) {
 		}
 		memset(config->circle_layout, 0, string_count * sizeof(char *));
 
-		// 3. 解析 value 中的字符串
-		char *value_copy =
-			strdup(value); // 复制 value，因为 strtok 会修改原字符串
+		// 3. Parses the strings in value.
+		char *value_copy = strdup(
+			value); // Copies value because strtok modifies the original string.
 		char *token = strtok(value_copy, ",");
 		int32_t i = 0;
 		char *cleaned_token;
 		while (token != NULL && i < string_count) {
-			// 为每个字符串分配内存并复制内容
+			// Allocates memory for each string and copies the content.
 			cleaned_token = sanitize_string(token);
 			config->circle_layout[i] = strdup(cleaned_token);
 			if (!config->circle_layout[i]) {
@@ -692,13 +708,13 @@ bool parse_option(Config *config, char *key, char *value, int line_number) {
 							"failed for "
 							"string: %s\n",
 							token);
-				// 释放之前分配的内存
+				// Frees previously allocated memory.
 				for (int32_t j = 0; j < i; j++) {
 					free(config->circle_layout[j]);
 				}
 				free(config->circle_layout);
 				free(value_copy);
-				config->circle_layout = NULL; // 防止野指针
+				config->circle_layout = NULL; // Prevents a dangling pointer.
 				config->circle_layout_count = 0;
 				return false;
 			}
@@ -706,25 +722,25 @@ bool parse_option(Config *config, char *key, char *value, int line_number) {
 			i++;
 		}
 
-		// 4. 检查解析的字符串数量是否匹配
+		// 4. Checks that the parsed string count matches.
 		if (i != string_count) {
 			mango_error(false, WLR_ERROR,
 						"Invalid circle_layout "
 						"format: %s\n",
 						value);
-			// 释放之前分配的内存
+			// Frees previously allocated memory.
 			for (int32_t j = 0; j < i; j++) {
 				free(config->circle_layout[j]);
 			}
 			free(config->circle_layout);
 			free(value_copy);
-			config->circle_layout = NULL; // 防止野指针
+			config->circle_layout = NULL; // Prevents a dangling pointer.
 			config->circle_layout_count = 0;
 			return false;
 		}
 		config->circle_layout_count = string_count;
 
-		// 5. 释放临时复制的字符串
+		// 5. Frees the temporary string copy.
 		free(value_copy);
 	} else if (strcmp(key, "new_is_master") == 0) {
 		config->new_is_master = atoi(value);
@@ -1180,7 +1196,7 @@ bool parse_option(Config *config, char *key, char *value, int line_number) {
 			&config->monitor_rules[config->monitor_rules_count];
 		memset(rule, 0, sizeof(ConfigMonitorRule));
 
-		// 设置默认值
+		// Sets default values.
 		rule->name = NULL;
 		rule->make = NULL;
 		rule->model = NULL;
@@ -1294,7 +1310,7 @@ bool parse_option(Config *config, char *key, char *value, int line_number) {
 		ConfigTagRule *rule = &config->tag_rules[config->tag_rules_count];
 		memset(rule, 0, sizeof(ConfigTagRule));
 
-		// 设置默认值
+		// Sets default values.
 		rule->id = 0;
 		rule->id_wildcard = false;
 		rule->layout_name = NULL;
@@ -1390,7 +1406,7 @@ bool parse_option(Config *config, char *key, char *value, int line_number) {
 		ConfigLayerRule *rule = &config->layer_rules[config->layer_rules_count];
 		memset(rule, 0, sizeof(ConfigLayerRule));
 
-		// 设置默认值
+		// Sets default values.
 		rule->layer_name = NULL;
 		rule->animation_type_open = NULL;
 		rule->animation_type_close = NULL;
@@ -1437,7 +1453,7 @@ bool parse_option(Config *config, char *key, char *value, int line_number) {
 			token = strtok(NULL, ",");
 		}
 
-		// 如果没有指定布局名称，则使用默认值
+		// Uses the default value when no layout name is given.
 		if (rule->layer_name == NULL) {
 			rule->layer_name = strdup("default");
 		}
@@ -1666,7 +1682,8 @@ bool parse_option(Config *config, char *key, char *value, int line_number) {
 			&config->device_rules[config->device_rules_count];
 		memset(rule, 0, sizeof(ConfigDeviceRule));
 
-		// 默认值：-1 / UINT32_MAX / 空串 表示未设置，沿用全局配置
+		// Defaults: -1 / UINT32_MAX / empty string mean unset and fall back to
+		// the global config.
 		rule->repeat_rate = -1;
 		rule->repeat_delay = -1;
 		rule->natural_scrolling = -1;
@@ -2451,18 +2468,18 @@ bool check_switch_binding_conflicts(Config *config) {
 
 void free_circle_layout(Config *config) {
 	if (config->circle_layout) {
-		// 释放每个字符串
+		// Frees each string.
 		for (int32_t i = 0; i < config->circle_layout_count; i++) {
 			if (config->circle_layout[i]) {
-				free(config->circle_layout[i]);	 // 释放单个字符串
-				config->circle_layout[i] = NULL; // 防止野指针
+				free(config->circle_layout[i]);	 // Frees a single string.
+				config->circle_layout[i] = NULL; // Prevents a dangling pointer.
 			}
 		}
-		// 释放 circle_layout 数组本身
+		// Frees the circle_layout array itself.
 		free(config->circle_layout);
-		config->circle_layout = NULL; // 防止野指针
+		config->circle_layout = NULL; // Prevents a dangling pointer.
 	}
-	config->circle_layout_count = 0; // 重置计数
+	config->circle_layout_count = 0; // Resets the count.
 }
 
 void set_xcursor_env() {
@@ -2480,14 +2497,14 @@ void set_xcursor_env() {
 }
 
 void reapply_rootbg(void) {
-	wlr_scene_rect_set_color(root_bg, config.rootcolor);
+	wlr_scene_rect_set_color(server.root_bg, config.rootcolor);
 }
 
 void reapply_property(void) {
 	Client *c = NULL;
 
 	// reset border width when config change
-	wl_list_for_each(c, &clients, link) {
+	wl_list_for_each(c, &server.clients, link) {
 		if (c && !c->iskilling) {
 			if (!c->isnoborder && !c->isfullscreen) {
 				c->bw = config.borderpx;
@@ -2500,7 +2517,7 @@ void reapply_property(void) {
 void reapply_pointer(void) {
 	InputDevice *id;
 	struct libinput_device *device;
-	wl_list_for_each(id, &inputdevices, link) {
+	wl_list_for_each(id, &server.input_devices, link) {
 
 		if (id->wlr_device->type != WLR_INPUT_DEVICE_POINTER) {
 			continue;
@@ -2515,7 +2532,7 @@ void reapply_pointer(void) {
 
 void reapply_tagrule(void) {
 	Monitor *m = NULL;
-	wl_list_for_each(m, &mons, link) {
+	wl_list_for_each(m, &server.monitors, link) {
 		if (!m->wlr_output->enabled) {
 			continue;
 		}
@@ -2525,7 +2542,7 @@ void reapply_tagrule(void) {
 
 void reset_option(void) {
 	init_baked_points();
-	handlecursoractivity();
+	pointer_cursor_activity();
 	reset_keyboard_layout();
 	reset_blur_params();
 	set_env_without_display();
@@ -2542,11 +2559,11 @@ void reset_option(void) {
 	reapply_tagrule();
 	reapply_monitor_rules();
 
-	arrange(selmon, false, false);
+	arrange(server.selected_monitor, false, false);
 }
 
 int32_t parse_force(const char *str) {
-	// 将输入字符串转换为小写
+	// Converts the input string to lowercase.
 	char lowerStr[10];
 	int32_t i = 0;
 	while (str[i] && i < 9) {
@@ -2555,7 +2572,7 @@ int32_t parse_force(const char *str) {
 	}
 	lowerStr[i] = '\0';
 
-	// 根据转换后的小写字符串返回对应的枚举值
+	// Returns the matching enum value from the lowercased string.
 	if (strcmp(lowerStr, "unforce") == 0) {
 		return UNFORCE;
 	} else if (strcmp(lowerStr, "force") == 0) {
@@ -2566,7 +2583,7 @@ int32_t parse_force(const char *str) {
 }
 
 int32_t parse_fold_state(const char *str) {
-	// 将输入字符串转换为小写
+	// Converts the input string to lowercase.
 	char lowerStr[10];
 	int32_t i = 0;
 	while (str[i] && i < 9) {
@@ -2575,7 +2592,7 @@ int32_t parse_fold_state(const char *str) {
 	}
 	lowerStr[i] = '\0';
 
-	// 根据转换后的小写字符串返回对应的枚举值
+	// Returns the matching enum value from the lowercased string.
 	if (strcmp(lowerStr, "fold") == 0) {
 		return FOLD;
 	} else if (strcmp(lowerStr, "unfold") == 0) {
@@ -2585,7 +2602,8 @@ int32_t parse_fold_state(const char *str) {
 	}
 }
 
-// 辅助函数：检查字符串是否以指定的前缀开头（忽略大小写）
+// Helper: checks whether a string starts with the given prefix
+// (case-insensitive).
 char *combine_args_until_empty(char *values[], int count) {
 	if (count <= 0)
 		return strdup("");
@@ -2642,27 +2660,27 @@ uint32_t parse_mod(const char *mod_str) {
 	char *saveptr = NULL;
 	bool match_success = false;
 
-	// 复制并转换为小写
+	// Copies and converts to lowercase.
 	strncpy(input_copy, mod_str, sizeof(input_copy) - 1);
 	input_copy[sizeof(input_copy) - 1] = '\0';
 	for (char *p = input_copy; *p; p++) {
 		*p = tolower(*p);
 	}
 
-	// 分割处理每个部分
+	// Splits and processes each part.
 	token = strtok_r(input_copy, "+", &saveptr);
 	while (token != NULL) {
-		// 去除前后空白
+		// Strips leading/trailing whitespace.
 		trim_whitespace(token);
 
-		// 如果 token 变成空字符串则跳过
+		// Skips tokens that became empty.
 		if (*token == '\0') {
 			token = strtok_r(NULL, "+", &saveptr);
 			continue;
 		}
 
 		if (strncmp(token, "code:", 5) == 0) {
-			// 处理 code: 形式
+			// Handles the code: form.
 			char *endptr;
 			long keycode = strtol(token + 5, &endptr, 10);
 			if (endptr != token + 5 && (*endptr == '\0' || *endptr == ' ')) {
@@ -2736,7 +2754,7 @@ uint32_t parse_mod(const char *mod_str) {
 	return mod;
 }
 
-// 定义辅助函数：在 keymap 中查找 keysym 对应的多个 keycode
+// Helper: finds all keycodes for a keysym in the keymap.
 int32_t find_keycodes_for_keysym(struct xkb_keymap *keymap, xkb_keysym_t sym,
 								 MultiKeycode *multi_kc) {
 	xkb_keycode_t min_keycode = xkb_keymap_min_keycode(keymap);
@@ -2750,7 +2768,7 @@ int32_t find_keycodes_for_keysym(struct xkb_keymap *keymap, xkb_keysym_t sym,
 
 	for (xkb_keycode_t keycode = min_keycode;
 		 keycode <= max_keycode && found_count < 3; keycode++) {
-		// 使用布局0和层级0
+		// Uses layout 0 and level 0.
 		const xkb_keysym_t *syms;
 		int32_t num_syms =
 			xkb_keymap_key_get_syms_by_level(keymap, keycode, 0, 0, &syms);
@@ -2778,21 +2796,21 @@ int32_t find_keycodes_for_keysym(struct xkb_keymap *keymap, xkb_keysym_t sym,
 }
 
 KeySymCode parse_key(const char *key_str, bool isbindsym) {
-	KeySymCode kc = {0}; // 初始化为0
+	KeySymCode kc = {0}; // Initialized to 0.
 
 	if (config.keymap == NULL || config.ctx == NULL) {
-		// 处理错误
+		// Handles errors.
 		kc.type = KEY_TYPE_SYM;
 		kc.keysym = XKB_KEY_NoSymbol;
 		return kc;
 	}
 
-	// 处理 code: 前缀的情况
+	// Handles the code: prefix case.
 	if (strncmp(key_str, "code:", 5) == 0) {
 		char *endptr;
 		xkb_keycode_t keycode = (xkb_keycode_t)strtol(key_str + 5, &endptr, 10);
 		kc.type = KEY_TYPE_CODE;
-		kc.keycode.keycode1 = keycode; // 只设置第一个
+		kc.keycode.keycode1 = keycode; // Sets only the first one.
 		kc.keycode.keycode2 = 0;
 		kc.keycode.keycode3 = 0;
 		return kc;
@@ -2809,46 +2827,47 @@ KeySymCode parse_key(const char *key_str, bool isbindsym) {
 	}
 
 	if (sym != XKB_KEY_NoSymbol) {
-		// 尝试找到对应的多个 keycode
+		// Tries to find all matching keycodes.
 		int32_t found_count =
 			find_keycodes_for_keysym(config.keymap, sym, &kc.keycode);
 		if (found_count > 0) {
 			kc.type = KEY_TYPE_CODE;
-			kc.keysym = sym; // 仍然保存 keysym 供参考
+			kc.keysym = sym; // Still keeps the keysym for reference.
 		} else {
 			kc.type = KEY_TYPE_SYM;
 			kc.keysym = sym;
-			// keycode 字段保持为0
+			// keycode field stays 0.
 		}
 	} else {
-		// 无法解析的键名
+		// Unparseable key name.
 		kc.type = KEY_TYPE_SYM;
 		kc.keysym = XKB_KEY_NoSymbol;
 		mango_error(false, WLR_ERROR, "Unknown key: \033[1m\033[31m%s\033[0m\n",
 					key_str);
-		// keycode 字段保持为0
+		// keycode field stays 0.
 	}
 
 	return kc;
 }
 
 uint32_t parse_button(const char *str) {
-	// 将输入字符串转换为小写
+	// Converts the input string to lowercase.
 	char lowerStr[20];
 	int32_t i = 0;
 	while (str[i] && i < 19) {
 		lowerStr[i] = tolower(str[i]);
 		i++;
 	}
-	lowerStr[i] = '\0'; // 确保字符串正确终止
+	lowerStr[i] = '\0'; // Ensures the string is properly terminated.
 
-	// 解析 "code:数字" 格式
+	// Parses the "code:number" format.
 	if (strncmp(lowerStr, "code:", 5) == 0) {
-		const char *numStart = lowerStr + 5; // 跳过 "code:"
+		const char *numStart = lowerStr + 5; // Skips "code:".
 		char *endptr;
 		unsigned long val = strtoul(numStart, &endptr, 10);
 
-		// 检查是否成功转换且无多余字符，且值未溢出（在 uint32_t 范围内）
+		// Checks that the conversion succeeded with no leftover characters and
+		// no overflow (within uint32_t).
 		if (endptr != numStart && *endptr == '\0' && val <= UINT32_MAX) {
 			return (uint32_t)val;
 		} else {
@@ -2860,7 +2879,7 @@ uint32_t parse_button(const char *str) {
 		}
 	}
 
-	// 根据转换后的小写字符串返回对应的按钮编号
+	// Returns the matching button number from the lowercased string.
 	if (strcmp(lowerStr, "btn_left") == 0) {
 		return BTN_LEFT;
 	} else if (strcmp(lowerStr, "btn_right") == 0) {
@@ -2887,16 +2906,16 @@ uint32_t parse_button(const char *str) {
 }
 
 int32_t parse_mouse_action(const char *str) {
-	// 将输入字符串转换为小写
+	// Converts the input string to lowercase.
 	char lowerStr[20];
 	int32_t i = 0;
 	while (str[i] && i < 19) {
 		lowerStr[i] = tolower(str[i]);
 		i++;
 	}
-	lowerStr[i] = '\0'; // 确保字符串正确终止
+	lowerStr[i] = '\0'; // Ensures the string is properly terminated.
 
-	// 根据转换后的小写字符串返回对应的按钮编号
+	// Returns the matching button number from the lowercased string.
 	if (strcmp(lowerStr, "curmove") == 0) {
 		return CurMove;
 	} else if (strcmp(lowerStr, "curresize") == 0) {
@@ -2955,8 +2974,8 @@ bool parse_config_file(Config *config, const char *file_path, bool must_exist) {
 	if (file_path[0] == '.' && file_path[1] == '/') {
 		// Relative path
 
-		if (cli_config_path[0]) {
-			char *config_path = strdup(cli_config_path);
+		if (server.cli_config_path[0]) {
+			char *config_path = strdup(server.cli_config_path);
 			char *config_dir = dirname(config_path);
 			snprintf(full_path, sizeof(full_path), "%s/%s", config_dir,
 					 file_path + 1);
@@ -2993,13 +3012,13 @@ bool parse_config_file(Config *config, const char *file_path, bool must_exist) {
 		file = fopen(file_path, "r");
 	}
 
-	// 保存当前文件索引，用于递归恢复
+	// Saves the current file index to restore after recursion.
 	int saved_file_index = current_file_index;
 
-	// 将文件路径加入全局列表
+	// Adds the file path to the global list.
 	file_paths = realloc(file_paths, (file_paths_count + 1) * sizeof(char *));
 	file_paths[file_paths_count] =
-		strdup(file_path); // 需要 strdup 申请独立内存
+		strdup(file_path); // Needs strdup for independent memory.
 	current_file_index = file_paths_count;
 	file_paths_count++;
 
@@ -3067,7 +3086,7 @@ bool check_key_binding_conflicts(Config *config) {
 	if (n < 2)
 		return false;
 
-	/* 复制用户定义的绑定（行号 > 0） */
+	/* Copies user-defined bindings (line number > 0). */
 	KeyBinding *binds = malloc(n * sizeof(KeyBinding));
 	int count = 0;
 	for (int i = 0; i < n; i++) {
@@ -3079,18 +3098,18 @@ bool check_key_binding_conflicts(Config *config) {
 		return false;
 	}
 
-	/* 只按按键排序，将相同按键的绑定排在一起 */
+	/* Sorts only by key so bindings with the same key are grouped together. */
 	qsort(binds, count, sizeof(KeyBinding), compare_keybind_by_key_only);
 
 	bool conflict_found = false;
 
 	for (int i = 0; i < count;) {
 		int j = i;
-		/* 找出所有按键相同的绑定（区间 [i, j) ） */
+		/* Finds all bindings with the same key (range [i, j)). */
 		while (j < count && same_key(&binds[i], &binds[j]))
 			j++;
 
-		/* 在该区间内检测冲突 */
+		/* Detects conflicts inside that range. */
 		for (int a = i; a < j; a++) {
 			for (int b = a + 1; b < j; b++) {
 				bool same_mode = (strcmp(binds[a].mode, binds[b].mode) == 0);
@@ -3121,7 +3140,7 @@ bool check_key_binding_conflicts(Config *config) {
 				}
 			}
 		}
-		i = j; /* 跳到下一个按键组 */
+		i = j; /* Moves to the next key group. */
 	}
 
 	free(binds);
@@ -3180,41 +3199,41 @@ bool check_gesture_binding_conflicts(Config *config) {
 }
 
 void free_baked_points(void) {
-	if (baked_points_move) {
-		free(baked_points_move);
-		baked_points_move = NULL;
+	if (server.baked_points_move) {
+		free(server.baked_points_move);
+		server.baked_points_move = NULL;
 	}
-	if (baked_points_open) {
-		free(baked_points_open);
-		baked_points_open = NULL;
+	if (server.baked_points_open) {
+		free(server.baked_points_open);
+		server.baked_points_open = NULL;
 	}
-	if (baked_points_close) {
-		free(baked_points_close);
-		baked_points_close = NULL;
+	if (server.baked_points_close) {
+		free(server.baked_points_close);
+		server.baked_points_close = NULL;
 	}
-	if (baked_points_tag) {
-		free(baked_points_tag);
-		baked_points_tag = NULL;
+	if (server.baked_points_tag) {
+		free(server.baked_points_tag);
+		server.baked_points_tag = NULL;
 	}
-	if (baked_points_focus) {
-		free(baked_points_focus);
-		baked_points_focus = NULL;
+	if (server.baked_points_focus) {
+		free(server.baked_points_focus);
+		server.baked_points_focus = NULL;
 	}
-	if (baked_points_opafadein) {
-		free(baked_points_opafadein);
-		baked_points_opafadein = NULL;
+	if (server.baked_points_opafadein) {
+		free(server.baked_points_opafadein);
+		server.baked_points_opafadein = NULL;
 	}
-	if (baked_points_opafadeout) {
-		free(baked_points_opafadeout);
-		baked_points_opafadeout = NULL;
+	if (server.baked_points_opafadeout) {
+		free(server.baked_points_opafadeout);
+		server.baked_points_opafadeout = NULL;
 	}
 }
 
 void free_config(void) {
-	// 释放内存
+	// Frees memory.
 	int32_t i;
 
-	// 释放 window_rules
+	// Frees window_rules.
 	if (config.window_rules) {
 		for (int32_t i = 0; i < config.window_rules_count; i++) {
 			ConfigWinRule *rule = &config.window_rules[i];
@@ -3233,7 +3252,7 @@ void free_config(void) {
 			rule->animation_type_open = NULL;
 			rule->animation_type_close = NULL;
 			rule->monitor = NULL;
-			// 释放 globalkeybinding 的 arg.v（如果动态分配）
+			// Frees arg.v of globalkeybinding if dynamically allocated.
 			if (rule->globalkeybinding.arg.v) {
 				free((void *)rule->globalkeybinding.arg.v);
 			}
@@ -3243,7 +3262,7 @@ void free_config(void) {
 		config.window_rules_count = 0;
 	}
 
-	// 释放 device_rules
+	// Frees device_rules.
 	if (config.device_rules) {
 		for (i = 0; i < config.device_rules_count; i++) {
 			if (config.device_rules[i].name)
@@ -3254,7 +3273,7 @@ void free_config(void) {
 		config.device_rules_count = 0;
 	}
 
-	// 释放 key_bindings
+	// Frees key_bindings.
 	if (config.key_bindings) {
 		for (i = 0; i < config.key_bindings_count; i++) {
 			if (config.key_bindings[i].arg.v) {
@@ -3275,7 +3294,7 @@ void free_config(void) {
 		config.key_bindings_count = 0;
 	}
 
-	// 释放 mouse_bindings
+	// Frees mouse_bindings.
 	if (config.mouse_bindings) {
 		for (i = 0; i < config.mouse_bindings_count; i++) {
 			if (config.mouse_bindings[i].arg.v) {
@@ -3296,7 +3315,7 @@ void free_config(void) {
 		config.mouse_bindings_count = 0;
 	}
 
-	// 释放 axis_bindings
+	// Frees axis_bindings.
 	if (config.axis_bindings) {
 		for (i = 0; i < config.axis_bindings_count; i++) {
 			if (config.axis_bindings[i].arg.v) {
@@ -3317,7 +3336,7 @@ void free_config(void) {
 		config.axis_bindings_count = 0;
 	}
 
-	// 释放 switch_bindings
+	// Frees switch_bindings.
 	if (config.switch_bindings) {
 		for (i = 0; i < config.switch_bindings_count; i++) {
 			if (config.switch_bindings[i].arg.v) {
@@ -3338,7 +3357,7 @@ void free_config(void) {
 		config.switch_bindings_count = 0;
 	}
 
-	// 释放 gesture_bindings
+	// Frees gesture_bindings.
 	if (config.gesture_bindings) {
 		for (i = 0; i < config.gesture_bindings_count; i++) {
 			if (config.gesture_bindings[i].arg.v) {
@@ -3359,7 +3378,7 @@ void free_config(void) {
 		config.gesture_bindings_count = 0;
 	}
 
-	// 释放 tag_rules
+	// Frees tag_rules.
 	if (config.tag_rules) {
 		for (int32_t i = 0; i < config.tag_rules_count; i++) {
 			if (config.tag_rules[i].layout_name)
@@ -3378,7 +3397,7 @@ void free_config(void) {
 		config.tag_rules_count = 0;
 	}
 
-	// 释放 monitor_rules
+	// Frees monitor_rules.
 	if (config.monitor_rules) {
 		for (int32_t i = 0; i < config.monitor_rules_count; i++) {
 			if (config.monitor_rules[i].name)
@@ -3397,7 +3416,7 @@ void free_config(void) {
 		config.monitor_rules_count = 0;
 	}
 
-	// 释放 layer_rules
+	// Frees layer_rules.
 	if (config.layer_rules) {
 		for (int32_t i = 0; i < config.layer_rules_count; i++) {
 			if (config.layer_rules[i].layer_name)
@@ -3412,7 +3431,7 @@ void free_config(void) {
 		config.layer_rules_count = 0;
 	}
 
-	// 释放 env
+	// Frees env.
 	if (config.env) {
 		for (int32_t i = 0; i < config.env_count; i++) {
 			if (config.env[i]->type) {
@@ -3428,7 +3447,7 @@ void free_config(void) {
 		config.env_count = 0;
 	}
 
-	// 释放 exec
+	// Frees exec.
 	if (config.exec) {
 		for (i = 0; i < config.exec_count; i++) {
 			free(config.exec[i]);
@@ -3438,7 +3457,7 @@ void free_config(void) {
 		config.exec_count = 0;
 	}
 
-	// 释放 exec_once
+	// Frees exec_once.
 	if (config.exec_once) {
 		for (i = 0; i < config.exec_once_count; i++) {
 			free(config.exec_once[i]);
@@ -3448,7 +3467,7 @@ void free_config(void) {
 		config.exec_once_count = 0;
 	}
 
-	// 释放 scroller_proportion_preset
+	// Frees scroller_proportion_preset.
 	if (config.scroller_proportion_preset) {
 		free(config.scroller_proportion_preset);
 		config.scroller_proportion_preset = NULL;
@@ -3485,17 +3504,19 @@ void free_config(void) {
 		config.jump_labels = NULL;
 	}
 
-	// 释放 circle_layout
+	// Frees circle_layout.
 	free_circle_layout(&config);
 
-	// 释放动画资源
+	// Frees animation resources.
 	free_baked_points();
 
-	// 清理解析按键用的keymap
+	// Cleans up the keymap used for key parsing.
 	cleanup_config_keymap();
 }
 
-void update_global_var(void) { tagmask = ((uint32_t)1 << config.tag_num) - 1; }
+void update_global_var(void) {
+	server.tagmask = ((uint32_t)1 << config.tag_num) - 1;
+}
 
 void override_config(void) {
 	config.animations = CLAMP_INT(config.animations, 0, 1);
@@ -4011,11 +4032,11 @@ void set_value_default() {
 void set_default_key_bindings(Config *config) {
 	KeyBinding *b = NULL;
 
-	// 计算默认按键绑定的数量
+	// Computes the default key binding count.
 	size_t default_key_bindings_count =
 		sizeof(default_key_bindings) / sizeof(KeyBinding);
 
-	// 重新分配内存以容纳新的默认按键绑定
+	// Reallocates memory to hold the new default bindings.
 	config->key_bindings =
 		realloc(config->key_bindings,
 				(config->key_bindings_count + default_key_bindings_count) *
@@ -4024,7 +4045,7 @@ void set_default_key_bindings(Config *config) {
 		return;
 	}
 
-	// 将默认按键绑定复制到配置的按键绑定数组中
+	// Copies the default bindings into the config key binding array.
 	for (size_t i = 0; i < default_key_bindings_count; i++) {
 		config->key_bindings[config->key_bindings_count + i] =
 			default_key_bindings[i];
@@ -4035,7 +4056,7 @@ void set_default_key_bindings(Config *config) {
 		strcpy(b->mode, "common");
 	}
 
-	// 更新按键绑定的总数
+	// Updates the total binding count.
 	config->key_bindings_count += default_key_bindings_count;
 }
 
@@ -4046,14 +4067,14 @@ bool parse_config(void) {
 
 	memset(&config, 0, sizeof(config));
 
-	// 重新将xkb_rules指针指向静态数组
+	// Points the xkb_rules pointers back to the static arrays.
 	config.xkb_rules.layout = config.xkb_rules_layout;
 	config.xkb_rules.variant = config.xkb_rules_variant;
 	config.xkb_rules.options = config.xkb_rules_options;
 	config.xkb_rules.rules = config.xkb_rules_rules;
 	config.xkb_rules.model = config.xkb_rules_model;
 
-	// 初始化动态数组的指针为NULL，避免野指针
+	// Initializes dynamic array pointers to NULL to avoid dangling pointers.
 	config.window_rules = NULL;
 	config.window_rules_count = 0;
 	config.monitor_rules = NULL;
@@ -4092,22 +4113,22 @@ bool parse_config(void) {
 
 	create_config_keymap();
 
-	if (cli_config_path[0]) {
-		snprintf(filename, sizeof(filename), "%s", cli_config_path);
+	if (server.cli_config_path[0]) {
+		snprintf(filename, sizeof(filename), "%s", server.cli_config_path);
 	} else {
-		// 获取当前用户家目录
+		// Gets the current user home directory.
 		const char *homedir = getenv("HOME");
 		if (!homedir) {
-			// 如果获取失败，则无法继续
+			// Cannot continue if that fails.
 			return false;
 		}
-		// 构建日志文件路径
+		// Builds the log file path.
 		snprintf(filename, sizeof(filename), "%s/.config/mango/config.conf",
 				 homedir);
 
-		// 检查文件是否存在
+		// Checks whether the file exists.
 		if (access(filename, F_OK) != 0) {
-			// 如果文件不存在，则使用 /etc/mango/config.conf
+			// Uses /etc/mango/config.conf when the file does not exist.
 			snprintf(filename, sizeof(filename), "%s/mango/config.conf",
 					 SYSCONFDIR);
 		}
@@ -4126,7 +4147,7 @@ bool parse_config(void) {
 	keybindings_conflict |= check_switch_binding_conflicts(&config);
 	keybindings_conflict |= check_gesture_binding_conflicts(&config);
 
-	// 释放文件路径列表
+	// Frees the file path list.
 	if (file_paths) {
 		for (int i = 0; i < file_paths_count; i++) {
 			free(file_paths[i]);
@@ -4142,21 +4163,23 @@ bool parse_config(void) {
 void reset_blur_params(void) {
 	if (config.blur) {
 		Monitor *m = NULL;
-		wl_list_for_each(m, &mons, link) {
+		wl_list_for_each(m, &server.monitors, link) {
 			if (m->blur != NULL) {
 				wlr_scene_node_destroy(&m->blur->node);
 			}
-			m->blur = wlr_scene_optimized_blur_create(&scene->tree, 0, 0);
-			wlr_scene_node_reparent(&m->blur->node, layers[LyrBlur]);
+			m->blur =
+				wlr_scene_optimized_blur_create(&server.scene->tree, 0, 0);
+			wlr_scene_node_reparent(&m->blur->node, server.layers[LyrBlur]);
 			wlr_scene_optimized_blur_set_size(m->blur, m->m.width, m->m.height);
 			wlr_scene_set_blur_data(
-				scene, config.blur_params.num_passes, config.blur_params.radius,
-				config.blur_params.noise, config.blur_params.brightness,
-				config.blur_params.contrast, config.blur_params.saturation);
+				server.scene, config.blur_params.num_passes,
+				config.blur_params.radius, config.blur_params.noise,
+				config.blur_params.brightness, config.blur_params.contrast,
+				config.blur_params.saturation);
 		}
 	} else {
 		Monitor *m = NULL;
-		wl_list_for_each(m, &mons, link) {
+		wl_list_for_each(m, &server.monitors, link) {
 
 			if (m->blur) {
 				wlr_scene_node_destroy(&m->blur->node);
@@ -4172,7 +4195,7 @@ void reapply_monitor_rules(void) {
 	int32_t ji;
 	int32_t mx, my;
 
-	wl_list_for_each(m, &mons, link) {
+	wl_list_for_each(m, &server.monitors, link) {
 		if (!m->wlr_output->enabled)
 			continue;
 
@@ -4185,7 +4208,8 @@ void reapply_monitor_rules(void) {
 
 				apply_rule_to_state(m, mr, &m->pending);
 
-				wlr_output_layout_add(output_layout, m->wlr_output, mx, my);
+				wlr_output_layout_add(server.output_layout, m->wlr_output, mx,
+									  my);
 				break;
 			}
 		}
@@ -4207,49 +4231,51 @@ void reapply_monitor_rules(void) {
 				output_state_setup_hdr(m, true, &m->pending);
 			}
 		}
-		/* scale/mode 变化后强制调度一帧，确保 wl_output 事件发送 */
+		/* After scale/mode changes, force one frame so wl_output events are
+		 * sent. */
 		wlr_output_schedule_frame(m->wlr_output);
 		wlr_output_effective_resolution(m->wlr_output, &m->m.width,
 										&m->m.height);
 	}
 
-	updatemons(NULL, NULL);
+	handle_output_layout_change(NULL, NULL);
 }
 
 void reapply_cursor_style(void) {
-	if (hide_cursor_source) {
-		wl_event_source_timer_update(hide_cursor_source, 0);
-		wl_event_source_remove(hide_cursor_source);
-		hide_cursor_source = NULL;
+	if (server.hide_cursor_source) {
+		wl_event_source_timer_update(server.hide_cursor_source, 0);
+		wl_event_source_remove(server.hide_cursor_source);
+		server.hide_cursor_source = NULL;
 	}
 
-	wlr_cursor_unset_image(cursor);
+	wlr_cursor_unset_image(server.cursor);
 
-	wlr_cursor_set_surface(cursor, NULL, 0, 0);
+	wlr_cursor_set_surface(server.cursor, NULL, 0, 0);
 
-	if (cursor_mgr) {
-		wlr_xcursor_manager_destroy(cursor_mgr);
-		cursor_mgr = NULL;
+	if (server.cursor_manager) {
+		wlr_xcursor_manager_destroy(server.cursor_manager);
+		server.cursor_manager = NULL;
 	}
 
 	set_xcursor_env();
 
-	cursor_mgr =
+	server.cursor_manager =
 		wlr_xcursor_manager_create(config.cursor_theme, config.cursor_size);
 
 	Monitor *m = NULL;
-	wl_list_for_each(m, &mons, link) {
-		wlr_xcursor_manager_load(cursor_mgr, m->wlr_output->scale);
+	wl_list_for_each(m, &server.monitors, link) {
+		wlr_xcursor_manager_load(server.cursor_manager, m->wlr_output->scale);
 	}
 
-	wlr_cursor_set_xcursor(cursor, cursor_mgr, "left_ptr");
+	wlr_cursor_set_xcursor(server.cursor, server.cursor_manager, "left_ptr");
 
-	hide_cursor_source = wl_event_loop_add_timer(wl_display_get_event_loop(dpy),
-												 hidecursor, cursor);
-	if (cursor_hidden) {
-		wlr_cursor_unset_image(cursor);
+	server.hide_cursor_source =
+		wl_event_loop_add_timer(wl_display_get_event_loop(server.display),
+								pointer_hide_cursor, server.cursor);
+	if (server.cursor_hidden) {
+		wlr_cursor_unset_image(server.cursor);
 	} else {
-		wl_event_source_timer_update(hide_cursor_source,
+		wl_event_source_timer_update(server.hide_cursor_source,
 									 config.cursor_hide_timeout * 1000);
 	}
 }
@@ -4260,9 +4286,9 @@ void reapply_keyboard(void) {
 	ConfigDeviceRule *rule;
 	bool want_standalone;
 
-	wlr_keyboard_set_repeat_info(&kb_group->wlr_group->keyboard,
+	wlr_keyboard_set_repeat_info(&server.keyboard_group->wlr_group->keyboard,
 								 config.repeat_rate, config.repeat_delay);
-	wl_list_for_each(id, &inputdevices, link) {
+	wl_list_for_each(id, &server.input_devices, link) {
 		if (id->wlr_device->type != WLR_INPUT_DEVICE_KEYBOARD) {
 			continue;
 		}
@@ -4271,15 +4297,17 @@ void reapply_keyboard(void) {
 		want_standalone = rule && device_rule_has_keyboard_settings(rule);
 
 		if (want_standalone && !id->standalone) {
-			/* 命中规则：拆出为独立键盘 */
+			/* Rule matched: split it out as a standalone keyboard. */
 			struct wlr_keyboard *kb = (struct wlr_keyboard *)id->device_data;
 			if (!kb)
 				continue;
-			wlr_keyboard_group_remove_keyboard(kb_group->wlr_group, kb);
+			wlr_keyboard_group_remove_keyboard(server.keyboard_group->wlr_group,
+											   kb);
 			id->standalone = true;
 			create_standalone_keyboard(id, kb, rule);
 		} else if (!want_standalone && id->standalone) {
-			/* 规则失效：并回默认键盘组 */
+			/* Rule no longer matches: merge back into the default keyboard
+			 * group. */
 			g = (KeyboardGroup *)id->device_data;
 			struct wlr_keyboard *kb = g ? g->keyboard : NULL;
 			if (g)
@@ -4287,9 +4315,12 @@ void reapply_keyboard(void) {
 			id->standalone = false;
 			id->device_data = kb;
 			if (kb) {
-				wlr_keyboard_set_keymap(kb, kb_group->keyboard->keymap);
-				wlr_keyboard_notify_modifiers(kb, 0, 0, locked_mods, 0);
-				wlr_keyboard_group_add_keyboard(kb_group->wlr_group, kb);
+				wlr_keyboard_set_keymap(
+					kb, server.keyboard_group->keyboard->keymap);
+				wlr_keyboard_notify_modifiers(kb, 0, 0, server.locked_modifiers,
+											  0);
+				wlr_keyboard_group_add_keyboard(
+					server.keyboard_group->wlr_group, kb);
 				wlr_keyboard_set_repeat_info(kb, config.repeat_rate,
 											 config.repeat_delay);
 			}
@@ -4310,7 +4341,7 @@ void reapply_master(void) {
 	int32_t i;
 	Monitor *m = NULL;
 	for (i = 0; i < PERTAG_SLOTS; i++) {
-		wl_list_for_each(m, &mons, link) {
+		wl_list_for_each(m, &server.monitors, link) {
 			if (!m->wlr_output->enabled) {
 				continue;
 			}
@@ -4416,7 +4447,7 @@ void parse_tagrule(Monitor *m) {
 	}
 
 	for (i = 1; i <= config.tag_num; i++) {
-		wl_list_for_each(c, &clients, link) {
+		wl_list_for_each(c, &server.clients, link) {
 			if ((c->tags & (1 << (i - 1)) & TAGMASK) && ISTILED(c)) {
 				if (m->pertag->mfacts[i] > 0.0f)
 					c->master_mfact_per = m->pertag->mfacts[i];
@@ -4431,18 +4462,18 @@ void reset_tag(int old_tag_num) {
 		Client *c = NULL;
 		Monitor *m = NULL;
 
-		wl_list_for_each(c, &clients, link) {
-			if (c->tags & ~tagmask) {
+		wl_list_for_each(c, &server.clients, link) {
+			if (c->tags & ~server.tagmask) {
 				c->tags = last_tag_mask;
 				c->oldtags = last_tag_mask;
 			}
 		}
 
-		wl_list_for_each(m, &mons, link) {
+		wl_list_for_each(m, &server.monitors, link) {
 			if (!m->wlr_output->enabled)
 				continue;
-			m->tagset[0] &= tagmask;
-			m->tagset[1] &= tagmask;
+			m->tagset[0] &= server.tagmask;
+			m->tagset[1] &= server.tagmask;
 			if (m->tagset[m->seltags] == 0)
 				m->tagset[m->seltags] = last_tag_mask;
 			if (m->pertag->curtag > (uint32_t)config.tag_num)
@@ -4479,32 +4510,32 @@ FuncType parse_func_name(char *func_name, Arg *arg, char *arg_value,
 	(*arg).v3 = NULL;
 
 	if (strcmp(func_name, "focusstack") == 0) {
-		func = focusstack;
+		func = focus_stack;
 		(*arg).i = parse_circle_direction(arg_value);
 	} else if (strcmp(func_name, "overcircle") == 0) {
-		func = overcircle;
+		func = over_circle;
 		(*arg).i = parse_circle_direction(arg_value);
 	} else if (strcmp(func_name, "groupfocus") == 0) {
-		func = groupfocus;
+		func = group_focus;
 		(*arg).i = parse_circle_direction(arg_value);
 	} else if (strcmp(func_name, "focusdir") == 0) {
-		func = focusdir;
+		func = focus_direction;
 		(*arg).i = parse_direction(arg_value);
 	} else if (strcmp(func_name, "focus_window_or_workspace") == 0) {
 		func = focus_window_or_workspace;
 		(*arg).i = parse_direction(arg_value);
 	} else if (strcmp(func_name, "groupjoin") == 0) {
-		func = groupjoin;
+		func = group_join;
 		(*arg).i = parse_direction(arg_value);
 	} else if (strcmp(func_name, "groupleave") == 0) {
-		func = groupleave;
+		func = group_leave;
 	} else if (strcmp(func_name, "focusid") == 0) {
-		func = focusid;
+		func = focus_by_id;
 	} else if (strcmp(func_name, "incnmaster") == 0) {
-		func = incnmaster;
+		func = inc_nmaster;
 		(*arg).i = atoi(arg_value);
 	} else if (strcmp(func_name, "setmfact") == 0) {
-		func = setmfact;
+		func = set_master_factor;
 		(*arg).f = atof(arg_value);
 	} else if (strcmp(func_name, "zoom") == 0) {
 		func = zoom;
@@ -4515,10 +4546,10 @@ FuncType parse_func_name(char *func_name, Arg *arg, char *arg_value,
 		func = exchange_stack_client;
 		(*arg).i = parse_circle_direction(arg_value);
 	} else if (strcmp(func_name, "toggleglobal") == 0) {
-		func = toggleglobal;
+		func = toggle_global;
 	} else if (strcmp(func_name, "togglehdr") == 0) {
 		/* togglehdr[,on|off|toggle][,<monitor name>|all] */
-		func = togglehdr;
+		func = toggle_hdr;
 		if (strcmp(arg_value, "on") == 0)
 			(*arg).i = 1;
 		else if (strcmp(arg_value, "off") == 0)
@@ -4531,9 +4562,9 @@ FuncType parse_func_name(char *func_name, Arg *arg, char *arg_value,
 						!(strlen(arg_value2) == 1 && arg_value2[0] == '0');
 		(*arg).v = has_name ? strdup(arg_value2) : NULL;
 	} else if (strcmp(func_name, "toggleoverview") == 0) {
-		func = toggleoverview;
+		func = toggle_overview;
 	} else if (strcmp(func_name, "togglejump") == 0) {
-		func = togglejump;
+		func = toggle_jump;
 	} else if (strcmp(func_name, "set_proportion") == 0) {
 		func = set_proportion;
 		(*arg).f = atof(arg_value);
@@ -4541,30 +4572,30 @@ FuncType parse_func_name(char *func_name, Arg *arg, char *arg_value,
 		func = switch_proportion_preset;
 		(*arg).i = parse_circle_direction(arg_value);
 	} else if (strcmp(func_name, "viewtoleft") == 0) {
-		func = viewtoleft;
+		func = view_to_left;
 		(*arg).i = atoi(arg_value);
 	} else if (strcmp(func_name, "viewtoright") == 0) {
-		func = viewtoright;
+		func = view_to_right;
 		(*arg).i = atoi(arg_value);
 	} else if (strcmp(func_name, "view_insert") == 0) {
 		func = view_insert;
 		(*arg).i = strcmp(arg_value, "next") == 0 ? NEXT : PREV;
 	} else if (strcmp(func_name, "tagsilent") == 0) {
-		func = tagsilent;
+		func = tag_silent;
 		(*arg).ui = parse_tag_mask(arg_value);
 	} else if (strcmp(func_name, "tagtoleft") == 0) {
-		func = tagtoleft;
+		func = tag_to_left;
 		(*arg).i = atoi(arg_value);
 	} else if (strcmp(func_name, "tagtoright") == 0) {
-		func = tagtoright;
+		func = tag_to_right;
 		(*arg).i = atoi(arg_value);
 	} else if (strcmp(func_name, "killclient") == 0) {
-		func = killclient;
+		func = kill_client;
 		(*arg).i = parse_force(arg_value);
 	} else if (strcmp(func_name, "centerwin") == 0) {
-		func = centerwin;
+		func = center_window;
 	} else if (strcmp(func_name, "focuslast") == 0) {
-		func = focuslast;
+		func = focus_last;
 	} else if (strcmp(func_name, "switcher") == 0) {
 		func = switcher;
 		if (strcmp(arg_value, "all_next") == 0) {
@@ -4593,7 +4624,7 @@ FuncType parse_func_name(char *func_name, Arg *arg, char *arg_value,
 
 		(*arg).v = strdup(arg_value);
 
-		// 收集需要拼接的参数
+		// Collects the parameters to concatenate.
 		const char *non_empty_params[4] = {NULL};
 		int32_t param_index = 0;
 
@@ -4606,53 +4637,53 @@ FuncType parse_func_name(char *func_name, Arg *arg, char *arg_value,
 		if (arg_value5 && arg_value5[0] != '\0')
 			non_empty_params[param_index++] = arg_value5;
 
-		// 处理拼接
+		// Handles concatenation.
 		if (param_index == 0) {
 			(*arg).v2 = strdup("");
 		} else {
-			// 计算总长度
+			// Computes the total length.
 			size_t len = 0;
 			for (int32_t i = 0; i < param_index; i++) {
 				len += strlen(non_empty_params[i]);
 			}
-			len += (param_index - 1) + 1; // 逗号数 + null终止符
+			len += (param_index - 1) + 1; // Comma count + null terminator.
 
 			char *temp = malloc(len);
 			if (temp) {
-				char *cursor = temp;
+				char *cursor_str = temp;
 				for (int32_t i = 0; i < param_index; i++) {
 					if (i > 0) {
-						*cursor++ = ',';
+						*cursor_str++ = ',';
 					}
 					size_t param_len = strlen(non_empty_params[i]);
-					memcpy(cursor, non_empty_params[i], param_len);
-					cursor += param_len;
+					memcpy(cursor_str, non_empty_params[i], param_len);
+					cursor_str += param_len;
 				}
-				*cursor = '\0';
+				*cursor_str = '\0';
 				(*arg).v2 = temp;
 			}
 		}
 	} else if (strcmp(func_name, "setkeymode") == 0) {
-		func = setkeymode;
+		func = set_key_mode;
 		(*arg).v = strdup(arg_value);
 	} else if (strcmp(func_name, "switch_keyboard_layout") == 0) {
 		func = switch_keyboard_layout;
 		(*arg).i = CLAMP_INT(atoi(arg_value), 0, 100);
 	} else if (strcmp(func_name, "setlayout") == 0) {
-		func = setlayout;
+		func = set_layout;
 		(*arg).v = strdup(arg_value);
 	} else if (strcmp(func_name, "switch_layout") == 0) {
 		func = switch_layout;
 	} else if (strcmp(func_name, "togglefloating") == 0) {
-		func = togglefloating;
+		func = toggle_floating;
 	} else if (strcmp(func_name, "togglefullscreen") == 0) {
-		func = togglefullscreen;
+		func = toggle_fullscreen;
 	} else if (strcmp(func_name, "togglefakefullscreen") == 0) {
-		func = togglefakefullscreen;
+		func = toggle_fake_fullscreen;
 	} else if (strcmp(func_name, "toggleoverlay") == 0) {
-		func = toggleoverlay;
+		func = toggle_overlay;
 	} else if (strcmp(func_name, "minimized") == 0) {
-		func = minimized;
+		func = minimize_window;
 	} else if (strcmp(func_name, "restore_minimized") == 0) {
 		func = restore_minimized;
 	} else if (strcmp(func_name, "toggle_scratchpad") == 0) {
@@ -4660,25 +4691,25 @@ FuncType parse_func_name(char *func_name, Arg *arg, char *arg_value,
 	} else if (strcmp(func_name, "toggle_render_border") == 0) {
 		func = toggle_render_border;
 	} else if (strcmp(func_name, "focusmon") == 0) {
-		func = focusmon;
+		func = focus_monitor;
 		(*arg).i = parse_direction(arg_value);
 		if ((*arg).i == UNDIR) {
 			(*arg).v = strdup(arg_value);
 		}
 	} else if (strcmp(func_name, "tagmon") == 0) {
-		func = tagmon;
+		func = tag_monitor;
 		(*arg).i = parse_direction(arg_value);
 		(*arg).i2 = atoi(arg_value2);
 		if ((*arg).i == UNDIR) {
 			(*arg).v = strdup(arg_value);
 		};
 	} else if (strcmp(func_name, "incgaps") == 0) {
-		func = incgaps;
+		func = increase_gaps;
 		(*arg).i = atoi(arg_value);
 	} else if (strcmp(func_name, "togglegaps") == 0) {
-		func = togglegaps;
+		func = toggle_gaps;
 	} else if (strcmp(func_name, "chvt") == 0) {
-		func = chvt;
+		func = change_vt;
 		(*arg).ui = atoi(arg_value);
 	} else if (strcmp(func_name, "spawn") == 0) {
 		func = spawn;
@@ -4701,15 +4732,15 @@ FuncType parse_func_name(char *func_name, Arg *arg, char *arg_value,
 	} else if (strcmp(func_name, "destroy_all_virtual_output") == 0) {
 		func = destroy_all_virtual_output;
 	} else if (strcmp(func_name, "moveresize") == 0) {
-		func = moveresize;
+		func = move_resize;
 		(*arg).ui = parse_mouse_action(arg_value);
 	} else if (strcmp(func_name, "togglemaximizescreen") == 0) {
-		func = togglemaximizescreen;
+		func = toggle_maximize_screen;
 	} else if (strcmp(func_name, "viewtoleft_have_client") == 0) {
-		func = viewtoleft_have_client;
+		func = view_to_left_have_client;
 		(*arg).i = atoi(arg_value);
 	} else if (strcmp(func_name, "viewtoright_have_client") == 0) {
-		func = viewtoright_have_client;
+		func = view_to_right_have_client;
 		(*arg).i = atoi(arg_value);
 	} else if (strcmp(func_name, "reload_config") == 0) {
 		func = reload_config;
@@ -4725,30 +4756,30 @@ FuncType parse_func_name(char *func_name, Arg *arg, char *arg_value,
 		(*arg).ui = parse_tag_mask(arg_value);
 		(*arg).i = atoi(arg_value2);
 	} else if (strcmp(func_name, "viewcrossmon") == 0) {
-		func = viewcrossmon;
+		func = view_cross_monitor;
 		(*arg).ui = parse_tag_mask(arg_value);
 		(*arg).v = strdup(arg_value2);
 	} else if (strcmp(func_name, "tagcrossmon") == 0) {
-		func = tagcrossmon;
+		func = tag_cross_monitor;
 		(*arg).ui = parse_tag_mask(arg_value);
 		(*arg).v = strdup(arg_value2);
 	} else if (strcmp(func_name, "toggletag") == 0) {
-		func = toggletag;
+		func = toggle_tag;
 		(*arg).ui = parse_tag_mask(arg_value);
 	} else if (strcmp(func_name, "toggleview") == 0) {
-		func = toggleview;
+		func = toggle_view;
 		(*arg).ui = parse_tag_mask(arg_value);
 	} else if (strcmp(func_name, "comboview") == 0) {
-		func = comboview;
+		func = combo_view;
 		(*arg).ui = parse_tag_mask(arg_value);
 	} else if (strcmp(func_name, "smartmovewin") == 0) {
-		func = smartmovewin;
+		func = smart_move_window;
 		(*arg).i = parse_direction(arg_value);
 	} else if (strcmp(func_name, "smartresizewin") == 0) {
-		func = smartresizewin;
+		func = smart_resize_window;
 		(*arg).i = parse_direction(arg_value);
 	} else if (strcmp(func_name, "resizewin") == 0) {
-		func = resizewin;
+		func = resize_window;
 		(*arg).ui = parse_num_type(arg_value);
 		(*arg).ui2 = parse_num_type(arg_value2);
 		(*arg).i = (*arg).ui == NUM_TYPE_DEFAULT ? atoi(arg_value)
@@ -4756,7 +4787,7 @@ FuncType parse_func_name(char *func_name, Arg *arg, char *arg_value,
 		(*arg).i2 = (*arg).ui2 == NUM_TYPE_DEFAULT ? atoi(arg_value2)
 												   : atoi(arg_value2 + 1);
 	} else if (strcmp(func_name, "movewin") == 0) {
-		func = movewin;
+		func = move_window;
 		(*arg).ui = parse_num_type(arg_value);
 		(*arg).ui2 = parse_num_type(arg_value2);
 		(*arg).i = (*arg).ui == NUM_TYPE_DEFAULT ? atoi(arg_value)

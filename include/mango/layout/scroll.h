@@ -3,18 +3,19 @@
 
 #include "mango/mango.h"
 
-/* 获取或创建指定 monitor 某个 tag 的 scroller 状态 */
+/* Gets or creates the scroller state for a given tag of the specified monitor.
+ */
 struct TagScrollerState *ensure_scroller_state(Monitor *m, uint32_t tag);
-/* 在 tag 状态中查找客户端对应的节点（无则返回 NULL） */
+/* Finds the node for a client in the tag state (returns NULL if absent). */
 struct ScrollerStackNode *find_scroller_node(struct TagScrollerState *st,
 											 Client *c);
 void scroller_node_remove(struct TagScrollerState *st,
 						  struct ScrollerStackNode *target);
-/* 清空一个 tag 的全部 scroller 状态 */
+/* Clears all scroller state for a tag. */
 void clear_scroller_state(struct TagScrollerState *st);
-/* 在 Monitor 销毁时清理所有 tag 的 scroller 状态 */
+/* Cleans up scroller state of all tags when a Monitor is destroyed. */
 void cleanup_monitor_scroller(Monitor *m);
-/* 将某个 tag 的状态同步回所有客户端的全局字段 */
+/* Syncs a tag state back to the global fields of all clients. */
 void sync_scroller_state_to_clients(Monitor *m, uint32_t tag);
 void vertical_scroll_adjust_fullandmax(Client *c, struct wlr_box *target_geom);
 void vertical_check_scroller_root_inside_mon(Client *c,
@@ -40,7 +41,7 @@ void scroller_swap_different_stacks(struct ScrollerStackNode *head1,
 									struct ScrollerStackNode *head2);
 void exchange_two_scroller_clients(Client *c1, Client *c2);
 
-/* 创建一个新节点并插入到 tag 状态的 all 链表中 */
+/* Creates a new node and inserts it into the tag state all list. */
 struct ScrollerStackNode *scroller_node_create(struct TagScrollerState *st,
 											   Client *c);
 

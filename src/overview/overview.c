@@ -1,17 +1,17 @@
 #include "mango/overview/overview.h"
 #include "mango/layout/layout.h"
-#include "mango/common/globals.h"
+#include "mango/common/server.h"
 #include "mango/manage/client.h"
 #include "mango/manage/monitor.h"
 #include "mango/animation/client.h"
 #include "mango/common/util.h"
 
-// 目标窗口有其他窗口和它同个tag就返回0
+// Returns 0 when the target window shares its tag with other windows.
 uint32_t want_restore_fullscreen(Client *target_client) {
 	Client *c = NULL;
-	wl_list_for_each(c, &clients, link) {
+	wl_list_for_each(c, &server.clients, link) {
 		if (c && c != target_client && c->tags == target_client->tags &&
-			c == selmon->sel && c->mon &&
+			c == server.selected_monitor->sel && c->mon &&
 			c->mon->pertag->ltidxs[get_tags_first_tag_num(c->tags)]->id !=
 				SCROLLER &&
 			c->mon->pertag->ltidxs[get_tags_first_tag_num(c->tags)]->id !=
@@ -23,16 +23,18 @@ uint32_t want_restore_fullscreen(Client *target_client) {
 	return 1;
 }
 
-// surface 提交后重算布局（scene_surface 提交时会重置
-// dest/source，需要重新套用）
-void overview_card_surface_commit(struct wl_listener *listener, void *data) {
+// Recomputes layout after surface commit (scene_surface commit resets
+// dest/source and needs to be reapplied).
+void handle_overview_card_surface_commit(struct wl_listener *listener,
+										 void *data) {
 	struct ov_card_surface *entry = wl_container_of(listener, entry, commit);
 	if (entry->c && entry->c->ov_card_tree)
 		overview_layout_card(entry->c);
 }
 
-// surface 销毁时移除并释放节点
-void overview_card_surface_destroy(struct wl_listener *listener, void *data) {
+// Removes and frees the node when the surface is destroyed.
+void handle_overview_card_surface_destroy(struct wl_listener *listener,
+										  void *data) {
 	struct ov_card_surface *entry = wl_container_of(listener, entry, destroy);
 	wl_list_remove(&entry->link);
 	wl_list_remove(&entry->commit.link);
@@ -40,7 +42,7 @@ void overview_card_surface_destroy(struct wl_listener *listener, void *data) {
 	free(entry);
 }
 
-// 为每个 surface（含 subsurface）建一个卡片 scene_surface 节点
+// Creates a card scene_surface node for every surface (including subsurfaces).
 void overview_card_surface_add(struct wlr_surface *surface, int sx, int sy,
 							   void *data) {
 	Client *c = data;
@@ -61,16 +63,17 @@ void overview_card_surface_add(struct wlr_surface *surface, int sx, int sy,
 	}
 	entry->buffer = entry->scene_surface->buffer;
 	wlr_scene_buffer_set_filter_mode(entry->buffer, WLR_SCALE_FILTER_BILINEAR);
-	entry->buffer->node.data = c; /* 命中测试 */
+	entry->buffer->node.data = c; /* Hit test. */
 
-	entry->commit.notify = overview_card_surface_commit;
+	entry->commit.notify = handle_overview_card_surface_commit;
 	wl_signal_add(&surface->events.commit, &entry->commit);
-	entry->destroy.notify = overview_card_surface_destroy;
+	entry->destroy.notify = handle_overview_card_surface_destroy;
 	wl_signal_add(&surface->events.destroy, &entry->destroy);
 
 	wl_list_insert(&c->ov_card_surfaces, &entry->link);
 }
-// 按当前几何更新卡片位置与缩放；内容起点用 client_get_clip 的 geometry 偏移
+// Updates card position and scale from the current geometry; content origin
+// uses client_get_clip geometry offset.
 void overview_layout_card(Client *c) {
 	if (!c->ov_card_tree)
 		return;
@@ -85,7 +88,7 @@ void overview_layout_card(Client *c) {
 
 	wlr_scene_node_set_position(&c->ov_card_tree->node, c->bw, c->bw);
 
-	// 内容起点（geometry 偏移）与卡片内容尺寸
+	// Content origin (geometry offset) and card content size.
 	struct wlr_box clip;
 	client_get_clip(c, &clip);
 
@@ -110,13 +113,16 @@ void overview_layout_card(Client *c) {
 	struct ov_card_surface *entry;
 	wl_list_for_each(entry, &c->ov_card_surfaces, link) {
 		struct wlr_surface *es = entry->surface;
-		/* current.width/height 是逻辑坐标，buffer_width/height 是像素坐标 */
+		/* current.width/height are logical coordinates; buffer_width/height are
+		 * pixel coordinates. */
 		float lw = es->current.width;
 		float lh = es->current.height;
 
 		if (entry->is_root) {
-			/* 根 surface 按内容区域裁剪填满卡片；source_box 为 buffer
-			 * 像素，用比例换算 */
+			/*
+			 * The root surface is clipped to fill the card; source_box is in
+			 * buffer pixels, converted by ratio.
+			 */
 			float ratio_x =
 				es->current.width > 0
 					? (float)es->current.buffer_width / es->current.width
@@ -135,7 +141,8 @@ void overview_layout_card(Client *c) {
 			};
 			wlr_scene_buffer_set_source_box(entry->buffer, &src);
 		} else {
-			/* subsurface 相对内容起点摆放并缩放 */
+			/* Subsurfaces are positioned and scaled relative to the content
+			 * origin. */
 			int px = (int)((entry->sx - clip.x) * scale_x);
 			int py = (int)((entry->sy - clip.y) * scale_y);
 			wlr_scene_node_set_position(&entry->buffer->node, px, py);
@@ -145,7 +152,7 @@ void overview_layout_card(Client *c) {
 	}
 }
 
-// 销毁卡片树并释放全部 surface 节点
+// Destroys the card tree and frees all surface nodes.
 void overview_destroy_card(Client *c) {
 	if (!c->ov_card_tree)
 		return;
@@ -161,28 +168,31 @@ void overview_destroy_card(Client *c) {
 	wlr_scene_node_destroy(&c->ov_card_tree->node);
 	c->ov_card_tree = NULL;
 }
-// 给卡片所有 buffer 节点统一应用圆角
+// Applies rounded corners to all buffer nodes of the card.
 void overview_card_set_corner_radii(Client *c, struct fx_corner_radii corners) {
 	struct ov_card_surface *entry;
 	wl_list_for_each(entry, &c->ov_card_surfaces, link)
 		wlr_scene_buffer_set_corner_radii(entry->buffer, corners);
 }
 
-// 进入 overview：保存并禁用真实 scene_surface 树，建独立卡片树显示内容
+// Entering overview: saves and disables the real scene_surface tree and builds
+// an independent card tree to display content.
 void overview_backup_surface(Client *c) {
 	if (c->ov_card_tree)
 		return;
-	/* 被吞噬/隐藏的窗口相当于完全消失，不给它建卡片、也不重置其隐藏状态 */
+	/* A swallowed/hidden window is treated as fully gone: no card is created
+	 * for it and its hidden state is not reset. */
 	if (c->is_logic_hide)
 		return;
 	if (!client_surface(c) || !client_surface(c)->mapped)
 		return;
 
-	// 禁用真实 surface 树
+	// Disables the real surface tree.
 	c->overview_scene_surface = c->scene_surface;
 	wlr_scene_node_set_enabled(&c->scene_surface->node, false);
 
-	// overview 里所有 tag 的窗口都要显示卡片，不能被子树隐藏逻辑禁用
+	// In overview every tag window must show its card and must not be disabled
+	// by the subtree hiding logic.
 	c->is_logic_hide = false;
 	c->is_clip_to_hide = false;
 	wlr_scene_node_set_enabled(&c->scene->node, true);
@@ -190,24 +200,26 @@ void overview_backup_surface(Client *c) {
 	c->ov_card_tree = wlr_scene_tree_create(c->scene);
 	if (!c->ov_card_tree)
 		return;
-	c->ov_card_tree->node.data = c; // 命中测试
+	c->ov_card_tree->node.data = c; // Hit test.
 
-	// 遍历 surface 树为每个 surface 建卡片节点
+	// Walks the surface tree and creates a card node per surface.
 	wlr_surface_for_each_surface(client_surface(c), overview_card_surface_add,
 								 c);
 
-	// 卡片树建在 scene 顶层，把已启用的 jump label 提到卡片之上
+	// The card tree is created at the scene top; enabled jump labels are raised
+	// above the cards.
 	if (c->jump_label_node && c->jump_label_node->scene_buffer->node.enabled)
 		wlr_scene_node_raise_to_top(&c->jump_label_node->scene_buffer->node);
 
 	overview_layout_card(c);
 
-	// 喂一帧启动渲染循环（之后由 scene_surface 的 frame-done 驱动）
+	// Feeds one frame to start the render loop (later driven by scene_surface
+	// frame-done).
 	struct timespec now;
 	clock_gettime(CLOCK_MONOTONIC, &now);
 	client_send_frame_done(c, &now);
 }
-// 普通视图切换到overview时保存窗口的旧状态
+// Saves the window old state when switching from the normal view to overview.
 void overview_backup(Client *c) {
 	c->overview_isfloatingbak = c->isfloating;
 	c->overview_isfullscreenbak = c->isfullscreen;
@@ -225,7 +237,8 @@ void overview_backup(Client *c) {
 	overview_backup_surface(c);
 
 	if (c->isfullscreen || c->ismaximizescreen) {
-		client_pending_fullscreen_state(c, 0); // 清除窗口全屏标志
+		client_pending_fullscreen_state(
+			c, 0); // Clears the window fullscreen flag.
 		client_pending_maximized_state(c, 0);
 	}
 	c->bw = c->isnoborder ? 0 : config.borderpx;
@@ -233,9 +246,9 @@ void overview_backup(Client *c) {
 	client_set_tiled(c, WLR_EDGE_TOP | WLR_EDGE_BOTTOM | WLR_EDGE_LEFT |
 							WLR_EDGE_RIGHT);
 }
-// overview切回到普通视图还原窗口的状态
+// Restores window state when switching back from overview to the normal view.
 void overview_restore(Client *c, const Arg *arg) {
-	/* 被吞噬/隐藏的窗口保持原状（不还原、不显示） */
+	/* Swallowed/hidden windows stay as they are (not restored, not shown). */
 	if (c->is_logic_hide)
 		return;
 
@@ -250,7 +263,7 @@ void overview_restore(Client *c, const Arg *arg) {
 	c->animation.tagining = false;
 	c->is_restoring_from_ov = (arg->ui & c->tags & TAGMASK) == 0 ? true : false;
 
-	// 销毁卡片树，恢复真实 scene_surface 树
+	// Destroys the card tree and restores the real scene_surface tree.
 	overview_destroy_card(c);
 	if (c->overview_scene_surface) {
 		c->scene_surface = c->overview_scene_surface;
@@ -259,17 +272,18 @@ void overview_restore(Client *c, const Arg *arg) {
 	}
 
 	if (c->isfloating) {
-		// XRaiseWindow(dpy, c->win); // 提升悬浮窗口到顶层
+		// XRaiseWindow(display, c->win); // Raise the floating window to the
+		// top
 		resize(c, c->overview_backup_geom, 0);
 	} else if (c->isfullscreen || c->ismaximizescreen) {
 		if (want_restore_fullscreen(c) && c->ismaximizescreen) {
-			setmaximizescreen(c, 1, false);
+			client_set_maximize_screen(c, 1, false);
 		} else if (want_restore_fullscreen(c) && c->isfullscreen) {
-			setfullscreen(c, 1, false);
+			client_apply_fullscreen(c, 1, false);
 		} else {
 			client_pending_fullscreen_state(c, 0);
 			client_pending_maximized_state(c, 0);
-			setfullscreen(c, false, false);
+			client_apply_fullscreen(c, false, false);
 		}
 	} else {
 		if (c->is_restoring_from_ov) {
@@ -278,8 +292,8 @@ void overview_restore(Client *c, const Arg *arg) {
 		}
 	}
 
-	if (c->bw == 0 &&
-		!c->isfullscreen) { // 如果是在ov模式中创建的窗口,没有bw记录
+	if (c->bw == 0 && !c->isfullscreen) { // Windows created while in overview
+										  // mode have no bw record.
 		c->bw = c->isnoborder ? 0 : config.borderpx;
 	}
 

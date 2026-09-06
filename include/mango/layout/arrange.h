@@ -5,23 +5,23 @@
 
 void set_size_per(Monitor *m, Client *c);
 
-void resize_tile_master_horizontal(Client *grabc, bool isdrag, int32_t offsetx,
+void resize_tile_master_horizontal(Client *gc, bool isdrag, int32_t offsetx,
 								   int32_t offsety, uint32_t time,
 								   int32_t type);
 
-void resize_tile_master_vertical(Client *grabc, bool isdrag, int32_t offsetx,
+void resize_tile_master_vertical(Client *gc, bool isdrag, int32_t offsetx,
 								 int32_t offsety, uint32_t time, int32_t type);
 
-void resize_tile_dwindle(Client *grabc, bool isdrag, int32_t offsetx,
+void resize_tile_dwindle(Client *gc, bool isdrag, int32_t offsetx,
 						 int32_t offsety, uint32_t time, bool isvertical);
 
-void resize_tile_grid_fair(Client *grabc, bool isdrag, int32_t offsetx,
+void resize_tile_grid_fair(Client *gc, bool isdrag, int32_t offsetx,
 						   int32_t offsety, uint32_t time);
 
-void resize_tile_scroller(Client *grabc, bool isdrag, int32_t offsetx,
+void resize_tile_scroller(Client *gc, bool isdrag, int32_t offsetx,
 						  int32_t offsety, uint32_t time, bool isvertical);
 
-void resize_tile_client(Client *grabc, bool isdrag, int32_t offsetx,
+void resize_tile_client(Client *gc, bool isdrag, int32_t offsetx,
 						int32_t offsety, uint32_t time);
 
 void check_size_per_valid(Client *c);

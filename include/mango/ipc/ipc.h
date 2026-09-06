@@ -48,10 +48,10 @@ void ipc_notify_all_clients(void);
 void ipc_notify_all_tags(void);
 void ipc_notify_keymode(void);
 void ipc_notify_kb_layout(void);
-/* ---------- Watch 模式支持 ---------- */
+/* ---------- Watch mode support ---------- */
 void ipc_notify_json_to_fd(int fd, cJSON *json);
 
-cJSON *tags_mask_to_array(uint32_t tagmask);
+cJSON *tags_mask_to_array(uint32_t tag_mask);
 cJSON *build_tags_json(Monitor *m);
 cJSON *monitor_active_tags(Monitor *m);
 cJSON *build_client_json(Client *c);
@@ -66,15 +66,16 @@ void handle_print_status(struct wl_listener *listener, void *data);
 
 void send_static_json(int fd, const char *json_str);
 
-/* ---------- 一次性命令处理 ---------- */
+/* ---------- One-shot command handling ---------- */
 void handle_command(int client_fd, const char *cmd_raw);
 
-/* 向 watch all-devices 客户端推送最后触发事件的设备 */
+/* Pushes the device that triggered the last event to watch all-devices clients.
+ */
 
 int ipc_watch_data_handler(int fd, uint32_t mask, void *data);
 bool handle_watch_command(int fd, const char *cmd,
 						  struct ipc_client_state *client);
 
-/* ---------- Socket 事件处理 ---------- */
+/* ---------- Socket event handling ---------- */
 int ipc_handle_client_data(int fd, uint32_t mask, void *data);
 #endif

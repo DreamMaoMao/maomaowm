@@ -1,8 +1,10 @@
 #include "mango/switcher/switcher.h"
 #include "mango/manage/client.h"
-#include "mango/common/globals.h"
+#include "mango/common/server.h"
 #include "mango/manage/monitor.h"
 #include "mango/common/util.h"
+
+static struct switcher_state switcher_state;
 
 // map the surface tree into the fixed tile box, re-run after each commit
 // because the content size or clip may change
@@ -15,7 +17,7 @@ void switcher_tile_layout(struct switcher_tile *tile) {
 		return;
 
 	float scale_x = (float)tile->cw / src_w;
-	float scale_y = (float)sw.tile_h / src_h;
+	float scale_y = (float)switcher_state.tile_h / src_h;
 	struct switcher_surface *entry;
 	wl_list_for_each(entry, &tile->surfaces, link) {
 		struct wlr_surface *s = entry->surface;
@@ -36,7 +38,8 @@ void switcher_tile_layout(struct switcher_tile *tile) {
 			};
 			wlr_scene_buffer_set_source_box(entry->buffer, &src);
 			wlr_scene_node_set_position(&entry->buffer->node, 0, 0);
-			wlr_scene_buffer_set_dest_size(entry->buffer, tile->cw, sw.tile_h);
+			wlr_scene_buffer_set_dest_size(entry->buffer, tile->cw,
+										   switcher_state.tile_h);
 		} else {
 			wlr_scene_node_set_position(&entry->buffer->node,
 										(int)((entry->sx - clip.x) * scale_x),
@@ -119,20 +122,21 @@ void switcher_surface_update_buffer(struct switcher_surface *entry) {
 											 &options);
 }
 
-void switcher_surface_commit(struct wl_listener *listener, void *data) {
+void handle_switcher_surface_commit(struct wl_listener *listener, void *data) {
 	struct switcher_surface *entry = wl_container_of(listener, entry, commit);
 	switcher_surface_update_buffer(entry);
 	switcher_tile_layout(entry->tile);
 }
 
-void switcher_surface_destroy(struct wl_listener *listener, void *data) {
+void handle_switcher_surface_destroy(struct wl_listener *listener, void *data) {
 	struct switcher_surface *entry = wl_container_of(listener, entry, destroy);
 	struct wlr_scene_buffer *buffer = entry->buffer;
 	switcher_surface_finish(entry);
 	wlr_scene_node_destroy(&buffer->node);
 }
 
-void switcher_surface_output_sample(struct wl_listener *listener, void *data) {
+void handle_switcher_surface_output_sample(struct wl_listener *listener,
+										   void *data) {
 	struct switcher_surface *entry =
 		wl_container_of(listener, entry, output_sample);
 	const struct wlr_scene_output_sample_event *event = data;
@@ -154,7 +158,8 @@ void switcher_surface_output_sample(struct wl_listener *listener, void *data) {
 }
 
 // hidden clients are paced by the preview buffer
-void switcher_surface_frame_done(struct wl_listener *listener, void *data) {
+void handle_switcher_surface_frame_done(struct wl_listener *listener,
+										void *data) {
 	struct switcher_surface *entry =
 		wl_container_of(listener, entry, frame_done);
 	struct wlr_scene_frame_done_event *event = data;
@@ -182,12 +187,14 @@ void switcher_tile_add_surface(struct wlr_surface *surface, int sx, int sy,
 	wlr_scene_buffer_set_filter_mode(entry->buffer, WLR_SCALE_FILTER_BILINEAR);
 	switcher_surface_update_buffer(entry);
 
-	LISTEN(&surface->events.commit, &entry->commit, switcher_surface_commit);
-	LISTEN(&surface->events.destroy, &entry->destroy, switcher_surface_destroy);
+	LISTEN(&surface->events.commit, &entry->commit,
+		   handle_switcher_surface_commit);
+	LISTEN(&surface->events.destroy, &entry->destroy,
+		   handle_switcher_surface_destroy);
 	LISTEN(&buffer->events.output_sample, &entry->output_sample,
-		   switcher_surface_output_sample);
+		   handle_switcher_surface_output_sample);
 	LISTEN(&buffer->events.frame_done, &entry->frame_done,
-		   switcher_surface_frame_done);
+		   handle_switcher_surface_frame_done);
 	wl_list_insert(&tile->surfaces, &entry->link);
 }
 
@@ -198,9 +205,9 @@ void switcher_tile_create(struct switcher_tile *tile, Client *c) {
 	switcher_content_size(c, &src_w, &src_h);
 	float aspect = src_w > 0 && src_h > 0 ? src_w / src_h : 1.0f;
 	aspect = MANGO_MAX(SW_ASPECT_MIN, MANGO_MIN(aspect, SW_ASPECT_MAX));
-	tile->cw = MANGO_MAX(1, (int)(sw.tile_h * aspect));
+	tile->cw = MANGO_MAX(1, (int)(switcher_state.tile_h * aspect));
 
-	tile->tree = wlr_scene_tree_create(sw.tree);
+	tile->tree = wlr_scene_tree_create(switcher_state.tree);
 	tile->frame = wlr_scene_rect_create(tile->tree, 1, 1, config.bordercolor);
 	tile->content = wlr_scene_tree_create(tile->tree);
 	wlr_scene_node_set_position(&tile->content->node, SW_PAD, SW_PAD);
@@ -210,15 +217,15 @@ void switcher_tile_create(struct switcher_tile *tile, Client *c) {
 }
 
 void switcher_layout(void) {
-	int frame_h = sw.tile_h + 2 * SW_PAD;
-	int maxrow_w =
-		MANGO_MAX(1, (int)(sw.mon->m.width * SW_PANEL_FRAC) - 2 * SW_MARGIN);
+	int frame_h = switcher_state.tile_h + 2 * SW_PAD;
+	int maxrow_w = MANGO_MAX(
+		1, (int)(switcher_state.mon->m.width * SW_PANEL_FRAC) - 2 * SW_MARGIN);
 
 	int nrows = 1;
 	int row_w = 0;
 	int content_w = 0;
-	for (int i = 0; i < sw.count; i++) {
-		struct switcher_tile *tile = sw.tiles[i];
+	for (int i = 0; i < switcher_state.count; i++) {
+		struct switcher_tile *tile = switcher_state.tiles[i];
 		int fw = tile->cw + 2 * SW_PAD;
 		if (row_w > 0 && row_w + SW_GAP + fw > maxrow_w) {
 			nrows++;
@@ -231,23 +238,24 @@ void switcher_layout(void) {
 	}
 
 	int *rowsw = ecalloc(nrows, sizeof(*rowsw));
-	for (int i = 0; i < sw.count; i++) {
-		struct switcher_tile *tile = sw.tiles[i];
+	for (int i = 0; i < switcher_state.count; i++) {
+		struct switcher_tile *tile = switcher_state.tiles[i];
 		int fw = tile->cw + 2 * SW_PAD;
 		rowsw[tile->row] += rowsw[tile->row] == 0 ? fw : SW_GAP + fw;
 	}
 
 	int panel_w = content_w + 2 * SW_MARGIN;
 	int panel_h = 2 * SW_MARGIN + nrows * frame_h + (nrows - 1) * SW_GAP;
-	wlr_scene_node_set_position(&sw.tree->node,
-								sw.mon->m.x + (sw.mon->m.width - panel_w) / 2,
-								sw.mon->m.y + (sw.mon->m.height - panel_h) / 2);
-	wlr_scene_rect_set_size(sw.bg, panel_w, panel_h);
+	wlr_scene_node_set_position(
+		&switcher_state.tree->node,
+		switcher_state.mon->m.x + (switcher_state.mon->m.width - panel_w) / 2,
+		switcher_state.mon->m.y + (switcher_state.mon->m.height - panel_h) / 2);
+	wlr_scene_rect_set_size(switcher_state.bg, panel_w, panel_h);
 
 	int row = -1;
 	int x = 0;
-	for (int i = 0; i < sw.count; i++) {
-		struct switcher_tile *tile = sw.tiles[i];
+	for (int i = 0; i < switcher_state.count; i++) {
+		struct switcher_tile *tile = switcher_state.tiles[i];
 		if (tile->row != row) {
 			row = tile->row;
 			x = SW_MARGIN + (content_w - rowsw[row]) / 2;
@@ -261,26 +269,27 @@ void switcher_layout(void) {
 }
 
 void switcher_apply_highlight(void) {
-	for (int i = 0; i < sw.count; i++)
-		wlr_scene_rect_set_color(sw.tiles[i]->frame, i == sw.index
-														 ? config.focuscolor
-														 : config.bordercolor);
+	for (int i = 0; i < switcher_state.count; i++)
+		wlr_scene_rect_set_color(
+			switcher_state.tiles[i]->frame,
+			i == switcher_state.index ? config.focuscolor : config.bordercolor);
 }
 
 void switcher_close(void) {
 	if (!switcher_is_active())
 		return;
-	for (int i = 0; i < sw.count; i++) {
+	for (int i = 0; i < switcher_state.count; i++) {
 		struct switcher_surface *entry, *tmp;
-		wl_list_for_each_safe(entry, tmp, &sw.tiles[i]->surfaces, link) {
+		wl_list_for_each_safe(entry, tmp, &switcher_state.tiles[i]->surfaces,
+							  link) {
 			switcher_surface_finish(entry);
 		}
 	}
-	wlr_scene_node_destroy(&sw.tree->node);
-	for (int i = 0; i < sw.count; i++)
-		free(sw.tiles[i]);
-	free(sw.tiles);
-	memset(&sw, 0, sizeof(sw));
+	wlr_scene_node_destroy(&switcher_state.tree->node);
+	for (int i = 0; i < switcher_state.count; i++)
+		free(switcher_state.tiles[i]);
+	free(switcher_state.tiles);
+	memset(&switcher_state, 0, sizeof(switcher_state));
 }
 
 // remove a single tile while the switcher stays open, then relayout
@@ -288,31 +297,32 @@ void switcher_remove_client(Client *c) {
 	if (!switcher_is_active())
 		return;
 	int i;
-	for (i = 0; i < sw.count; i++) {
-		if (sw.tiles[i]->c == c)
+	for (i = 0; i < switcher_state.count; i++) {
+		if (switcher_state.tiles[i]->c == c)
 			break;
 	}
-	if (i == sw.count)
+	if (i == switcher_state.count)
 		return;
 
 	struct switcher_surface *entry, *tmp;
-	wl_list_for_each_safe(entry, tmp, &sw.tiles[i]->surfaces, link) {
+	wl_list_for_each_safe(entry, tmp, &switcher_state.tiles[i]->surfaces,
+						  link) {
 		switcher_surface_finish(entry);
 	}
-	wlr_scene_node_destroy(&sw.tiles[i]->tree->node);
-	free(sw.tiles[i]);
+	wlr_scene_node_destroy(&switcher_state.tiles[i]->tree->node);
+	free(switcher_state.tiles[i]);
 
-	if (sw.index > i)
-		sw.index--;
-	memmove(&sw.tiles[i], &sw.tiles[i + 1],
-			(sw.count - i - 1) * sizeof(*sw.tiles));
-	sw.count--;
-	if (sw.count == 0) {
+	if (switcher_state.index > i)
+		switcher_state.index--;
+	memmove(&switcher_state.tiles[i], &switcher_state.tiles[i + 1],
+			(switcher_state.count - i - 1) * sizeof(*switcher_state.tiles));
+	switcher_state.count--;
+	if (switcher_state.count == 0) {
 		switcher_close();
 		return;
 	}
-	if (sw.index >= sw.count)
-		sw.index = sw.count - 1;
+	if (switcher_state.index >= switcher_state.count)
+		switcher_state.index = switcher_state.count - 1;
 	switcher_layout();
 	switcher_apply_highlight();
 }
@@ -325,25 +335,25 @@ void switcher_commit_client(Client *tc) {
 		client_is_x11_popup(tc))
 		return;
 	if (!VISIBLEON(tc, tc->mon))
-		view_in_mon(&(Arg){.ui = get_tags_first_tag(tc->tags)}, true, tc->mon,
-					true);
-	focusclient(tc, 1);
+		client_view_on_monitor(&(Arg){.ui = get_tags_first_tag(tc->tags)}, true,
+							   tc->mon, true);
+	client_focus(tc, 1);
 }
 
 void switcher_commit(void) {
 	if (!switcher_is_active())
 		return;
-	switcher_commit_client(sw.tiles[sw.index]->c);
+	switcher_commit_client(switcher_state.tiles[switcher_state.index]->c);
 }
 
 Client *switcher_client_at(double lx, double ly) {
 	if (!switcher_is_active())
 		return NULL;
-	for (int i = 0; i < sw.count; i++) {
-		struct switcher_tile *tile = sw.tiles[i];
+	for (int i = 0; i < switcher_state.count; i++) {
+		struct switcher_tile *tile = switcher_state.tiles[i];
 		struct wlr_box box = {
 			.width = tile->cw + 2 * SW_PAD,
-			.height = sw.tile_h + 2 * SW_PAD,
+			.height = switcher_state.tile_h + 2 * SW_PAD,
 		};
 		if (!wlr_scene_node_coords(&tile->tree->node, &box.x, &box.y) ||
 			!wlr_box_contains_point(&box, lx, ly))
@@ -358,25 +368,26 @@ void switcher_open(int scope) {
 	Monitor *m;
 	int n = 0;
 
-	wl_list_for_each(m, &mons, link) {
+	wl_list_for_each(m, &server.monitors, link) {
 		if (m->isoverview)
 			return;
 	}
 
-	sw.mon = selmon;
-	sw.scope = scope;
+	switcher_state.mon = server.selected_monitor;
+	switcher_state.scope = scope;
 
-	wl_list_for_each(c, &fstack, flink) {
+	wl_list_for_each(c, &server.focus_stack, flink) {
 		if (switcher_candidate(c))
 			n++;
 	}
 	if (n == 0)
 		return;
 
-	int max_row_w = (int)(sw.mon->m.width * SW_PANEL_FRAC) - 2 * SW_MARGIN;
-	int max_panel_h = (int)(sw.mon->m.height * SW_PANEL_FRAC);
+	int max_row_w =
+		(int)(switcher_state.mon->m.width * SW_PANEL_FRAC) - 2 * SW_MARGIN;
+	int max_panel_h = (int)(switcher_state.mon->m.height * SW_PANEL_FRAC);
 	// size against the widest allowed tile so the panel always fits
-	sw.tile_h = 1;
+	switcher_state.tile_h = 1;
 	for (int cols = 1; cols <= n; cols++) {
 		int rows = (n + cols - 1) / cols;
 		int h_by_w =
@@ -385,24 +396,27 @@ void switcher_open(int scope) {
 		int h_by_h =
 			(max_panel_h - 2 * SW_MARGIN - (rows - 1) * SW_GAP) / rows -
 			2 * SW_PAD;
-		int h = MANGO_MIN((int)(sw.mon->m.height * SW_TILE_FRAC),
+		int h = MANGO_MIN((int)(switcher_state.mon->m.height * SW_TILE_FRAC),
 						  MANGO_MIN(h_by_w, h_by_h));
-		sw.tile_h = MANGO_MAX(sw.tile_h, h);
+		switcher_state.tile_h = MANGO_MAX(switcher_state.tile_h, h);
 	}
 
-	sw.tree = wlr_scene_tree_create(layers[LyrOverlay]);
-	sw.bg = wlr_scene_rect_create(sw.tree, 1, 1, switcher_panel_color);
-	sw.tiles = ecalloc(n, sizeof(*sw.tiles));
-	wl_list_for_each(c, &fstack, flink) {
+	switcher_state.tree = wlr_scene_tree_create(server.layers[LyrOverlay]);
+	switcher_state.bg =
+		wlr_scene_rect_create(switcher_state.tree, 1, 1, switcher_panel_color);
+	switcher_state.tiles = ecalloc(n, sizeof(*switcher_state.tiles));
+	wl_list_for_each(c, &server.focus_stack, flink) {
 		if (!switcher_candidate(c))
 			continue;
 		struct switcher_tile *tile = ecalloc(1, sizeof(*tile));
 		switcher_tile_create(tile, c);
-		sw.tiles[sw.count++] = tile;
+		switcher_state.tiles[switcher_state.count++] = tile;
 	}
-	// 当前窗口位于 fstack 头部（tiles[0]），选中第二个并提交后会被插到
-	// 最前，下次打开时原来的第一个变成第二个，从而在最近两个窗口间往返
-	sw.index = sw.count > 1 ? 1 : 0;
+	// The current window is at the focus_stack head (tiles[0]); selecting the
+	// second one and committing inserts it at the front, so the next open puts
+	// the original first as second, toggling between the two most recent
+	// windows.
+	switcher_state.index = switcher_state.count > 1 ? 1 : 0;
 	switcher_layout();
 	switcher_apply_highlight();
 
@@ -410,22 +424,24 @@ void switcher_open(int scope) {
 	// tiles of hidden windows stay live, like overview cards
 	struct timespec now;
 	clock_gettime(CLOCK_MONOTONIC, &now);
-	for (int i = 0; i < sw.count; i++)
-		client_send_frame_done(sw.tiles[i]->c, &now);
+	for (int i = 0; i < switcher_state.count; i++)
+		client_send_frame_done(switcher_state.tiles[i]->c, &now);
 }
 
 void switcher_cycle(int dir) {
-	sw.index = (sw.index + dir + sw.count) % sw.count;
+	switcher_state.index = (switcher_state.index + dir + switcher_state.count) %
+						   switcher_state.count;
 	switcher_apply_highlight();
 }
 
 void switcher(const Arg *arg) {
 	int dir = arg && arg->i == PREV ? -1 : 1;
 	int scope = arg ? arg->i2 : SW_CURRENT_TAG;
-	if (locked || !selmon || selmon->is_jump_mode)
+	if (server.session_locked || !server.selected_monitor ||
+		server.selected_monitor->is_jump_mode)
 		return;
 	if (switcher_is_active()) {
-		if (scope != sw.scope) {
+		if (scope != switcher_state.scope) {
 			switcher_close();
 			switcher_open(scope);
 		} else {
@@ -435,7 +451,7 @@ void switcher(const Arg *arg) {
 		switcher_open(scope);
 	}
 }
-bool switcher_is_active(void) { return sw.tree != NULL; }
+bool switcher_is_active(void) { return switcher_state.tree != NULL; }
 
 bool switcher_candidate(Client *c) {
 	if (!c->mon || c->iskilling || c->isminimized || c->isunglobal ||
@@ -443,10 +459,10 @@ bool switcher_candidate(Client *c) {
 		client_is_unmanaged(c) || client_is_x11_popup(c))
 		return false;
 
-	if (sw.scope == SW_CURRENT_TAG)
-		return c->mon == sw.mon && VISIBLEON(c, sw.mon);
-	if (sw.scope == SW_ALL_TAG)
-		return c->mon == sw.mon;
+	if (switcher_state.scope == SW_CURRENT_TAG)
+		return c->mon == switcher_state.mon && VISIBLEON(c, switcher_state.mon);
+	if (switcher_state.scope == SW_ALL_TAG)
+		return c->mon == switcher_state.mon;
 	return (int32_t)c->tags > 0;
 }
 
@@ -464,4 +480,3 @@ void switcher_content_size(Client *c, float *w, float *h) {
 }
 
 const float switcher_panel_color[4] = {0.09f, 0.09f, 0.11f, 0.92f};
-struct switcher_state sw;

@@ -43,14 +43,16 @@ void fadeout_client_animation_next_tick(Client *c);
 void client_animation_next_tick(Client *c);
 void init_fadeout_client(Client *c);
 
-/* 无动画时应用窗口最终状态：位置、裁剪/可见性以及几何状态同步 */
+/* Applies the final window state when animation is disabled: position,
+ * clipping/visibility, and geometry state are synchronized. */
 void client_apply_finish_geometry(Client *c);
 void client_commit(Client *c);
 void client_set_pending_state(Client *c);
 
 typedef struct ResizeOpts {
-	bool interact;			 // 交互式 resize（鼠标拖动调整）
-	bool skip_ov_enter_anim; // 预排阶段：跳过 overview 进入放大
+	bool interact; // Interactive resize (window resized by mouse drag).
+	bool skip_ov_enter_anim; // Pre-arrangement stage: skip the overview enter
+							 // zoom.
 } ResizeOpts;
 
 void resize_apply(Client *c, struct wlr_box geo, ResizeOpts opts);

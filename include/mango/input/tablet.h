@@ -5,21 +5,21 @@
 #include <wlr/types/wlr_tablet_tool.h>
 #include <wlr/types/wlr_tablet_v2.h>
 
-void createtablet(struct wlr_input_device *device);
-void destroytablet(struct wl_listener *listener, void *data);
-void createtabletpad(struct wlr_input_device *device);
-void destroytabletpad(struct wl_listener *listener, void *data);
-void tabletpadtabletdestroy(struct wl_listener *listener, void *data);
-void tabletpadattach(struct wl_listener *listener, void *data);
-void destroytabletsurfacenotify(struct wl_listener *listener, void *data);
-void destroytablettool(struct wl_listener *listener, void *data);
-void tablettoolsetcursor(struct wl_listener *listener, void *data);
+void tablet_create(struct wlr_input_device *device);
+void handle_tablet_destroy(struct wl_listener *listener, void *data);
+void tablet_pad_create(struct wlr_input_device *device);
+void handle_tablet_pad_destroy(struct wl_listener *listener, void *data);
+void handle_tablet_pad_tablet_destroy(struct wl_listener *listener, void *data);
+void handle_tablet_pad_attach(struct wl_listener *listener, void *data);
+void handle_tablet_tool_surface_destroy(struct wl_listener *listener,
+										void *data);
+void handle_tablet_tool_destroy(struct wl_listener *listener, void *data);
+void handle_tablet_tool_set_cursor(struct wl_listener *listener, void *data);
 
-void tablettoolproximity(struct wl_listener *listener, void *data);
-void tablettoolaxis(struct wl_listener *listener, void *data);
-void tablettoolbutton(struct wl_listener *listener, void *data);
-void tablettooltip(struct wl_listener *listener, void *data);
-extern struct wlr_tablet_manager_v2 *tablet_mgr;
+void handle_tablet_tool_proximity(struct wl_listener *listener, void *data);
+void handle_tablet_tool_axis(struct wl_listener *listener, void *data);
+void handle_tablet_tool_button(struct wl_listener *listener, void *data);
+void handle_tablet_tool_tip(struct wl_listener *listener, void *data);
 
 struct Tablet {
 	struct wlr_tablet_v2_tablet *tablet_v2;
@@ -27,7 +27,6 @@ struct Tablet {
 	struct wlr_input_device *device;
 	struct wl_list link;
 };
-extern struct wl_list tablets;
 
 struct TabletTool {
 	struct wlr_tablet_v2_tablet_tool *tool_v2;
@@ -48,15 +47,9 @@ struct TabletPad {
 	struct wl_listener destroy;
 	struct wl_list link;
 };
-extern struct wl_list tablet_pads;
 
 void attach_tablet_pad(struct TabletPad *tablet_pad, struct Tablet *tablet);
-void tablettoolmotion(struct TabletTool *tool, bool change_x, bool change_y,
-					  double x, double y, double dx, double dy);
-
-extern struct wl_listener tablet_tool_axis;
-extern struct wl_listener tablet_tool_button;
-extern struct wl_listener tablet_tool_proximity;
-extern struct wl_listener tablet_tool_tip;
+void tablet_tool_motion(struct TabletTool *tool, bool change_x, bool change_y,
+						double x, double y, double dx, double dy);
 
 #endif

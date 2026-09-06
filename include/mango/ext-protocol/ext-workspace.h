@@ -18,11 +18,7 @@ struct workspace {
 	struct wl_listener commit;
 };
 
-extern struct wlr_ext_workspace_manager_v1 *ext_manager;
-extern struct wl_list workspaces;
-
 void handle_ext_commit(struct wl_listener *listener, void *data);
-extern struct wl_listener ext_manager_commit_listener;
 
 void goto_workspace(struct workspace *target);
 void toggle_workspace(struct workspace *target);

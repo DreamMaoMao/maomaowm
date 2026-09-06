@@ -1,7 +1,6 @@
 #include "mango/layout/overview.h"
-#include "mango/common/globals.h"
+#include "mango/common/server.h"
 #include "mango/manage/client.h"
-#include "mango/common/globals.h"
 #include "mango/config/parse_config.h"
 #include <stdbool.h>
 
@@ -100,7 +99,7 @@ void overview_scale(Monitor *m) {
 
 	int n = 0;
 	Client *c;
-	wl_list_for_each(c, &clients, link) {
+	wl_list_for_each(c, &server.clients, link) {
 		if (c->mon != m)
 			continue;
 		if (VISIBLEON(c, m) && !c->isunglobal && !client_is_x11_popup(c)) {
@@ -225,7 +224,8 @@ void overview_scale(Monitor *m) {
 		float base_x = m->w.x + target_gappo + dx;
 		float base_y = m->w.y + target_gappo + dy;
 
-		// 收集所有客户端的目标几何，最后统一调用 client_tile_resize
+		// Collects the target geometry of all clients and calls
+		// client_tile_resize once at the end.
 		struct wlr_box *overview_boxes = calloc(n, sizeof(*overview_boxes));
 		if (!overview_boxes) {
 			free(items);
@@ -256,7 +256,8 @@ void overview_scale(Monitor *m) {
 	free(feas);
 }
 
-// overview 布局：聚焦窗口居中（约一半屏宽），其余窗口分列两侧
+// Overview layout: focused window centered (about half screen width), remaining
+// windows split on both sides.
 void overview_layout_column(Monitor *m, Client **items, int cnt, float x,
 							float top, float col_w, float col_h, float gap) {
 	if (cnt <= 0)
@@ -270,7 +271,7 @@ void overview_layout_column(Monitor *m, Client **items, int cnt, float x,
 		return;
 	}
 
-	// 宽度占满列宽，高度按比例
+	// Width fills the column width; height is proportional.
 	float total_h = 0.0f;
 	for (int i = 0; i < cnt; i++) {
 		float ow = items[i]->overview_backup_geom.width;
@@ -284,7 +285,7 @@ void overview_layout_column(Monitor *m, Client **items, int cnt, float x,
 		total_h += hs[i];
 	}
 
-	// 超高则整体缩小
+	// Scales the whole item down when it is too tall.
 	float gap_total = gap * (cnt - 1);
 	if (total_h + gap_total > col_h) {
 		float s = (col_h - gap_total) / total_h;
@@ -297,7 +298,7 @@ void overview_layout_column(Monitor *m, Client **items, int cnt, float x,
 		total_h *= s;
 	}
 
-	// 不足则垂直居中
+	// Vertically centers when there is extra room.
 	float y = top;
 	if (total_h + gap_total < col_h)
 		y = top + (col_h - (total_h + gap_total)) / 2.0f;
@@ -327,7 +328,7 @@ void overview_scale_tab(Monitor *m) {
 
 	int n = 0;
 	Client *c;
-	wl_list_for_each(c, &clients, link) {
+	wl_list_for_each(c, &server.clients, link) {
 		if (c->mon != m)
 			continue;
 		if (VISIBLEON(c, m) && !c->isunglobal && !client_is_x11_popup(c)) {
@@ -340,7 +341,7 @@ void overview_scale_tab(Monitor *m) {
 		return;
 	}
 
-	// 焦点窗口的下标（无则取第一个）
+	// Index of the focused window (or the first one if none).
 	Client *sel = m->sel;
 	int focus_idx = 0;
 	for (int i = 0; i < n; i++) {
@@ -350,7 +351,7 @@ void overview_scale_tab(Monitor *m) {
 		}
 	}
 
-	// 列间取大 gap，贴边取小 gap
+	// Uses the larger gap between columns and the smaller gap at the edges.
 	float gap_mid = (float)target_gappo;
 	float gap_edge = (float)target_gappi;
 	if (gap_mid < gap_edge) {
@@ -358,12 +359,13 @@ void overview_scale_tab(Monitor *m) {
 		gap_mid = gap_edge;
 		gap_edge = tmp;
 	}
-	gap_mid *= 0.5f; /* 列间间隙减半 */
+	gap_mid *= 0.5f; /* Halves the gap between columns. */
 
 	float avail_w = fmaxf(1.0f, m->w.width - 2 * gap_edge);
 	float avail_h = fmaxf(1.0f, m->w.height - 2 * gap_edge);
 
-	// 中列占比可配置，两侧平分剩余空间
+	// Center column ratio is configurable; both sides split the remaining space
+	// evenly.
 	float center_w = avail_w * config.overcircle_center_ratio;
 	float side_w = (avail_w - center_w - 2.0f * gap_mid) * 0.5f;
 	if (side_w < 1.0f)
@@ -376,7 +378,7 @@ void overview_scale_tab(Monitor *m) {
 	float center_x = base_x + side_w + gap_mid;
 	float right_x = center_x + center_w + gap_mid;
 
-	// 焦点窗口居中
+	// The focused window is centered.
 	Client *focus = items[focus_idx];
 	{
 		float ow = focus->overview_backup_geom.width;
@@ -397,7 +399,8 @@ void overview_scale_tab(Monitor *m) {
 		client_tile_resize(focus, (struct wlr_box){ix, iy, (int)w, (int)h}, 0);
 	}
 
-	// 其余窗口对半入左右两列，焦点切换时环形流动（转圈）
+	// The rest split into the left/right columns; on focus change they
+	// circulate (rotate).
 	Client **left = calloc(n, sizeof(Client *));
 	Client **right = calloc(n, sizeof(Client *));
 	if (!left || !right) {
@@ -432,7 +435,7 @@ void overview_scale_tab(Monitor *m) {
 }
 
 void create_jump_hints(Monitor *m) {
-	// 未配置 jump_labels 时使用静态默认序列
+	// Uses the static default sequence when jump_labels is not configured.
 	const char *jump_labels =
 		config.jump_labels ? config.jump_labels : default_jump_labels;
 	if (!jump_labels || !jump_labels[0])
@@ -441,7 +444,7 @@ void create_jump_hints(Monitor *m) {
 	int label_idx = 0;
 	Client *c;
 
-	wl_list_for_each(c, &clients, link) {
+	wl_list_for_each(c, &server.clients, link) {
 		if (VISIBLEON(c, m) && !c->isunglobal && !client_is_x11_popup(c)) {
 			if (label_idx >= (int)jump_labels_len)
 				break;
@@ -471,7 +474,7 @@ void finish_jump_mode(Monitor *m) {
 		return;
 
 	Client *c;
-	wl_list_for_each(c, &clients, link) {
+	wl_list_for_each(c, &server.clients, link) {
 		if (c->mon == m) {
 			if (c->jump_label_node &&
 				c->jump_label_node->scene_buffer->node.enabled) {

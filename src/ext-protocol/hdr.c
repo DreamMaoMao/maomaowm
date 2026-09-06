@@ -1,6 +1,9 @@
 #include "mango/ext-protocol/hdr.h"
+
+static uint32_t output_formats_8bit[10];
+static uint32_t output_formats_10bit[8];
 #include "mango/common/log.h"
-#include "mango/common/globals.h"
+#include "mango/common/server.h"
 #include "mango/manage/monitor.h"
 
 bool output_set_render_format(Monitor *m, uint32_t candidates[], size_t count,
@@ -47,7 +50,7 @@ bool output_supports_hdr(const Monitor *m, const char **reason) {
 	else if (!m->hdr_force && !(output->supported_transfer_functions &
 								WLR_COLOR_TRANSFER_FUNCTION_ST2084_PQ))
 		r = "PQ transfer function not supported";
-	else if (!drw->features.output_color_transform)
+	else if (!server.renderer->features.output_color_transform)
 		r = "renderer doesn't support output color transforms";
 	if (reason)
 		*reason = r;
@@ -118,7 +121,8 @@ void output_state_setup_hdr(Monitor *m, bool silent,
 
 	if (depth == MANGO_RENDER_BIT_DEPTH_10 &&
 		bit_depth_from_format(render_format) == depth) {
-		hdr_succeeded = true; // 上次已经成功设置10位，直接复用
+		hdr_succeeded = true; // 10-bit was already set successfully last time;
+							  // reuse it directly.
 	} else if (depth == MANGO_RENDER_BIT_DEPTH_10) {
 		hdr_succeeded = output_set_render_format(
 			m, output_formats_10bit, ARRAY_SIZE(output_formats_10bit), state);
@@ -135,7 +139,7 @@ void output_state_setup_hdr(Monitor *m, bool silent,
 			}
 		}
 	} else {
-		// 明确要求8位或自动降级
+		// Explicitly requires 8-bit or falls back automatically.
 		hdr_succeeded = output_set_render_format(
 			m, output_formats_8bit, ARRAY_SIZE(output_formats_8bit), state);
 		if (!hdr_succeeded) {
@@ -203,7 +207,7 @@ bool togglehdr_output(Monitor *target, bool want) {
 									&target->m.height);
 	return true;
 }
-void togglehdr(const Arg *arg) {
+void toggle_hdr(const Arg *arg) {
 	// arg->i: 1 = on, 0 = off, -1 = toggle (also the default when no argument
 	// was given, so a bare `togglehdr` binding does the obvious thing).
 	if (arg->v && strcmp(arg->v, "all") == 0) {
@@ -215,7 +219,7 @@ void togglehdr(const Arg *arg) {
 			// state would leave a multi-monitor desk half on and half off, and
 			// the next press would swap the halves instead of converging.
 			bool any_on = false;
-			wl_list_for_each(m, &mons, link) {
+			wl_list_for_each(m, &server.monitors, link) {
 				if (m->wlr_output->enabled && m->hdr_enable) {
 					any_on = true;
 					break;
@@ -226,14 +230,14 @@ void togglehdr(const Arg *arg) {
 			want = arg->i != 0;
 		}
 
-		wl_list_for_each(m, &mons, link) togglehdr_output(m, want);
+		wl_list_for_each(m, &server.monitors, link) togglehdr_output(m, want);
 		return;
 	}
 
 	Monitor *m = NULL, *target = NULL;
 
 	if (arg->v && *arg->v) {
-		wl_list_for_each(m, &mons, link) {
+		wl_list_for_each(m, &server.monitors, link) {
 			if (m->wlr_output->enabled &&
 				strcmp(m->wlr_output->name, arg->v) == 0) {
 				target = m;
@@ -245,7 +249,7 @@ void togglehdr(const Arg *arg) {
 			return;
 		}
 	} else {
-		target = selmon;
+		target = server.selected_monitor;
 	}
 
 	if (!target)
@@ -254,14 +258,14 @@ void togglehdr(const Arg *arg) {
 	togglehdr_output(target, arg->i < 0 ? !target->hdr_enable : (arg->i != 0));
 }
 
-uint32_t output_formats_8bit[] = {
+static uint32_t output_formats_8bit[] = {
 	DRM_FORMAT_XRGB8888, DRM_FORMAT_XBGR8888, DRM_FORMAT_RGBX8888,
 	DRM_FORMAT_BGRX8888, DRM_FORMAT_ARGB8888, DRM_FORMAT_ABGR8888,
 	DRM_FORMAT_RGBA8888, DRM_FORMAT_BGRA8888, DRM_FORMAT_RGB888,
 	DRM_FORMAT_BGR888,
 };
 
-uint32_t output_formats_10bit[] = {
+static uint32_t output_formats_10bit[] = {
 	DRM_FORMAT_XRGB2101010, DRM_FORMAT_XBGR2101010, DRM_FORMAT_RGBX1010102,
 	DRM_FORMAT_BGRX1010102, DRM_FORMAT_ARGB2101010, DRM_FORMAT_ABGR2101010,
 	DRM_FORMAT_RGBA1010102, DRM_FORMAT_BGRA1010102,

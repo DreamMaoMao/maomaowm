@@ -1,13 +1,14 @@
 #include "mango/input/switch.h"
-#include "mango/common/globals.h"
+#include "mango/common/server.h"
+#include "mango/config/parse_config.h"
 #include "mango/ipc/ipc.h"
 #include "mango/input/device.h"
 
-void switch_toggle(struct wl_listener *listener, void *data) {
-	// 获取包含监听器的结构体
+void handle_switch_toggle(struct wl_listener *listener, void *data) {
+	// Gets the struct that contains the listener.
 	Switch *sw = wl_container_of(listener, sw, toggle);
 
-	// 处理切换事件
+	// Handles the switch event.
 	struct wlr_switch_toggle_event *event = data;
 	SwitchBinding *s;
 	int32_t ji;
@@ -16,8 +17,9 @@ void switch_toggle(struct wl_listener *listener, void *data) {
 
 	for (ji = 0; ji < config.switch_bindings_count; ji++) {
 		s = &config.switch_bindings[ji];
-		if ((s->iscommonmode || (s->isdefaultmode && keymode.isdefault) ||
-			 (strcmp(keymode.mode, s->mode) == 0)) &&
+		if ((s->iscommonmode ||
+			 (s->isdefaultmode && server.key_mode.isdefault) ||
+			 (strcmp(server.key_mode.mode, s->mode) == 0)) &&
 			event->switch_state == s->fold && s->func) {
 			s->func(&s->arg);
 			return;
@@ -25,7 +27,7 @@ void switch_toggle(struct wl_listener *listener, void *data) {
 	}
 }
 
-void createswitch(struct wlr_switch *switch_device) {
+void switch_create(struct wlr_switch *switch_device) {
 	struct libinput_device *device = NULL;
 
 	if (wlr_input_device_is_libinput(&switch_device->base) &&
@@ -34,25 +36,25 @@ void createswitch(struct wlr_switch *switch_device) {
 		InputDevice *input_dev = calloc(1, sizeof(InputDevice));
 		input_dev->wlr_device = &switch_device->base;
 		input_dev->libinput_device = device;
-		input_dev->device_data = NULL; // 初始化为 NULL
+		input_dev->device_data = NULL; // Initialized to NULL.
 
-		input_dev->destroy_listener.notify = destroyinputdevice;
+		input_dev->destroy_listener.notify = handle_input_device_destroy;
 		wl_signal_add(&switch_device->base.events.destroy,
 					  &input_dev->destroy_listener);
 
-		// 创建 Switch 特定数据
+		// Creates Switch-specific data.
 		Switch *sw = calloc(1, sizeof(Switch));
 		sw->wlr_switch = switch_device;
-		sw->toggle.notify = switch_toggle;
+		sw->toggle.notify = handle_switch_toggle;
 		sw->input_dev = input_dev;
 
-		// 将 Switch 指针保存到 input_device 中
+		// Stores the Switch pointer in the input_device.
 		input_dev->device_data = sw;
 
-		// 添加 toggle 监听器
+		// Adds the toggle listener.
 		wl_signal_add(&switch_device->events.toggle, &sw->toggle);
 
-		// 添加到全局列表
-		wl_list_insert(&inputdevices, &input_dev->link);
+		// Adds it to the global list.
+		wl_list_insert(&server.input_devices, &input_dev->link);
 	}
 }

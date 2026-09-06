@@ -138,9 +138,6 @@
 #define END(A) ((A) + LENGTH(A))
 #define LISTEN(E, L, H) wl_signal_add((E), ((L)->notify = (H), (L)))
 
-#define TAGMASK (tagmask)
-extern uint32_t tagmask; /* 默认 9 个 tag，定义于 common/globals.c */
-
 #define ISFULLSCREEN(A)                                                        \
 	((A)->isfullscreen || (A)->ismaximizescreen ||                             \
 	 (A)->overview_ismaximizescreenbak || (A)->overview_isfullscreenbak)
@@ -185,7 +182,7 @@ enum {
 	XdgImPopup,
 	GroupBar
 }; /* client types */
-enum { AxisUp, AxisDown, AxisLeft, AxisRight }; // 滚轮滚动的方向
+enum { AxisUp, AxisDown, AxisLeft, AxisRight }; // Scroll wheel direction
 
 #ifdef XWAYLAND
 enum {
@@ -219,7 +216,7 @@ enum { UP, DOWN, LEFT, RIGHT, UNDIR }; /* smartmovewin */
 enum { NONE, OPEN, MOVE, CLOSE, TAG, FOCUS, OPAFADEIN, OPAFADEOUT, OVERVIEW };
 enum { UNFOLD, FOLD, INVALIDFOLD };
 enum { PREV, NEXT };
-enum { SW_CURRENT_TAG, SW_ALL_TAG, SW_ALL_MON }; /* switcher 候选范围 */
+enum { SW_CURRENT_TAG, SW_ALL_TAG, SW_ALL_MON }; /* Switcher candidate scope */
 enum { STATE_UNSPECIFIED = 0, STATE_ENABLED, STATE_DISABLED };
 enum { FORCE, UNFORCE };
 
@@ -285,8 +282,10 @@ typedef struct {
 	struct libinput_device *libinput_device;
 	struct wl_listener destroy_listener;
 	void *device_data;
-	bool standalone;			  /* 命中 devicerule 的键盘，独立于默认键盘组 */
-	struct wl_listener key_watch; /* 记录最后触发按键事件的设备 */
+	bool standalone; /* Keyboard matched by a devicerule; independent from the
+						default keyboard group. */
+	struct wl_listener
+		key_watch; /* Records the device that emitted the last key event. */
 } InputDevice;
 
 typedef struct {
@@ -334,18 +333,21 @@ typedef struct {
 	bool should_scale;
 } BufferData;
 
-// overview 卡片 surface 节点：每个 surface（含 subsurface）对应卡片树中
-// 的一个 scene_surface 节点，sx/sy 是其相对根 surface 的坐标
+// Overview card surface node: each surface (including subsurfaces) maps to a
+// scene_surface node in the card tree; sx/sy are its coordinates relative to
+// the root surface.
 struct ov_card_surface {
 	Client *c;
 	struct wlr_surface *surface;
 	struct wlr_scene_surface *scene_surface;
 	struct wlr_scene_buffer *buffer;
-	int sx, sy; /* 相对根 surface 的坐标 */
+	int sx, sy; /* Coordinates relative to the root surface */
 	bool is_root;
 	struct wl_list link;
-	struct wl_listener commit;	/* 提交后重算缩放（提交会重置 dest/source） */
-	struct wl_listener destroy; /* surface 销毁时移除节点 */
+	struct wl_listener commit; /* Recomputes scaling after commit (commit resets
+								  dest/source). */
+	struct wl_listener
+		destroy; /* Removes the node when the surface is destroyed. */
 };
 
 struct Client {
@@ -394,12 +396,18 @@ struct Client {
 	struct wl_listener set_geometry;
 	struct wl_listener commmitx11;
 	struct wlr_scene_buffer *xwl_root_buffer;
-	float xwayland_scale;	 /* X11 坐标相对逻辑坐标的缩放 */
-	struct wlr_box xwl_clip; /* XWayland 根 surface 最近一次逻辑裁剪区 */
-	bool xwl_clip_active;	 /* 是否处于 source_box 裁剪状态 */
-	/* X11 configure 去重：客户端尚未 ack 时 surface->current 不更新，
-	 * 多次 arrange 会重复发相同参数的 configure，导致客户端反复重渲染/
-	 * 上传。这里记录最近一次请求的物理尺寸/位置，相同参数不再重复发送。 */
+	float xwayland_scale;	 /* X11 coordinate scale relative to logical
+								coordinates. */
+	struct wlr_box xwl_clip; /* Most recent logical clip area of the XWayland
+								root surface. */
+	bool xwl_clip_active;	 /* Whether source_box clipping is active. */
+							 /*
+							  * X11 configure deduplication: until the client acks, surface->current is
+							  * not updated,						  so repeated arrange calls resend
+							  * identical configures and						  force clients to re-render/
+							  * re-upload. Record the most recently requested						  physical size/position here
+							  * and skip						  configure if it has not changed.
+							  */
 	int32_t xwl_req_x, xwl_req_y, xwl_req_w, xwl_req_h;
 	bool xwl_req_valid;
 #endif
@@ -419,9 +427,9 @@ struct Client {
 	int32_t overview_isfullscreenbak, overview_ismaximizescreenbak,
 		overview_isfloatingbak;
 
-	struct wlr_scene_tree *
-		ov_card_tree; /* overview 卡片树（含主 surface + 各 subsurface 节点） */
-	struct wl_list ov_card_surfaces; /* struct ov_card_surface 链表 */
+	struct wlr_scene_tree *ov_card_tree; /* Overview card tree (root surface
+											plus all subsurface nodes). */
+	struct wl_list ov_card_surfaces;	 /* struct ov_card_surface list */
 
 	struct wlr_xdg_toplevel_decoration_v1 *decoration;
 	struct wl_listener foreign_activate_request;
@@ -511,11 +519,12 @@ struct Client {
 
 typedef struct {
 	struct wlr_keyboard_group *wlr_group;
-	struct wlr_keyboard
-		*keyboard; /* 实际生效的 wlr_keyboard（group 或独立键盘） */
+	struct wlr_keyboard *keyboard; /* The keyboard actually in use (group or
+									  standalone keyboard). */
 	struct wlr_keyboard *virtual_keyboard;
 	struct wlr_keyboard
-		*prev_seat_keyboard; /* 接管 seat 前生效的键盘，销毁时恢复用 */
+		*prev_seat_keyboard; /* Keyboard in effect before taking over the seat;
+								restored on destroy. */
 
 	int32_t nsyms;
 	const xkb_keysym_t *keysyms; /* invalid if nsyms == 0 */
@@ -621,8 +630,10 @@ struct Monitor {
 	int32_t isoverview;
 	int32_t is_jump_mode;
 	int32_t is_in_hotarea;
-	int32_t ov_normal_mode; /* 热区进入时使用普通网格布局 */
-	int32_t ov_tab_layout;	/* overcircle 进入时使用居中 tab 布局 */
+	int32_t ov_normal_mode; /* Uses the normal grid layout when entering via the
+							   hot area. */
+	int32_t ov_tab_layout;	/* Uses the centered tab layout when entering via
+							   overcircle. */
 	int32_t only_sleep;
 	bool special_empty_view; // user intentionally opened the empty special view
 	uint32_t visible_clients;
@@ -647,7 +658,8 @@ struct Monitor {
 	float hdr_max_avg_lum;
 	// Bypass the EDID-derived capability checks (DisplayID-only panels).
 	bool hdr_force;
-	struct wlr_color_transform *icc_transform; /* 从 icc 加载的 ICC 变换 */
+	struct wlr_color_transform
+		*icc_transform; /* ICC transform loaded from the ICC file. */
 	char icc_path[PATH_MAX];
 };
 
@@ -700,7 +712,8 @@ struct ScrollerStackNode {
 };
 
 struct TagScrollerState {
-	struct ScrollerStackNode *all_first; /* 所有节点的单链表头 */
+	struct ScrollerStackNode
+		*all_first; /* Singly linked list head for all nodes. */
 	int count;
 };
 
@@ -721,7 +734,6 @@ struct LastCursor {
 	int32_t hotspot_x;
 	int32_t hotspot_y;
 };
-extern struct LastCursor last_cursor;
 
 #include "mango/config/preset.h"
 
@@ -747,17 +759,17 @@ struct Pertag {
 
 // Functions declaration of mango.c
 
-void createnotify(struct wl_listener *listener, void *data);
+void handle_new_xdg_toplevel(struct wl_listener *listener, void *data);
 
 void request_fresh_all_monitors(void);
 
-void handlesig(int32_t signo);
+void handle_signal(int32_t signo);
 
-void cleanuplisteners();
+void cleanup_listeners();
 
 void cleanup();
 
-void quitsignal(int32_t signo);
+void handle_quit_signal(int32_t signo);
 
 void setup();
 

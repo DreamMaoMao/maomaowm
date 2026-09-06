@@ -23,7 +23,8 @@ bool try_place(OvPlacedRect *placed, int placed_cnt, float w, float h,
 			   float gap, float avail_w, float avail_h, OvPlacedRect *out,
 			   OvPoint *cands, OvPoint *feas);
 void overview_scale(Monitor *m);
-// overview 布局：聚焦窗口居中（约一半屏宽），其余窗口分列两侧
+// Overview layout: focused window centered (about half screen width), remaining
+// windows split on both sides.
 void overview_layout_column(Monitor *m, Client **items, int cnt, float x,
 							float top, float col_w, float col_h, float gap);
 void overview_scale_tab(Monitor *m);

@@ -1,7 +1,6 @@
 #include "mango/animation/tag.h"
-#include "mango/mango.h"
 #include "mango/animation/client.h"
-#include "mango/common/globals.h"
+#include "mango/common/server.h"
 #include "mango/layout/layout.h"
 #include "mango/manage/monitor.h"
 #include "mango/manage/client.h"
@@ -53,7 +52,7 @@ void set_tagin_animation(Monitor *m, Client *c) {
 
 void set_arrange_visible(Monitor *m, Client *c, bool want_animation) {
 
-	/* 被吞噬的窗口完全消失，保持隐藏 */
+	/* A swallowed window disappears completely and stays hidden. */
 	if (c->is_logic_hide)
 		return;
 
@@ -63,7 +62,8 @@ void set_arrange_visible(Monitor *m, Client *c, bool want_animation) {
 		c->is_clip_to_hide = false;
 		c->is_logic_hide = false;
 		wlr_scene_node_set_enabled(&c->scene->node, true);
-		/* overview 中真实 surface 树由卡片树替代，保持禁用 */
+		/* In overview the real surface tree is replaced by the card tree, so it
+		 * stays disabled. */
 		if (!c->ov_card_tree)
 			wlr_scene_node_set_enabled(&c->scene_surface->node, true);
 	}
@@ -142,13 +142,15 @@ void set_tagout_animation(Monitor *m, Client *c) {
 	}
 }
 void set_arrange_hidden(Monitor *m, Client *c, bool want_animation) {
-	/* 被吞噬的窗口完全消失，保持隐藏（避免触发 tag 动画导致闪现） */
+	/* A swallowed window disappears completely and stays hidden (avoids
+	 * triggering a tag animation flash). */
 	if (c->is_logic_hide) {
 		wlr_scene_node_set_enabled(&c->scene->node, false);
 		return;
 	}
 
-	/* overview 里所有 tag 的窗口都要显示卡片，不能被隐藏逻辑禁用 */
+	/* In overview every tag window must show its card and must not be disabled
+	 * by the hiding logic. */
 	if (c->ov_card_tree) {
 		c->is_logic_hide = false;
 		c->is_clip_to_hide = false;

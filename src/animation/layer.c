@@ -1,6 +1,6 @@
 #include "mango/animation/layer.h"
 #include "mango/animation/common.h"
-#include "mango/common/globals.h"
+#include "mango/common/server.h"
 #include "mango/common/util.h"
 #include "mango/manage/client.h"
 
@@ -159,7 +159,7 @@ void layer_draw_shield(LayerSurface *l) {
 	if (!l->mapped)
 		return;
 
-	if (active_capture_count > 0 && l->shield_when_capture) {
+	if (server.active_capture_count > 0 && l->shield_when_capture) {
 
 		layer_actual_size(l, &width, &height);
 
@@ -425,7 +425,7 @@ void init_fadeout_layers(LayerSurface *l) {
 
 	wlr_scene_node_set_enabled(&l->scene->node, true);
 	fadeout_layer->scene =
-		wlr_scene_tree_snapshot(&l->scene->node, layers[LyrFadeOut]);
+		wlr_scene_tree_snapshot(&l->scene->node, server.layers[LyrFadeOut]);
 	wlr_scene_node_set_enabled(&l->scene->node, false);
 
 	if (!fadeout_layer->scene) {
@@ -497,9 +497,9 @@ void init_fadeout_layers(LayerSurface *l) {
 	// during screen refresh, it will check whether there are nodes in the list
 	// that can be applied to animation.
 	wlr_scene_node_set_enabled(&fadeout_layer->scene->node, true);
-	wl_list_insert(&fadeout_layers, &fadeout_layer->fadeout_link);
+	wl_list_insert(&server.fadeout_layers, &fadeout_layer->fadeout_link);
 
-	// 请求刷新屏幕
+	// Requests a screen refresh.
 	if (l->mon)
 		wlr_output_schedule_frame(l->mon->wlr_output);
 }
@@ -557,7 +557,7 @@ void layer_set_pending_state(LayerSurface *l) {
 		l->animation.should_animate = false;
 	}
 
-	// 开始动画
+	// Starts the animation.
 	layer_commit(l);
 	l->dirty = true;
 }

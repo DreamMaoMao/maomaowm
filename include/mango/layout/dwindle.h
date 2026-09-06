@@ -3,9 +3,6 @@
 
 #include "mango/mango.h"
 
-extern DwindleNode *dwindle_locked_h_node;
-extern DwindleNode *dwindle_locked_v_node;
-
 DwindleNode *dwindle_new_leaf(Client *c);
 
 int count_block_items(DwindleNode *node, bool split_h);
@@ -30,5 +27,5 @@ void dwindle_insert_with_config(DwindleNode **root, Client *new_c,
 void dwindle(Monitor *m);
 void cleanup_monitor_dwindle(Monitor *m);
 
-// 统计同方向上的节点总和 (N_old)
+// Counts nodes in the same direction (N_old).
 #endif

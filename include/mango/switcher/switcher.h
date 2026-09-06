@@ -46,8 +46,6 @@ struct switcher_state {
 	int tile_h;
 	int scope;
 };
-extern struct switcher_state
-	sw; // TODO refractor-header: move this global variable
 
 /* Function Definitions */
 bool switcher_is_active(void);
@@ -58,11 +56,13 @@ void switcher_content_size(Client *c, float *w, float *h);
 void switcher_tile_layout(struct switcher_tile *tile);
 void switcher_surface_finish(struct switcher_surface *entry);
 void switcher_surface_update_buffer(struct switcher_surface *entry);
-void switcher_surface_commit(struct wl_listener *listener, void *data);
-void switcher_surface_destroy(struct wl_listener *listener, void *data);
-void switcher_surface_output_sample(struct wl_listener *listener, void *data);
+void handle_switcher_surface_commit(struct wl_listener *listener, void *data);
+void handle_switcher_surface_destroy(struct wl_listener *listener, void *data);
+void handle_switcher_surface_output_sample(struct wl_listener *listener,
+										   void *data);
 // hidden clients are paced by the preview buffer
-void switcher_surface_frame_done(struct wl_listener *listener, void *data);
+void handle_switcher_surface_frame_done(struct wl_listener *listener,
+										void *data);
 void switcher_tile_add_surface(struct wlr_surface *surface, int sx, int sy,
 							   void *data);
 void switcher_tile_create(struct switcher_tile *tile, Client *c);

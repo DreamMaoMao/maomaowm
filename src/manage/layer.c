@@ -2,16 +2,18 @@
 #include "mango/manage/client.h"
 #include "mango/layout/arrange.h"
 #include "mango/ext-protocol/text-input.h"
-#include "mango/common/globals.h"
+#include "mango/common/server.h"
 #include "mango/animation/layer.h"
 #include "mango/common/log.h"
-#include "mango/mango.h"
 #include "mango/common/util.h"
 #include "mango/ipc/ipc.h"
 #include "mango/input/pointer.h"
 
-void arrangelayer(Monitor *m, struct wl_list *list, struct wlr_box *usable_area,
-				  int32_t exclusive) {
+/* Maps the wlr_layer_shell layer enum to scene layers. */
+static const int32_t layermap[] = {LyrBg, LyrBottom, LyrTop, LyrOverlay};
+
+void arrange_layer(Monitor *m, struct wl_list *list,
+				   struct wlr_box *usable_area, int32_t exclusive) {
 	LayerSurface *l = NULL;
 	struct wlr_box full_area = m->m;
 
@@ -32,11 +34,12 @@ void arrangelayer(Monitor *m, struct wl_list *list, struct wlr_box *usable_area,
 	}
 }
 
-void focuslayer(LayerSurface *l) {
-	focusclient(NULL, 0);
-	mango_im_relay_set_focus(mango_input_method_relay,
+void layer_focus(LayerSurface *l) {
+	client_focus(NULL, 0);
+	mango_im_relay_set_focus(server.input_method_relay,
 							 l->layer_surface->surface);
-	client_notify_enter(l->layer_surface->surface, wlr_seat_get_keyboard(seat));
+	client_notify_enter(l->layer_surface->surface,
+						wlr_seat_get_keyboard(server.seat));
 }
 
 void reset_exclusive_layers_focus(Monitor *m) {
@@ -54,17 +57,17 @@ void reset_exclusive_layers_focus(Monitor *m) {
 
 	for (i = 0; i < (int32_t)LENGTH(layers_above_shell); i++) {
 		wl_list_for_each(l, &m->layers[layers_above_shell[i]], link) {
-			if (l == exclusive_focus &&
+			if (l == server.exclusive_focus &&
 				l->layer_surface->current.keyboard_interactive !=
 					ZWLR_LAYER_SURFACE_V1_KEYBOARD_INTERACTIVITY_EXCLUSIVE) {
 
-				exclusive_focus = NULL;
+				server.exclusive_focus = NULL;
 
 				neet_change_focus_to_client = true;
 			}
 
 			if (l->layer_surface->surface ==
-					seat->keyboard_state.focused_surface &&
+					server.seat->keyboard_state.focused_surface &&
 				l->being_unmapped) {
 				neet_change_focus_to_client = true;
 			}
@@ -72,31 +75,31 @@ void reset_exclusive_layers_focus(Monitor *m) {
 			if (l->layer_surface->current.keyboard_interactive ==
 					ZWLR_LAYER_SURFACE_V1_KEYBOARD_INTERACTIVITY_NONE &&
 				l->layer_surface->surface ==
-					seat->keyboard_state.focused_surface) {
+					server.seat->keyboard_state.focused_surface) {
 				neet_change_focus_to_client = true;
 			}
 
-			if (locked ||
+			if (server.session_locked ||
 				l->layer_surface->current.keyboard_interactive !=
 					ZWLR_LAYER_SURFACE_V1_KEYBOARD_INTERACTIVITY_EXCLUSIVE ||
 				l->being_unmapped)
 				continue;
 			/* Deactivate the focused client. */
-			exclusive_focus = l;
+			server.exclusive_focus = l;
 			neet_change_focus_to_client = false;
 			if (l->layer_surface->surface !=
-				seat->keyboard_state.focused_surface)
-				focuslayer(l);
+				server.seat->keyboard_state.focused_surface)
+				layer_focus(l);
 			return;
 		}
 	}
 
 	if (neet_change_focus_to_client) {
-		focusclient(focustop(selmon), 1);
+		client_focus(client_focus_top(server.selected_monitor), 1);
 	}
 }
 
-void arrangelayers(Monitor *m) {
+void arrange_layers(Monitor *m) {
 	int32_t i;
 	struct wlr_box usable_area = m->m;
 
@@ -108,7 +111,7 @@ void arrangelayers(Monitor *m) {
 
 	/* Arrange exclusive surfaces from top->bottom */
 	for (i = 3; i >= 0; i--)
-		arrangelayer(m, &m->layers[i], &usable_area, 1);
+		arrange_layer(m, &m->layers[i], &usable_area, 1);
 
 	if (!wlr_box_equal(&usable_area, &m->w)) {
 		m->w = usable_area;
@@ -117,7 +120,7 @@ void arrangelayers(Monitor *m) {
 
 	/* Arrange non-exlusive surfaces from top->bottom */
 	for (i = 3; i >= 0; i--)
-		arrangelayer(m, &m->layers[i], &usable_area, 0);
+		arrange_layer(m, &m->layers[i], &usable_area, 0);
 }
 
 void iter_layer_scene_buffers(struct wlr_scene_buffer *buffer, int32_t sx,
@@ -145,7 +148,8 @@ void layer_flush_blur_background(LayerSurface *l) {
 	if (!config.blur)
 		return;
 
-	// 如果背景层发生变化,标记优化的模糊背景缓存需要更新
+	// If the background layer changed, mark the optimized blurred background
+	// cache as needing an update.
 	if (l->layer_surface->current.layer ==
 		ZWLR_LAYER_SHELL_V1_LAYER_BACKGROUND) {
 		if (l->mon) {
@@ -154,7 +158,7 @@ void layer_flush_blur_background(LayerSurface *l) {
 	}
 }
 
-void maplayersurfacenotify(struct wl_listener *listener, void *data) {
+void handle_layer_surface_map(struct wl_listener *listener, void *data) {
 	LayerSurface *l = wl_container_of(listener, l, map);
 	struct wlr_layer_surface_v1 *layer_surface = l->layer_surface;
 	int32_t ji;
@@ -165,11 +169,12 @@ void maplayersurfacenotify(struct wl_listener *listener, void *data) {
 	if (!l->mon)
 		return;
 	strncpy(l->mon->last_open_surface, layer_surface->namespace,
-			sizeof(l->mon->last_open_surface) - 1); // 最多拷贝255个字符
+			sizeof(l->mon->last_open_surface) -
+				1); // Copies at most 255 characters.
 	l->mon->last_open_surface[sizeof(l->mon->last_open_surface) - 1] =
-		'\0'; // 确保字符串以null结尾
+		'\0'; // Ensures the string is null-terminated.
 
-	// 初始化几何位置
+	// Initializes the geometry position.
 	get_layer_target_geometry(l, &l->geom);
 
 	l->noanim = 0;
@@ -179,7 +184,7 @@ void maplayersurfacenotify(struct wl_listener *listener, void *data) {
 	l->shadow = NULL;
 	l->need_output_flush = true;
 
-	// 应用layer规则
+	// Applies the layer rule.
 	for (ji = 0; ji < config.layer_rules_count; ji++) {
 		if (regex_match(config.layer_rules[ji].layer_name,
 						l->layer_surface->namespace)) {
@@ -194,14 +199,14 @@ void maplayersurfacenotify(struct wl_listener *listener, void *data) {
 		}
 	}
 
-	// 初始化屏蔽
+	// Initializes the shield.
 	l->shield =
 		wlr_scene_rect_create(l->scene, 0, 0, (float[4]){0, 0, 0, 0xff});
 	l->shield->node.data = l;
 	wlr_scene_node_lower_to_bottom(&l->shield->node);
 	wlr_scene_node_set_enabled(&l->shield->node, false);
 
-	// 初始化阴影
+	// Initializes the shadow.
 	if (layer_surface->current.layer != ZWLR_LAYER_SHELL_V1_LAYER_BOTTOM &&
 		layer_surface->current.layer != ZWLR_LAYER_SHELL_V1_LAYER_BACKGROUND) {
 		if (layer_surface->current.exclusive_zone == 0) {
@@ -216,7 +221,7 @@ void maplayersurfacenotify(struct wl_listener *listener, void *data) {
 		wlr_scene_node_lower_to_bottom(&l->blur->node);
 	}
 
-	// 初始化动画
+	// Initializes the animation.
 	if (config.animations && config.layer_animations && !l->noanim) {
 		l->animation.duration = config.animation_duration_open;
 		l->animation.action = OPEN;
@@ -226,17 +231,18 @@ void maplayersurfacenotify(struct wl_listener *listener, void *data) {
 			l->geom;
 	}
 
-	// 刷新布局，让窗口能感应到exclude_zone变化以及设置独占表面
-	arrangelayers(l->mon);
+	// Refreshes the layout so windows notice exclude_zone changes and sets the
+	// exclusive surface.
+	arrange_layers(l->mon);
 	reset_exclusive_layers_focus(l->mon);
 	printstatus(IPC_WATCH_LAST_OPEN_SURFACE);
 }
 
-void commitlayersurfacenotify(struct wl_listener *listener, void *data) {
+void handle_layer_surface_commit(struct wl_listener *listener, void *data) {
 	LayerSurface *l = wl_container_of(listener, l, surface_commit);
 	struct wlr_layer_surface_v1 *layer_surface = l->layer_surface;
 	struct wlr_scene_tree *scene_layer =
-		layers[layermap[layer_surface->current.layer]];
+		server.layers[layermap[layer_surface->current.layer]];
 	struct wlr_layer_surface_v1_state old_state;
 	struct wlr_box box = l->geom;
 
@@ -247,19 +253,19 @@ void commitlayersurfacenotify(struct wl_listener *listener, void *data) {
 		 * so that we can easily arrange it */
 		old_state = l->layer_surface->current;
 		l->layer_surface->current = l->layer_surface->pending;
-		arrangelayers(l->mon);
+		arrange_layers(l->mon);
 		l->layer_surface->current = old_state;
-		// 按需交互layer只在map之前设置焦点
-		if (!exclusive_focus &&
+		// Focus is only set before map for interactive-on-demand layers.
+		if (!server.exclusive_focus &&
 			l->layer_surface->current.keyboard_interactive ==
 				ZWLR_LAYER_SURFACE_V1_KEYBOARD_INTERACTIVITY_ON_DEMAND) {
-			focuslayer(l);
+			layer_focus(l);
 		}
 		return;
 	}
 
-	// 检查surface是否有buffer
-	// 空buffer，只是隐藏，不改变mapped状态
+	// Checks whether the surface has a buffer.
+	// Empty buffer: only hides; the mapped state is unchanged.
 	if (l->mapped && !layer_surface->surface->buffer) {
 		wlr_scene_node_set_enabled(&l->scene->node, false);
 		return;
@@ -320,12 +326,12 @@ void commitlayersurfacenotify(struct wl_listener *listener, void *data) {
 			wlr_scene_node_reparent(
 				&l->popups->node,
 				(layer_surface->current.layer < ZWLR_LAYER_SHELL_V1_LAYER_TOP
-					 ? layers[LyrTop]
+					 ? server.layers[LyrTop]
 					 : scene_layer));
 		}
 	}
 
-	arrangelayers(l->mon);
+	arrange_layers(l->mon);
 
 	if (layer_surface->current.committed &
 		WLR_LAYER_SURFACE_V1_STATE_KEYBOARD_INTERACTIVITY) {
@@ -379,14 +385,14 @@ bool popup_unconstrain(Popup *popup) {
 	return false;
 }
 
-void destroypopup(struct wl_listener *listener, void *data) {
+void handle_popup_destroy(struct wl_listener *listener, void *data) {
 	Popup *popup = wl_container_of(listener, popup, destroy);
 	wl_list_remove(&popup->destroy.link);
 	wl_list_remove(&popup->reposition.link);
 	free(popup);
 }
 
-void commitpopup(struct wl_listener *listener, void *data) {
+void handle_popup_commit(struct wl_listener *listener, void *data) {
 	Popup *popup = wl_container_of(listener, popup, commit);
 
 	struct wlr_surface *surface = data;
@@ -421,12 +427,12 @@ cleanup_popup_commit:
 	}
 }
 
-void repositionpopup(struct wl_listener *listener, void *data) {
+void handle_popup_reposition(struct wl_listener *listener, void *data) {
 	Popup *popup = wl_container_of(listener, popup, reposition);
 	(void)popup_unconstrain(popup);
 }
 
-void createpopup(struct wl_listener *listener, void *data) {
+void handle_new_xdg_popup(struct wl_listener *listener, void *data) {
 	struct wlr_xdg_popup *wlr_popup = data;
 
 	Popup *popup = calloc(1, sizeof(Popup));
@@ -435,35 +441,37 @@ void createpopup(struct wl_listener *listener, void *data) {
 
 	popup->type = XdgPopup;
 
-	popup->destroy.notify = destroypopup;
+	popup->destroy.notify = handle_popup_destroy;
 	wl_signal_add(&wlr_popup->events.destroy, &popup->destroy);
 
-	popup->commit.notify = commitpopup;
+	popup->commit.notify = handle_popup_commit;
 	wl_signal_add(&wlr_popup->base->surface->events.commit, &popup->commit);
 
-	popup->reposition.notify = repositionpopup;
+	popup->reposition.notify = handle_popup_reposition;
 	wl_signal_add(&wlr_popup->events.reposition, &popup->reposition);
 }
 
-void createlayersurface(struct wl_listener *listener, void *data) {
+void handle_new_layer_surface(struct wl_listener *listener, void *data) {
 	struct wlr_layer_surface_v1 *layer_surface = data;
 	LayerSurface *l = NULL;
 	struct wlr_surface *surface = layer_surface->surface;
 	struct wlr_scene_tree *scene_layer =
-		layers[layermap[layer_surface->pending.layer]];
+		server.layers[layermap[layer_surface->pending.layer]];
 
 	if (!layer_surface->output &&
-		!(layer_surface->output = selmon ? selmon->wlr_output : NULL)) {
+		!(layer_surface->output = server.selected_monitor
+									  ? server.selected_monitor->wlr_output
+									  : NULL)) {
 		wlr_layer_surface_v1_destroy(layer_surface);
 		return;
 	}
 
 	l = layer_surface->data = ecalloc(1, sizeof(*l));
 	l->type = LayerShell;
-	LISTEN(&surface->events.map, &l->map, maplayersurfacenotify);
+	LISTEN(&surface->events.map, &l->map, handle_layer_surface_map);
 	LISTEN(&surface->events.commit, &l->surface_commit,
-		   commitlayersurfacenotify);
-	LISTEN(&surface->events.unmap, &l->unmap, unmaplayersurfacenotify);
+		   handle_layer_surface_commit);
+	LISTEN(&surface->events.unmap, &l->unmap, handle_layer_surface_unmap);
 
 	l->layer_surface = layer_surface;
 	l->mon = layer_surface->output->data;
@@ -472,16 +480,17 @@ void createlayersurface(struct wl_listener *listener, void *data) {
 	l->scene = l->scene_layer->tree;
 	l->popups = surface->data = wlr_scene_tree_create(
 		layer_surface->current.layer < ZWLR_LAYER_SHELL_V1_LAYER_TOP
-			? layers[LyrTop]
+			? server.layers[LyrTop]
 			: scene_layer);
 	l->scene->node.data = l->popups->node.data = l;
 
-	LISTEN(&l->scene->node.events.destroy, &l->destroy, destroylayernodenotify);
+	LISTEN(&l->scene->node.events.destroy, &l->destroy,
+		   handle_layer_node_destroy);
 
 	wl_list_insert(&l->mon->layers[layer_surface->pending.layer], &l->link);
 }
 
-void destroylayernodenotify(struct wl_listener *listener, void *data) {
+void handle_layer_node_destroy(struct wl_listener *listener, void *data) {
 	LayerSurface *l = wl_container_of(listener, l, destroy);
 
 	wl_list_remove(&l->link);
@@ -493,7 +502,7 @@ void destroylayernodenotify(struct wl_listener *listener, void *data) {
 	free(l);
 }
 
-void unmaplayersurfacenotify(struct wl_listener *listener, void *data) {
+void handle_layer_surface_unmap(struct wl_listener *listener, void *data) {
 	LayerSurface *l = wl_container_of(listener, l, unmap);
 
 	l->mapped = 0;
@@ -503,15 +512,15 @@ void unmaplayersurfacenotify(struct wl_listener *listener, void *data) {
 
 	wlr_scene_node_set_enabled(&l->scene->node, false);
 
-	if (l == exclusive_focus)
-		exclusive_focus = NULL;
+	if (l == server.exclusive_focus)
+		server.exclusive_focus = NULL;
 
 	if (l->layer_surface->output && (l->mon = l->layer_surface->output->data))
-		arrangelayers(l->mon);
+		arrange_layers(l->mon);
 
 	reset_exclusive_layers_focus(l->mon);
 
-	motionnotify(0, NULL, 0, 0, 0, 0);
+	pointer_process_motion(0, NULL, 0, 0, 0, 0);
 	layer_flush_blur_background(l);
 	wlr_scene_node_destroy(&l->shadow->node);
 	l->shadow = NULL;

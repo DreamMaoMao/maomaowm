@@ -1,19 +1,18 @@
 #include <wlr/types/wlr_touch.h>
 #include "mango/input/touch.h"
-#include "mango/common/globals.h"
+#include "mango/common/server.h"
 #include "mango/common/log.h"
 #include "mango/manage/monitor.h"
 #include "mango/manage/misc.h"
 #include "mango/manage/client.h"
 #include "mango/input/pointer.h"
 #include <wayland-client-core.h>
-#include "mango/mango.h"
 #include "mango/ipc/ipc.h"
 #include "mango/common/util.h"
 
-void touch_up(struct wl_listener *listener, void *data);
-void touch_cancel(struct wl_listener *listener, void *data);
-void touch_frame(struct wl_listener *listener, void *data);
+void handle_cursor_touch_up(struct wl_listener *listener, void *data);
+void handle_cursor_touch_cancel(struct wl_listener *listener, void *data);
+void handle_cursor_touch_frame(struct wl_listener *listener, void *data);
 struct wlr_surface *touch_get_coords(struct wlr_touch *touch, double x,
 									 double y, double *x_offset,
 									 double *y_offset, Client **pc);
@@ -27,30 +26,27 @@ struct touch_point {
 	double y_offset;
 	struct wlr_surface *surface;
 	struct wl_listener surface_destroy;
-	bool touch_protocol; // true=触摸协议，false=鼠标模拟
+	bool touch_protocol; // true = touch protocol, false = mouse emulation.
 	struct wl_list link;
 };
 
-struct wl_list touch_points;
-// 指针模拟状态：仅第一个不支持触摸的触点模拟指针，pointer_touch_id 隔离多指
-bool simulating_pointer_from_touch = false;
-int32_t pointer_touch_id = -1;
-struct wl_listener cursor_touch_down = {.notify = touch_down};
-struct wl_listener cursor_touch_up = {.notify = touch_up};
-struct wl_listener cursor_touch_cancel = {.notify = touch_cancel};
-struct wl_listener cursor_touch_motion = {.notify = touch_motion};
-struct wl_listener cursor_touch_frame = {.notify = touch_frame};
+// Pointer emulation state: only the first touch point that does not support
+// touch emulates the pointer; pointer_touch_id isolates multiple fingers.
+static bool simulating_pointer_from_touch = false;
+static int32_t pointer_touch_id = -1;
 
-// 将触摸设备映射到 touch_map_to_mon 指定的显示器。
-// 支持热插拔输出和配置重载，每次触摸按下时重新应用。
+// Maps the touch device to the monitor specified by touch_map_to_mon.
+// Supports hot-plugging outputs and config reload; reapplied on every touch
+// down.
 void touch_apply_monitor_mapping(struct wlr_touch *touch) {
 	if (!config.touch_map_to_mon)
 		return;
 
 	Monitor *m = NULL;
-	wl_list_for_each(m, &mons, link) {
+	wl_list_for_each(m, &server.monitors, link) {
 		if (match_monitor_spec(config.touch_map_to_mon, m)) {
-			wlr_cursor_map_input_to_output(cursor, &touch->base, m->wlr_output);
+			wlr_cursor_map_input_to_output(server.cursor, &touch->base,
+										   m->wlr_output);
 			mango_error(true, WLR_DEBUG, "Mapping touch %s to output %s",
 						touch->base.name, config.touch_map_to_mon);
 			return;
@@ -58,7 +54,7 @@ void touch_apply_monitor_mapping(struct wlr_touch *touch) {
 	}
 }
 
-void createtouch(struct wlr_touch *touch) {
+void touch_create(struct wlr_touch *touch) {
 	struct libinput_device *device = NULL;
 
 	if (wlr_input_device_is_libinput(&touch->base) &&
@@ -67,11 +63,12 @@ void createtouch(struct wlr_touch *touch) {
 			libinput_device_config_send_events_set_mode(
 				device, config.send_events_mode);
 	}
-	wlr_cursor_attach_input_device(cursor, &touch->base);
+	wlr_cursor_attach_input_device(server.cursor, &touch->base);
 	touch_apply_monitor_mapping(touch);
 }
 
-void touch_point_surface_destroy(struct wl_listener *listener, void *data) {
+void handle_touch_point_surface_destroy(struct wl_listener *listener,
+										void *data) {
 	struct touch_point *point =
 		wl_container_of(listener, point, surface_destroy);
 	point->surface = NULL;
@@ -79,8 +76,9 @@ void touch_point_surface_destroy(struct wl_listener *listener, void *data) {
 	wl_list_init(&listener->link);
 }
 
-// 将 [0,1] 归一化坐标转为布局坐标，查找触点下方的 surface，
-// 并计算布局->surface 偏移以便后续以相对坐标上报
+// Converts [0,1] normalized coordinates to layout coordinates, finds the
+// surface under the touch point, and computes the layout -> surface offset so
+// later events can be reported in relative coordinates.
 struct wlr_surface *touch_get_coords(struct wlr_touch *touch, double x,
 									 double y, double *x_offset,
 									 double *y_offset, Client **pc) {
@@ -88,9 +86,10 @@ struct wlr_surface *touch_get_coords(struct wlr_touch *touch, double x,
 	struct wlr_surface *surface = NULL;
 	Client *c = NULL;
 
-	wlr_cursor_absolute_to_layout_coords(cursor, &touch->base, x, y, &lx, &ly);
+	wlr_cursor_absolute_to_layout_coords(server.cursor, &touch->base, x, y, &lx,
+										 &ly);
 
-	xytonode(lx, ly, &surface, &c, NULL, NULL, &sx, &sy);
+	node_at_point(lx, ly, &surface, &c, NULL, NULL, &sx, &sy);
 
 	*x_offset = lx - sx;
 	*y_offset = ly - sy;
@@ -101,18 +100,20 @@ struct wlr_surface *touch_get_coords(struct wlr_touch *touch, double x,
 	return surface;
 }
 
-// 触摸模拟鼠标，绝对移动，无指针设备的触摸屏回退
+// Touch emulates a mouse with absolute motion; fallback for touchscreens
+// without a pointer device.
 void touch_emulate_move_absolute(struct wlr_touch *touch, double x, double y,
 								 uint32_t time) {
 	double lx, ly;
-	wlr_cursor_absolute_to_layout_coords(cursor, &touch->base, x, y, &lx, &ly);
-	double dx = lx - cursor->x;
-	double dy = ly - cursor->y;
-	motionnotify(time, &touch->base, dx, dy, dx, dy);
-	wlr_seat_pointer_notify_frame(seat);
+	wlr_cursor_absolute_to_layout_coords(server.cursor, &touch->base, x, y, &lx,
+										 &ly);
+	double dx = lx - server.cursor->x;
+	double dy = ly - server.cursor->y;
+	pointer_process_motion(time, &touch->base, dx, dy, dx, dy);
+	wlr_seat_pointer_notify_frame(server.seat);
 }
 
-// 触摸模拟鼠标：按键（复用普通指针的按键处理逻辑）
+// Touch emulates mouse buttons (reuses the normal pointer button handling).
 void touch_emulate_button(uint32_t button, enum wl_pointer_button_state state,
 						  uint32_t time) {
 	struct wlr_pointer_button_event ev = {
@@ -120,13 +121,15 @@ void touch_emulate_button(uint32_t button, enum wl_pointer_button_state state,
 		.state = state,
 		.time_msec = time,
 	};
-	if (!handle_buttonpress(&ev))
-		wlr_seat_pointer_notify_button(seat, ev.time_msec, ev.button, ev.state);
-	wlr_seat_pointer_notify_frame(seat);
+	if (!pointer_process_button_press(&ev))
+		wlr_seat_pointer_notify_button(server.seat, ev.time_msec, ev.button,
+									   ev.state);
+	wlr_seat_pointer_notify_frame(server.seat);
 }
 
-// X11 窗口 surface 局部坐标映射：xwayland_ignore_scale 下 X11 窗口以物理
-// 尺寸渲染，surface 局部坐标需乘 xwayland_scale 才能命中正确位置
+// X11 window surface-local coordinate mapping: with xwayland_ignore_scale, X11
+// windows render at physical sizes, so surface-local coordinates must be
+// multiplied by xwayland_scale to hit the right spot.
 void touch_apply_xwayland_scale(struct wlr_surface *surface, double *sx,
 								double *sy) {
 #ifdef XWAYLAND
@@ -140,7 +143,7 @@ void touch_apply_xwayland_scale(struct wlr_surface *surface, double *sx,
 #endif
 }
 
-void touch_down(struct wl_listener *listener, void *data) {
+void handle_cursor_touch_down(struct wl_listener *listener, void *data) {
 	struct wlr_touch_down_event *event = data;
 	struct touch_point *point = ecalloc(1, sizeof(*point));
 	double x_offset = 0.0, y_offset = 0.0;
@@ -148,7 +151,8 @@ void touch_down(struct wl_listener *listener, void *data) {
 
 	ipc_notify_device_event(&event->touch->base);
 
-	// 全局禁用触屏时忽略触摸事件；若正在指针模拟则一并清理结束
+	// Ignores touch events when touch is globally disabled; if emulating a
+	// pointer, clean up and stop it too.
 	if (!config.touch_enable) {
 		touch_finish_all();
 		return;
@@ -156,49 +160,53 @@ void touch_down(struct wl_listener *listener, void *data) {
 
 	touch_apply_monitor_mapping(event->touch);
 
-	wlr_idle_notifier_v1_notify_activity(idle_notifier, seat);
+	wlr_idle_notifier_v1_notify_activity(server.idle_notifier, server.seat);
 
 	point->surface = touch_get_coords(event->touch, event->x, event->y,
 									  &x_offset, &y_offset, &c);
 	point->touch_id = event->touch_id;
 	point->x_offset = x_offset;
 	point->y_offset = y_offset;
-	// 触点位于接受触摸的 surface 上则走触摸协议，否则回退鼠标模拟
-	point->touch_protocol =
-		point->surface && wlr_surface_accepts_touch(point->surface, seat);
+	// Touch points over surfaces that accept touch use the touch protocol;
+	// otherwise fall back to mouse emulation.
+	point->touch_protocol = point->surface && wlr_surface_accepts_touch(
+												  point->surface, server.seat);
 
-	wl_list_insert(&touch_points, &point->link);
-	int touch_point_count = wl_list_length(&touch_points);
+	wl_list_insert(&server.touch_points, &point->link);
+	int touch_point_count = wl_list_length(&server.touch_points);
 
-	// 触摸输入时隐藏光标
-	hidecursor(NULL);
+	// Hides the cursor during touch input.
+	pointer_hide_cursor(NULL);
 
 	if (point->touch_protocol) {
-		// 触点走触摸协议：退出指针模拟并清空指针焦点避免干扰
+		// Touch protocol touch point: exit pointer emulation and clear pointer
+		// focus to avoid interference.
 		simulating_pointer_from_touch = false;
-		wlr_seat_pointer_notify_clear_focus(seat);
+		wlr_seat_pointer_notify_clear_focus(server.seat);
 
 		double lx, ly, sx, sy;
-		wlr_cursor_absolute_to_layout_coords(cursor, &event->touch->base,
+		wlr_cursor_absolute_to_layout_coords(server.cursor, &event->touch->base,
 											 event->x, event->y, &lx, &ly);
 		sx = lx - x_offset;
 		sy = ly - y_offset;
 
-		// X11 窗口 surface 局部坐标映射（xwayland_ignore_scale 下为物理尺寸）
+		// X11 window surface-local coordinate mapping (physical size under
+		// xwayland_ignore_scale).
 		touch_apply_xwayland_scale(point->surface, &sx, &sy);
 
 		if (touch_point_count == 1)
-			wlr_cursor_warp_absolute(cursor, &event->touch->base, event->x,
-									 event->y);
+			wlr_cursor_warp_absolute(server.cursor, &event->touch->base,
+									 event->x, event->y);
 
 		wl_signal_add(&point->surface->events.destroy, &point->surface_destroy);
-		point->surface_destroy.notify = touch_point_surface_destroy;
+		point->surface_destroy.notify = handle_touch_point_surface_destroy;
 
-		wlr_seat_touch_notify_down(seat, point->surface, event->time_msec,
-								   event->touch_id, sx, sy);
+		wlr_seat_touch_notify_down(server.seat, point->surface,
+								   event->time_msec, event->touch_id, sx, sy);
 	} else if (config.touch_enable_mouse_emulation &&
 			   !simulating_pointer_from_touch) {
-		// 回退指针模拟：仅第一个触点模拟指针，pointer_touch_id 用于多指隔离
+		// Pointer emulation fallback: only the first touch point emulates the
+		// pointer; pointer_touch_id isolates multiple fingers.
 		simulating_pointer_from_touch = true;
 		pointer_touch_id = event->touch_id;
 		touch_emulate_move_absolute(event->touch, event->x, event->y,
@@ -206,10 +214,11 @@ void touch_down(struct wl_listener *listener, void *data) {
 		touch_emulate_button(BTN_LEFT, WL_POINTER_BUTTON_STATE_PRESSED,
 							 event->time_msec);
 	}
-	// 否则：surface 不支持触摸且未启用模拟，或已有触点正在模拟，忽略该触点
+	// Otherwise: the surface does not accept touch and emulation is disabled,
+	// or another touch point is already emulating; ignore this point.
 }
 
-void touch_motion(struct wl_listener *listener, void *data) {
+void handle_cursor_touch_motion(struct wl_listener *listener, void *data) {
 	struct wlr_touch_motion_event *event = data;
 	struct touch_point *point;
 
@@ -220,22 +229,23 @@ void touch_motion(struct wl_listener *listener, void *data) {
 		return;
 	}
 
-	wlr_idle_notifier_v1_notify_activity(idle_notifier, seat);
+	wlr_idle_notifier_v1_notify_activity(server.idle_notifier, server.seat);
 
-	wl_list_for_each(point, &touch_points, link) {
+	wl_list_for_each(point, &server.touch_points, link) {
 		if (point->touch_id != event->touch_id)
 			continue;
 
 		if (point->touch_protocol && point->surface) {
 			double lx, ly;
-			wlr_cursor_absolute_to_layout_coords(cursor, &event->touch->base,
-												 event->x, event->y, &lx, &ly);
+			wlr_cursor_absolute_to_layout_coords(server.cursor,
+												 &event->touch->base, event->x,
+												 event->y, &lx, &ly);
 			double sx = lx - point->x_offset;
 			double sy = ly - point->y_offset;
 
 			touch_apply_xwayland_scale(point->surface, &sx, &sy);
 
-			wlr_seat_touch_notify_motion(seat, event->time_msec,
+			wlr_seat_touch_notify_motion(server.seat, event->time_msec,
 										 event->touch_id, sx, sy);
 		} else if (config.touch_enable_mouse_emulation &&
 				   simulating_pointer_from_touch &&
@@ -247,7 +257,7 @@ void touch_motion(struct wl_listener *listener, void *data) {
 	}
 }
 
-void touch_up(struct wl_listener *listener, void *data) {
+void handle_cursor_touch_up(struct wl_listener *listener, void *data) {
 	struct wlr_touch_up_event *event = data;
 	struct touch_point *point, *tmp;
 
@@ -258,14 +268,15 @@ void touch_up(struct wl_listener *listener, void *data) {
 		return;
 	}
 
-	wlr_idle_notifier_v1_notify_activity(idle_notifier, seat);
+	wlr_idle_notifier_v1_notify_activity(server.idle_notifier, server.seat);
 
-	wl_list_for_each_safe(point, tmp, &touch_points, link) {
+	wl_list_for_each_safe(point, tmp, &server.touch_points, link) {
 		if (point->touch_id != event->touch_id)
 			continue;
 
 		if (point->touch_protocol && point->surface) {
-			wlr_seat_touch_notify_up(seat, event->time_msec, event->touch_id);
+			wlr_seat_touch_notify_up(server.seat, event->time_msec,
+									 event->touch_id);
 			wl_list_remove(&point->surface_destroy.link);
 		} else if (config.touch_enable_mouse_emulation &&
 				   simulating_pointer_from_touch &&
@@ -282,9 +293,10 @@ void touch_up(struct wl_listener *listener, void *data) {
 	}
 }
 
-// 触摸被系统取消（如全局手势抢占）：触摸协议触点取消整个会话，
-// 指针模拟触点则释放鼠标并结束模拟
-void touch_cancel(struct wl_listener *listener, void *data) {
+// Touch cancelled by the system (e.g. a global gesture takes over):
+// touch-protocol points cancel the whole session; pointer-emulation points
+// release the mouse and end emulation.
+void handle_cursor_touch_cancel(struct wl_listener *listener, void *data) {
 	struct wlr_touch_cancel_event *event = data;
 	struct touch_point *point, *tmp;
 
@@ -295,15 +307,15 @@ void touch_cancel(struct wl_listener *listener, void *data) {
 		return;
 	}
 
-	wlr_idle_notifier_v1_notify_activity(idle_notifier, seat);
+	wlr_idle_notifier_v1_notify_activity(server.idle_notifier, server.seat);
 
-	wl_list_for_each_safe(point, tmp, &touch_points, link) {
+	wl_list_for_each_safe(point, tmp, &server.touch_points, link) {
 		if (point->touch_id != event->touch_id)
 			continue;
 
 		if (point->touch_protocol && point->surface) {
-			// NULL 表示取消 seat 上所有触摸焦点
-			wlr_seat_touch_notify_cancel(seat, NULL);
+			// NULL clears all touch focus on the seat.
+			wlr_seat_touch_notify_cancel(server.seat, NULL);
 			wl_list_remove(&point->surface_destroy.link);
 		} else if (config.touch_enable_mouse_emulation &&
 				   simulating_pointer_from_touch &&
@@ -320,15 +332,17 @@ void touch_cancel(struct wl_listener *listener, void *data) {
 	}
 }
 
-void touch_frame(struct wl_listener *listener, void *data) {
-	// 指针模拟期间发送指针 frame，否则发送触摸 frame
+void handle_cursor_touch_frame(struct wl_listener *listener, void *data) {
+	// Sends a pointer frame during pointer emulation; otherwise sends a touch
+	// frame.
 	if (simulating_pointer_from_touch)
-		wlr_seat_pointer_notify_frame(seat);
+		wlr_seat_pointer_notify_frame(server.seat);
 	else
-		wlr_seat_touch_notify_frame(seat);
+		wlr_seat_touch_notify_frame(server.seat);
 }
 
-// 清空所有进行中的触摸点；正在指针模拟时先释放鼠标左键
+// Clears all in-progress touch points; releases the left mouse button first
+// when emulating a pointer.
 void touch_finish_all(void) {
 	struct touch_point *point, *tmp;
 
@@ -337,7 +351,7 @@ void touch_finish_all(void) {
 	simulating_pointer_from_touch = false;
 	pointer_touch_id = -1;
 
-	wl_list_for_each_safe(point, tmp, &touch_points, link) {
+	wl_list_for_each_safe(point, tmp, &server.touch_points, link) {
 		if (point->touch_protocol && point->surface)
 			wl_list_remove(&point->surface_destroy.link);
 		wl_list_remove(&point->link);

@@ -8,15 +8,15 @@
 #include <sys/un.h>
 #include <unistd.h>
 #include "mango/ipc/ipc.h"
-#include "mango/common/globals.h"
+#include "mango/common/server.h"
 #include "mango/common/log.h"
 #include "mango/layout/layout.h"
 #include "mango/ext-protocol/ext-workspace.h"
 #include "mango/manage/client.h"
 #include "mango/manage/monitor.h"
 
-struct wl_list watch_clients;
-int device_watch_count;
+static struct wl_list ipc_watch_clients;
+static int ipc_device_watch_count;
 
 const char *ipc_device_type_str(struct wlr_input_device *dev) {
 	if (!dev)
@@ -46,10 +46,10 @@ const char *ipc_device_type_str(struct wlr_input_device *dev) {
 	}
 }
 
-/* ---------- 工具函数 ---------- */
+/* ---------- Utils ---------- */
 Monitor *monitor_by_name(const char *name) {
 	Monitor *m;
-	wl_list_for_each(m, &mons, link) {
+	wl_list_for_each(m, &server.monitors, link) {
 		if (strcmp(m->wlr_output->name, name) == 0)
 			return m;
 	}
@@ -58,7 +58,7 @@ Monitor *monitor_by_name(const char *name) {
 
 Client *client_by_id(uint32_t id) {
 	Client *c;
-	wl_list_for_each(c, &clients, link) {
+	wl_list_for_each(c, &server.clients, link) {
 		if (c->id == id)
 			return c;
 	}
@@ -67,8 +67,9 @@ Client *client_by_id(uint32_t id) {
 
 const char *ipc_get_layout_str(void) {
 	struct wlr_keyboard *keyboard =
-		last_active_keyboard ? last_active_keyboard
-							 : (kb_group ? kb_group->keyboard : NULL);
+		server.last_active_keyboard
+			? server.last_active_keyboard
+			: (server.keyboard_group ? server.keyboard_group->keyboard : NULL);
 	if (!keyboard || !keyboard->keymap || !keyboard->xkb_state)
 		return "";
 	xkb_layout_index_t current = xkb_state_serialize_layout(
@@ -86,13 +87,13 @@ cJSON *build_tags_json(Monitor *m) {
 	for (int tag = 1; tag <= config.tag_num; tag++) {
 		int numclients = 0;
 		bool is_active = false, is_urgent = false;
-		uint32_t tagmask = 1 << (tag - 1);
-		if (tagmask & active_tagset)
+		uint32_t tag_bit = 1 << (tag - 1);
+		if (tag_bit & active_tagset)
 			is_active = true;
-		wl_list_for_each(c, &clients, link) {
+		wl_list_for_each(c, &server.clients, link) {
 			if (c->mon != m || c->is_logic_hide)
 				continue;
-			if (!(c->tags & tagmask & TAGMASK))
+			if (!(c->tags & tag_bit & TAGMASK))
 				continue;
 			if (c->isurgent)
 				is_urgent = true;
@@ -135,7 +136,7 @@ cJSON *build_all_tags_entry(Monitor *m) {
 cJSON *build_all_tags_response(void) {
 	cJSON *arr = cJSON_CreateArray();
 	Monitor *m;
-	wl_list_for_each(m, &mons, link)
+	wl_list_for_each(m, &server.monitors, link)
 		cJSON_AddItemToArray(arr, build_all_tags_entry(m));
 	cJSON *resp = cJSON_CreateObject();
 	cJSON_AddItemToObject(resp, "all_tags", arr);
@@ -168,7 +169,7 @@ void send_static_json(int fd, const char *json_str) {
 	send(fd, json_str, len, 0);
 }
 
-/* ---------- Watch 模式支持 ---------- */
+/* ---------- Watch mode support ---------- */
 void ipc_notify_json_to_fd(int fd, cJSON *json) {
 	char *str = cJSON_PrintUnformatted(json);
 	if (!str)
@@ -182,7 +183,7 @@ void ipc_notify_json_to_fd(int fd, cJSON *json) {
 	snprintf(msg, len + 2, "%s\n", str);
 	if (send(fd, msg, len + 1, 0) < 0) {
 		struct ipc_watch_client *wc, *tmp;
-		wl_list_for_each_safe(wc, tmp, &watch_clients, link) {
+		wl_list_for_each_safe(wc, tmp, &ipc_watch_clients, link) {
 			if (wc->fd == fd) {
 				ipc_remove_watch_client(wc);
 				break;
@@ -193,9 +194,10 @@ void ipc_notify_json_to_fd(int fd, cJSON *json) {
 	free(str);
 }
 
-/* 向 watch all-devices 客户端推送最后触发事件的设备 */
+/* Pushes the device that triggered the last event to watch all-devices clients.
+ */
 void ipc_notify_device_event(struct wlr_input_device *dev) {
-	if (!dev || !device_watch_count)
+	if (!dev || !ipc_device_watch_count)
 		return;
 
 	cJSON *json = cJSON_CreateObject();
@@ -203,7 +205,7 @@ void ipc_notify_device_event(struct wlr_input_device *dev) {
 	cJSON_AddStringToObject(json, "type", ipc_device_type_str(dev));
 
 	struct ipc_watch_client *wc, *tmp;
-	wl_list_for_each_safe(wc, tmp, &watch_clients, link) {
+	wl_list_for_each_safe(wc, tmp, &ipc_watch_clients, link) {
 		if (wc->type == IPC_WATCH_DEVICE)
 			ipc_notify_json_to_fd(wc->fd, json);
 	}
@@ -212,7 +214,7 @@ void ipc_notify_device_event(struct wlr_input_device *dev) {
 
 void ipc_remove_watch_client(struct ipc_watch_client *wc) {
 	if (wc->type == IPC_WATCH_DEVICE)
-		device_watch_count--;
+		ipc_device_watch_count--;
 	wl_list_remove(&wc->link);
 	wl_event_source_remove(wc->source);
 	close(wc->fd);
@@ -235,7 +237,7 @@ int ipc_watch_data_handler(int fd, uint32_t mask, void *data) {
 	return 0;
 }
 
-/* ---------- Socket 事件处理 ---------- */
+/* ---------- Socket event handling ---------- */
 int ipc_handle_client_data(int fd, uint32_t mask, void *data) {
 	struct ipc_client_state *client = data;
 	if (mask & (WL_EVENT_HANGUP | WL_EVENT_ERROR))
@@ -293,10 +295,10 @@ int ipc_handle_connection(int fd, uint32_t mask, void *data) {
 	if (client_fd < 0)
 		return 0;
 
-	// 设置 O_NONBLOCK
+	// Sets O_NONBLOCK
 	int flags = fcntl(client_fd, F_GETFL, 0);
 	fcntl(client_fd, F_SETFL, flags | O_NONBLOCK);
-	// 设置 FD_CLOEXEC
+	// Sets FD_CLOEXEC
 	flags = fcntl(client_fd, F_GETFD, 0);
 	fcntl(client_fd, F_SETFD, flags | FD_CLOEXEC);
 
@@ -313,7 +315,7 @@ void ipc_notify_client(Client *c) {
 	char *json_str = NULL;
 	size_t len = 0;
 	struct ipc_watch_client *wc, *tmp;
-	wl_list_for_each_safe(wc, tmp, &watch_clients, link) {
+	wl_list_for_each_safe(wc, tmp, &ipc_watch_clients, link) {
 		if (wc->type == IPC_WATCH_CLIENT && c->id == wc->target.client.id) {
 			if (!json_str) {
 				cJSON *json = build_client_json(c);
@@ -338,7 +340,7 @@ void ipc_notify_tags(Monitor *m) {
 	char *json_str = NULL;
 	size_t len = 0;
 	struct ipc_watch_client *wc, *tmp;
-	wl_list_for_each_safe(wc, tmp, &watch_clients, link) {
+	wl_list_for_each_safe(wc, tmp, &ipc_watch_clients, link) {
 		if (wc->type == IPC_WATCH_TAGS &&
 			strcmp(m->wlr_output->name, wc->target.tags.mon_name) == 0) {
 			if (!json_str) {
@@ -364,7 +366,7 @@ void ipc_notify_all_tags(void) {
 	char *json_str = NULL;
 	size_t len = 0;
 	struct ipc_watch_client *wc, *tmp;
-	wl_list_for_each_safe(wc, tmp, &watch_clients, link) {
+	wl_list_for_each_safe(wc, tmp, &ipc_watch_clients, link) {
 		if (wc->type == IPC_WATCH_ALL_TAGS) {
 			if (!json_str) {
 				cJSON *json = build_all_tags_response();
@@ -386,7 +388,7 @@ void ipc_notify_all_tags(void) {
 }
 
 void printstatus(enum ipc_watch_type type) {
-	wl_signal_emit(&mango_print_status, &type);
+	wl_signal_emit(&server.print_status_signal, &type);
 }
 
 void handle_print_status(struct wl_listener *listener, void *data) {
@@ -416,7 +418,7 @@ void handle_print_status(struct wl_listener *listener, void *data) {
 
 	if (type & IPC_WATCH_CLIENT) {
 		Client *c = NULL;
-		wl_list_for_each(c, &clients, link) {
+		wl_list_for_each(c, &server.clients, link) {
 			if (c->iskilling)
 				continue;
 			ipc_notify_client(c);
@@ -424,7 +426,7 @@ void handle_print_status(struct wl_listener *listener, void *data) {
 	}
 
 	Monitor *m = NULL;
-	wl_list_for_each(m, &mons, link) {
+	wl_list_for_each(m, &server.monitors, link) {
 		if (!m->wlr_output->enabled) {
 			continue;
 		}
@@ -444,29 +446,29 @@ void handle_print_status(struct wl_listener *listener, void *data) {
 	}
 }
 
-/* ---------- 初始化与清理 ---------- */
-int ipc_sock_fd = -1;
-struct wl_event_source *ipc_event_source = NULL;
-char ipc_socket_path[256];
+/* ---------- Init & cleanup ---------- */
+static int ipc_socket_fd = -1;
+static struct wl_event_source *ipc_event_source = NULL;
+static char ipc_socket_path[256];
 
 void ipc_cleanup(void) {
 	if (ipc_event_source)
 		wl_event_source_remove(ipc_event_source);
-	if (ipc_sock_fd >= 0)
-		close(ipc_sock_fd);
+	if (ipc_socket_fd >= 0)
+		close(ipc_socket_fd);
 	unlink(ipc_socket_path);
 	unsetenv("MANGO_INSTANCE_SIGNATURE");
 
 	struct ipc_watch_client *wc, *tmp;
-	wl_list_for_each_safe(wc, tmp, &watch_clients, link)
+	wl_list_for_each_safe(wc, tmp, &ipc_watch_clients, link)
 		ipc_remove_watch_client(wc);
 }
-cJSON *tags_mask_to_array(uint32_t tagmask) {
+cJSON *tags_mask_to_array(uint32_t tag_mask) {
 	cJSON *arr = cJSON_CreateArray();
-	if (tagmask & TAG0_MASK)
+	if (tag_mask & TAG0_MASK)
 		cJSON_AddItemToArray(arr, cJSON_CreateNumber(0));
 	for (int i = 0; i < config.tag_num; i++)
-		if (tagmask & (1 << i))
+		if (tag_mask & (1 << i))
 			cJSON_AddItemToArray(arr, cJSON_CreateNumber(i + 1));
 	return arr;
 }
@@ -523,7 +525,7 @@ cJSON *build_client_json(Client *c) {
 cJSON *build_monitor_json(Monitor *m) {
 	cJSON *resp = cJSON_CreateObject();
 	cJSON_AddStringToObject(resp, "name", m->wlr_output->name);
-	cJSON_AddBoolToObject(resp, "active", m == selmon);
+	cJSON_AddBoolToObject(resp, "active", m == server.selected_monitor);
 	cJSON_AddBoolToObject(resp, "is_hdr", m->is_hdr_enabling);
 	cJSON_AddBoolToObject(resp, "is_vrr", m->is_vrr_enabling);
 	cJSON_AddNumberToObject(resp, "x", m->m.x);
@@ -542,7 +544,8 @@ cJSON *build_monitor_json(Monitor *m) {
 	cJSON_AddItemToObject(resp, "tags", build_tags_json(m));
 	cJSON_AddItemToObject(resp, "active_tags", monitor_active_tags(m));
 	cJSON_AddItemToObject(resp, "active_client", monitor_active_client(m));
-	cJSON_AddItemToObject(resp, "keymode", cJSON_CreateString(keymode.mode));
+	cJSON_AddItemToObject(resp, "keymode",
+						  cJSON_CreateString(server.key_mode.mode));
 	cJSON_AddItemToObject(resp, "keyboardlayout",
 						  cJSON_CreateString(ipc_get_layout_str()));
 	return resp;
@@ -563,16 +566,16 @@ void handle_command(int client_fd, const char *cmd_raw) {
 		cJSON_AddStringToObject(resp, "version", VERSION);
 	} else if (strcmp(cmd, "get cursorpos") == 0) {
 		resp = cJSON_CreateObject();
-		cJSON_AddNumberToObject(resp, "x", cursor->x);
-		cJSON_AddNumberToObject(resp, "y", cursor->y);
-		Monitor *m = xytomon(cursor->x, cursor->y);
+		cJSON_AddNumberToObject(resp, "x", server.cursor->x);
+		cJSON_AddNumberToObject(resp, "y", server.cursor->y);
+		Monitor *m = monitor_at_point(server.cursor->x, server.cursor->y);
 		if (m)
 			cJSON_AddStringToObject(resp, "monitor", m->wlr_output->name);
 		else
 			cJSON_AddNullToObject(resp, "monitor");
 	} else if (strcmp(cmd, "get keymode") == 0) {
 		resp = cJSON_CreateObject();
-		cJSON_AddStringToObject(resp, "keymode", keymode.mode);
+		cJSON_AddStringToObject(resp, "keymode", server.key_mode.mode);
 	} else if (strcmp(cmd, "get keyboardlayout") == 0) {
 		resp = cJSON_CreateObject();
 		cJSON_AddStringToObject(resp, "layout", ipc_get_layout_str());
@@ -580,7 +583,7 @@ void handle_command(int client_fd, const char *cmd_raw) {
 			   strncmp(cmd, "get last_open_surface ", 22) == 0) {
 		Monitor *m;
 		if (cmd[21] == '\0') { // exactly "get last_open_surface"
-			m = selmon;
+			m = server.selected_monitor;
 		} else {
 			m = monitor_by_name(cmd + 22);
 		}
@@ -600,8 +603,8 @@ void handle_command(int client_fd, const char *cmd_raw) {
 		}
 		resp = build_monitor_json(m);
 	} else if (strcmp(cmd, "get focusing-client") == 0) {
-		if (selmon && selmon->sel) {
-			resp = build_client_json(selmon->sel);
+		if (server.selected_monitor && server.selected_monitor->sel) {
+			resp = build_client_json(server.selected_monitor->sel);
 		} else {
 			send_static_json(client_fd, "{\"error\":\"no focused client\"}\n");
 			return;
@@ -629,15 +632,15 @@ void handle_command(int client_fd, const char *cmd_raw) {
 							 "{\"error\":\"invalid monitor or tag index\"}\n");
 			return;
 		}
-		uint32_t tagmask = 1 << tag_idx;
+		uint32_t tag_bit = 1 << tag_idx;
 		int numclients = 0, focused_client = 0;
 		bool is_active = false, is_urgent = false;
-		if (tagmask & get_monitor_active_tagset(m))
+		if (tag_bit & get_monitor_active_tagset(m))
 			is_active = true;
 
-		Client *c, *focused = focustop(m);
-		wl_list_for_each(c, &clients, link) {
-			if (c->mon != m || c->is_logic_hide || !(c->tags & tagmask))
+		Client *c, *focused = client_focus_top(m);
+		wl_list_for_each(c, &server.clients, link) {
+			if (c->mon != m || c->is_logic_hide || !(c->tags & tag_bit))
 				continue;
 			if (c == focused)
 				focused_client = 1;
@@ -655,19 +658,20 @@ void handle_command(int client_fd, const char *cmd_raw) {
 	} else if (strcmp(cmd, "get all-clients") == 0) {
 		cJSON *arr = cJSON_CreateArray();
 		Client *c;
-		wl_list_for_each(c, &clients, link)
+		wl_list_for_each(c, &server.clients, link)
 			cJSON_AddItemToArray(arr, build_client_json(c));
 		resp = cJSON_CreateObject();
 		cJSON_AddItemToObject(resp, "clients", arr);
 	} else if (strcmp(cmd, "get all-monitors") == 0) {
 		cJSON *arr = cJSON_CreateArray();
 		Monitor *m;
-		wl_list_for_each(m, &mons, link)
+		wl_list_for_each(m, &server.monitors, link)
 			cJSON_AddItemToArray(arr, build_monitor_json(m));
 		resp = cJSON_CreateObject();
 		cJSON_AddItemToObject(resp, "monitors", arr);
 	} else if (strcmp(cmd, "get all-devices") == 0) {
-		/* 按物理设备（libinput device group）聚合列出 */
+		/* Aggregates and lists entries by physical device (libinput device
+		 * group). */
 		struct ipc_dev_group {
 			struct libinput_device_group *group;
 			char name[256];
@@ -675,12 +679,13 @@ void handle_command(int client_fd, const char *cmd_raw) {
 			int type_count;
 			int vendor, product;
 			int count;
-			ConfigDeviceRule *rule; /* 组内任一接口命中即记录 */
+			ConfigDeviceRule *
+				rule; /* Records a hit if any interface in the group matches. */
 		} groups[64];
 		int group_count = 0;
 
 		InputDevice *id;
-		wl_list_for_each(id, &inputdevices, link) {
+		wl_list_for_each(id, &server.input_devices, link) {
 			struct wlr_input_device *dev = id->wlr_device;
 			struct libinput_device *ld = NULL;
 			struct libinput_device_group *grp = NULL;
@@ -688,7 +693,7 @@ void handle_command(int client_fd, const char *cmd_raw) {
 				ld = wlr_libinput_get_device_handle(dev);
 			if (ld)
 				grp = libinput_device_get_device_group(ld);
-			/* 非 libinput 设备按设备自身聚合 */
+			/* Non-libinput devices are aggregated by the device itself. */
 			if (!grp)
 				grp = (struct libinput_device_group *)dev;
 
@@ -893,7 +898,7 @@ bool handle_watch_command(int fd, const char *cmd,
 		if (cmd[24] != '\0') { // has argument after the space
 			arg = cmd + 24;
 		} else {
-			arg = NULL; // default to selmon
+			arg = NULL; // default to selected_monitor
 		}
 	}
 
@@ -918,11 +923,11 @@ bool handle_watch_command(int fd, const char *cmd,
 	wc->source = wl_event_loop_add_fd(
 		client->loop, fd, WL_EVENT_READABLE | WL_EVENT_HANGUP | WL_EVENT_ERROR,
 		ipc_watch_data_handler, wc);
-	wl_list_insert(&watch_clients, &wc->link);
+	wl_list_insert(&ipc_watch_clients, &wc->link);
 	if (type == IPC_WATCH_DEVICE)
-		device_watch_count++;
+		ipc_device_watch_count++;
 
-	/* 推送初始状态 */
+	/* Pushes the initial state. */
 	cJSON *json = NULL;
 	switch (type) {
 	case IPC_WATCH_MONITOR: {
@@ -936,7 +941,7 @@ bool handle_watch_command(int fd, const char *cmd,
 		if (arg) {
 			m = monitor_by_name(arg);
 		} else {
-			m = selmon;
+			m = server.selected_monitor;
 		}
 		if (m) {
 			json = cJSON_CreateObject();
@@ -947,8 +952,8 @@ bool handle_watch_command(int fd, const char *cmd,
 		break;
 	}
 	case IPC_WATCH_FOCUSING_CLIENT: {
-		if (selmon && selmon->sel) {
-			json = build_client_json(selmon->sel);
+		if (server.selected_monitor && server.selected_monitor->sel) {
+			json = build_client_json(server.selected_monitor->sel);
 		} else {
 			json = cJSON_CreateObject();
 			cJSON_AddNullToObject(json, "id");
@@ -972,7 +977,7 @@ bool handle_watch_command(int fd, const char *cmd,
 	case IPC_WATCH_ALL_MONITORS: {
 		cJSON *arr = cJSON_CreateArray();
 		Monitor *m;
-		wl_list_for_each(m, &mons, link)
+		wl_list_for_each(m, &server.monitors, link)
 			cJSON_AddItemToArray(arr, build_monitor_json(m));
 		json = cJSON_CreateObject();
 		cJSON_AddItemToObject(json, "monitors", arr);
@@ -985,7 +990,7 @@ bool handle_watch_command(int fd, const char *cmd,
 	case IPC_WATCH_ALL_CLIENTS: {
 		cJSON *arr = cJSON_CreateArray();
 		Client *c;
-		wl_list_for_each(c, &clients, link)
+		wl_list_for_each(c, &server.clients, link)
 			cJSON_AddItemToArray(arr, build_client_json(c));
 		json = cJSON_CreateObject();
 		cJSON_AddItemToObject(json, "clients", arr);
@@ -999,7 +1004,7 @@ bool handle_watch_command(int fd, const char *cmd,
 	}
 	case IPC_WATCH_KEYMODE: {
 		json = cJSON_CreateObject();
-		cJSON_AddStringToObject(json, "keymode", keymode.mode);
+		cJSON_AddStringToObject(json, "keymode", server.key_mode.mode);
 		break;
 	}
 	case IPC_WATCH_KB_LAYOUT: {
@@ -1020,12 +1025,12 @@ bool handle_watch_command(int fd, const char *cmd,
 	free(client);
 	return true;
 }
-/* ---------- 外部通知接口 ---------- */
+/* ---------- External notification API ---------- */
 void ipc_notify_monitor(Monitor *m) {
 	char *json_str = NULL;
 	size_t len = 0;
 	struct ipc_watch_client *wc, *tmp;
-	wl_list_for_each_safe(wc, tmp, &watch_clients, link) {
+	wl_list_for_each_safe(wc, tmp, &ipc_watch_clients, link) {
 		if (wc->type == IPC_WATCH_MONITOR &&
 			strcmp(m->wlr_output->name, wc->target.monitor.name) == 0) {
 			if (!json_str) {
@@ -1051,13 +1056,13 @@ void ipc_notify_last_surface_ws_name(Monitor *m) {
 	char *json_str = NULL;
 	size_t len = 0;
 	struct ipc_watch_client *wc, *tmp;
-	wl_list_for_each_safe(wc, tmp, &watch_clients, link) {
+	wl_list_for_each_safe(wc, tmp, &ipc_watch_clients, link) {
 		if (wc->type != IPC_WATCH_LAST_OPEN_SURFACE)
 			continue;
 
 		bool match = false;
 		if (wc->target.monitor.name[0] == '\0') {
-			if (m == selmon)
+			if (m == server.selected_monitor)
 				match = true;
 		} else {
 			if (strcmp(m->wlr_output->name, wc->target.monitor.name) == 0)
@@ -1091,12 +1096,12 @@ void ipc_notify_focusing_client(void) {
 	char *json_str = NULL;
 	size_t len = 0;
 	struct ipc_watch_client *wc, *tmp;
-	wl_list_for_each_safe(wc, tmp, &watch_clients, link) {
+	wl_list_for_each_safe(wc, tmp, &ipc_watch_clients, link) {
 		if (wc->type == IPC_WATCH_FOCUSING_CLIENT) {
 			if (!json_str) {
 				cJSON *json = NULL;
-				if (selmon && selmon->sel) {
-					json = build_client_json(selmon->sel);
+				if (server.selected_monitor && server.selected_monitor->sel) {
+					json = build_client_json(server.selected_monitor->sel);
 				} else {
 					json = cJSON_CreateObject();
 					cJSON_AddNullToObject(json, "id");
@@ -1123,12 +1128,12 @@ void ipc_notify_all_monitors(void) {
 	char *json_str = NULL;
 	size_t len = 0;
 	struct ipc_watch_client *wc, *tmp;
-	wl_list_for_each_safe(wc, tmp, &watch_clients, link) {
+	wl_list_for_each_safe(wc, tmp, &ipc_watch_clients, link) {
 		if (wc->type == IPC_WATCH_ALL_MONITORS) {
 			if (!json_str) {
 				cJSON *arr = cJSON_CreateArray();
 				Monitor *m;
-				wl_list_for_each(m, &mons, link)
+				wl_list_for_each(m, &server.monitors, link)
 					cJSON_AddItemToArray(arr, build_monitor_json(m));
 				cJSON *json = cJSON_CreateObject();
 				cJSON_AddItemToObject(json, "monitors", arr);
@@ -1153,12 +1158,12 @@ void ipc_notify_all_clients(void) {
 	char *json_str = NULL;
 	size_t len = 0;
 	struct ipc_watch_client *wc, *tmp;
-	wl_list_for_each_safe(wc, tmp, &watch_clients, link) {
+	wl_list_for_each_safe(wc, tmp, &ipc_watch_clients, link) {
 		if (wc->type == IPC_WATCH_ALL_CLIENTS) {
 			if (!json_str) {
 				cJSON *arr = cJSON_CreateArray();
 				Client *c;
-				wl_list_for_each(c, &clients, link)
+				wl_list_for_each(c, &server.clients, link)
 					cJSON_AddItemToArray(arr, build_client_json(c));
 				cJSON *json = cJSON_CreateObject();
 				cJSON_AddItemToObject(json, "clients", arr);
@@ -1183,11 +1188,11 @@ void ipc_notify_keymode(void) {
 	char *json_str = NULL;
 	size_t len = 0;
 	struct ipc_watch_client *wc, *tmp;
-	wl_list_for_each_safe(wc, tmp, &watch_clients, link) {
+	wl_list_for_each_safe(wc, tmp, &ipc_watch_clients, link) {
 		if (wc->type == IPC_WATCH_KEYMODE) {
 			if (!json_str) {
 				cJSON *json = cJSON_CreateObject();
-				cJSON_AddStringToObject(json, "keymode", keymode.mode);
+				cJSON_AddStringToObject(json, "keymode", server.key_mode.mode);
 				char *raw = cJSON_PrintUnformatted(json);
 				cJSON_Delete(json);
 				if (!raw)
@@ -1209,7 +1214,7 @@ void ipc_notify_kb_layout(void) {
 	char *json_str = NULL;
 	size_t len = 0;
 	struct ipc_watch_client *wc, *tmp;
-	wl_list_for_each_safe(wc, tmp, &watch_clients, link) {
+	wl_list_for_each_safe(wc, tmp, &ipc_watch_clients, link) {
 		if (wc->type == IPC_WATCH_KB_LAYOUT) {
 			if (!json_str) {
 				cJSON *json = cJSON_CreateObject();
@@ -1231,10 +1236,10 @@ void ipc_notify_kb_layout(void) {
 		free(json_str);
 }
 
-/* ---------- 初始化与清理 ---------- */
+/* ---------- Init & cleanup ---------- */
 
-void ipc_init(struct wl_event_loop *event_loop) {
-	wl_list_init(&watch_clients);
+void ipc_init(struct wl_event_loop *loop) {
+	wl_list_init(&ipc_watch_clients);
 
 	const char *xdg_runtime = getenv("XDG_RUNTIME_DIR");
 	if (!xdg_runtime)
@@ -1243,22 +1248,24 @@ void ipc_init(struct wl_event_loop *event_loop) {
 	snprintf(ipc_socket_path, sizeof(ipc_socket_path), "%s/mango-%d.sock",
 			 xdg_runtime, getpid());
 
-	ipc_sock_fd = socket(AF_UNIX, SOCK_STREAM, 0);
-	if (ipc_sock_fd < 0)
+	ipc_socket_fd = socket(AF_UNIX, SOCK_STREAM, 0);
+	if (ipc_socket_fd < 0)
 		return;
 
-	// 设置 FD_CLOEXEC
-	int flags = fcntl(ipc_sock_fd, F_GETFD, 0);
-	if (flags == -1 || fcntl(ipc_sock_fd, F_SETFD, flags | FD_CLOEXEC) == -1) {
+	// Sets FD_CLOEXEC
+	int flags = fcntl(ipc_socket_fd, F_GETFD, 0);
+	if (flags == -1 ||
+		fcntl(ipc_socket_fd, F_SETFD, flags | FD_CLOEXEC) == -1) {
 		mango_error(true, WLR_ERROR, "failed to set FD_CLOEXEC on IPC socket");
-		close(ipc_sock_fd);
+		close(ipc_socket_fd);
 		return;
 	}
-	// 设置 O_NONBLOCK
-	flags = fcntl(ipc_sock_fd, F_GETFL, 0);
-	if (flags == -1 || fcntl(ipc_sock_fd, F_SETFL, flags | O_NONBLOCK) == -1) {
+	// Sets O_NONBLOCK
+	flags = fcntl(ipc_socket_fd, F_GETFL, 0);
+	if (flags == -1 ||
+		fcntl(ipc_socket_fd, F_SETFL, flags | O_NONBLOCK) == -1) {
 		mango_error(true, WLR_ERROR, "failed to set O_NONBLOCK on IPC socket");
-		close(ipc_sock_fd);
+		close(ipc_socket_fd);
 		return;
 	}
 
@@ -1267,20 +1274,19 @@ void ipc_init(struct wl_event_loop *event_loop) {
 		snprintf(addr.sun_path, sizeof(addr.sun_path), "%s", ipc_socket_path);
 	if (len < 0 || (size_t)len >= sizeof(addr.sun_path)) {
 		wlr_log(WLR_ERROR, "IPC socket path too long for sun_path");
-		close(ipc_sock_fd);
+		close(ipc_socket_fd);
 		return;
 	}
 
 	unlink(ipc_socket_path);
-	if (bind(ipc_sock_fd, (struct sockaddr *)&addr, sizeof(addr)) < 0) {
-		close(ipc_sock_fd);
+	if (bind(ipc_socket_fd, (struct sockaddr *)&addr, sizeof(addr)) < 0) {
+		close(ipc_socket_fd);
 		return;
 	}
-	listen(ipc_sock_fd, 16);
+	listen(ipc_socket_fd, 16);
 
 	setenv("MANGO_INSTANCE_SIGNATURE", ipc_socket_path, 1);
 
-	ipc_event_source =
-		wl_event_loop_add_fd(event_loop, ipc_sock_fd, WL_EVENT_READABLE,
-							 ipc_handle_connection, event_loop);
+	ipc_event_source = wl_event_loop_add_fd(
+		loop, ipc_socket_fd, WL_EVENT_READABLE, ipc_handle_connection, loop);
 }

@@ -4,35 +4,40 @@
 #include "mango/mango.h"
 #include <stdint.h>
 
-// overview 预览：每个客户端建一个独立卡片树，遍历其 surface 树（含
-// subsurface）为每个 surface 建 scene_surface 节点直接绑定纹理，尺寸由
-// GPU 采样缩放，坐标用 client_get_clip 的 geometry 偏移。提交后自动刷新。
+// Overview preview: each client gets its own card tree; walk its surface tree
+// (including subsurfaces) and create a scene_surface node per surface bound
+// directly to the texture. Sizes are scaled by GPU sampling and coordinates
+// offset by client_get_clip geometry; auto-refreshes after commit.
 
-// 目标窗口有其他窗口和它同个tag就返回0
+// Returns 0 when the target window shares its tag with other windows.
 uint32_t want_restore_fullscreen(Client *target_client);
-// surface 提交后重算布局（scene_surface 提交时会重置
-// dest/source，需要重新套用）
-void overview_card_surface_commit(struct wl_listener *listener, void *data);
-// surface 销毁时移除并释放节点
-void overview_card_surface_destroy(struct wl_listener *listener, void *data);
-// 为每个 surface（含 subsurface）建一个卡片 scene_surface 节点
+// Recomputes layout after surface commit (scene_surface commit resets
+// dest/source and needs to be reapplied).
+void handle_overview_card_surface_commit(struct wl_listener *listener,
+										 void *data);
+// Removes and frees the node when the surface is destroyed.
+void handle_overview_card_surface_destroy(struct wl_listener *listener,
+										  void *data);
+// Creates a card scene_surface node for every surface (including subsurfaces).
 void overview_card_surface_add(struct wlr_surface *surface, int sx, int sy,
 							   void *data);
-// 按当前几何更新卡片位置与缩放；内容起点用 client_get_clip 的 geometry 偏移
+// Updates card position and scale from the current geometry; content origin
+// uses client_get_clip geometry offset.
 void overview_layout_card(Client *c);
 
-// 销毁卡片树并释放全部 surface 节点
+// Destroys the card tree and frees all surface nodes.
 void overview_destroy_card(Client *c);
 
-// 给卡片所有 buffer 节点统一应用圆角
+// Applies rounded corners to all buffer nodes of the card.
 void overview_card_set_corner_radii(Client *c, struct fx_corner_radii corners);
-// 进入 overview：保存并禁用真实 scene_surface 树，建独立卡片树显示内容
+// Entering overview: saves and disables the real scene_surface tree and builds
+// an independent card tree to display content.
 void overview_backup_surface(Client *c);
 
-// 普通视图切换到overview时保存窗口的旧状态
+// Saves the window old state when switching from the normal view to overview.
 void overview_backup(Client *c);
 
-// overview切回到普通视图还原窗口的状态
+// Restores window state when switching back from overview to the normal view.
 void overview_restore(Client *c, const Arg *arg);
 
 #endif

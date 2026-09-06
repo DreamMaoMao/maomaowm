@@ -1,24 +1,21 @@
-#include "mango/mango.h"
 #include "mango/dispatch/bind.h"
 #include "mango/manage/client.h"
 #include "mango/common/log.h"
-#include "mango/common/globals.h"
+#include "mango/common/server.h"
 #include "mango/ext-protocol/ext-workspace.h"
 #include "mango/common/util.h"
 #include "mango/manage/monitor.h"
 
-struct wlr_ext_workspace_manager_v1 *ext_manager;
-struct wl_list workspaces;
-struct wl_listener ext_manager_commit_listener = {.notify = handle_ext_commit};
+static struct wl_list workspaces;
 
 void goto_workspace(struct workspace *target) {
 	uint32_t tag;
 	tag = 1 << (target->tag - 1);
 	if (target->tag == 0) {
-		toggleoverview(&(Arg){0});
+		toggle_overview(&(Arg){0});
 		return;
 	} else {
-		view(&(Arg){.ui = tag}, true);
+		client_switch_view(&(Arg){.ui = tag}, true);
 	}
 }
 
@@ -26,10 +23,10 @@ void toggle_workspace(struct workspace *target) {
 	uint32_t tag;
 	tag = 1 << (target->tag - 1);
 	if (target->tag == 0) {
-		toggleview(&(Arg){.i = -1});
+		toggle_view(&(Arg){.i = -1});
 		return;
 	} else {
-		toggleview(&(Arg){.ui = tag});
+		toggle_view(&(Arg){.ui = tag});
 	}
 }
 
@@ -74,7 +71,7 @@ void add_workspace_by_tag(int32_t tag, Monitor *m) {
 	workspace->tag = tag;
 	workspace->m = m;
 	workspace->ext_workspace = wlr_ext_workspace_handle_v1_create(
-		ext_manager, name, EXT_WORKSPACE_ENABLE_CAPS);
+		server.ext_workspace_manager, name, EXT_WORKSPACE_ENABLE_CAPS);
 
 	workspace->ext_workspace->data = workspace;
 
@@ -104,11 +101,13 @@ void refresh_monitors_workspaces_status(Monitor *m) {
 	mango_ext_workspace_printstatus(m);
 }
 void workspaces_init() {
-	ext_manager = wlr_ext_workspace_manager_v1_create(dpy, 1);
+	server.ext_workspace_manager =
+		wlr_ext_workspace_manager_v1_create(server.display, 1);
 
 	wl_list_init(&workspaces);
 
-	wl_signal_add(&ext_manager->events.commit, &ext_manager_commit_listener);
+	wl_signal_add(&server.ext_workspace_manager->events.commit,
+				  &server.ext_workspace_commit_listener);
 }
 // New from here
 void handle_ext_commit(struct wl_listener *listener, void *data) {
@@ -226,12 +225,12 @@ void sync_workspaces_to_tag_num(Monitor *m) {
 		if (!has_overview)
 			add_workspace_by_tag(0, m);
 	} else {
-		// 普通状态:销毁超出 tag_num 的旧 tag workspace
+		// Normal state: destroy old tag workspaces beyond tag_num.
 		wl_list_for_each_safe(w, tmp, &workspaces, link) {
 			if (w->m == m && w->tag > config.tag_num)
 				destroy_workspace(w);
 		}
-		// 补充缺失的tag
+		// Adds missing tags.
 		for (int32_t i = 1; i <= config.tag_num; i++) {
 			bool exists = false;
 			wl_list_for_each(w, &workspaces, link) {

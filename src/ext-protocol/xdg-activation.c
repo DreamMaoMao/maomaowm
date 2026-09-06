@@ -1,9 +1,14 @@
 #include "mango/ext-protocol/xdg-activation.h"
-#include "mango/common/globals.h"
+#include "mango/common/server.h"
 #include "mango/manage/client.h"
 #include <stdlib.h>
 #include "mango/common/util.h"
 #include "mango/ipc/ipc.h"
+
+static struct wlr_xdg_activation_v1 *activation;
+static struct wl_listener activation_request_activate_listener;
+static struct wl_listener activation_new_token_listener;
+static struct wl_listener activation_destroy_listener;
 
 void handle_xdg_activation_token_destroy(struct wl_listener *listener,
 										 void *data) {
@@ -52,20 +57,20 @@ void handle_xdg_activation_request_activate(struct wl_listener *listener,
 
 	/* activation_bypass skips auth and goes straight to the normal path */
 	if (c->activation_bypass) {
-		urgent(listener, data);
+		handle_client_activation_request(listener, data);
 		return;
 	}
 
 	if (xdg_activation_token_can_activate(event->token)) {
-		urgent(listener, data);
+		handle_client_activation_request(listener, data);
 	} else {
 		/* valid token, just not usable for activation; flag urgent,
 		 * but leave the focused window alone */
-		if (c == focustop(selmon))
+		if (c == client_focus_top(server.selected_monitor))
 			return;
 		c->isurgent = 1;
 		if (client_surface(c)->mapped)
-			setborder_color(c);
+			client_update_border_color(c);
 		printstatus(IPC_WATCH_ARRANGGE);
 	}
 }
@@ -77,7 +82,7 @@ void handle_xdg_activation_destroy(struct wl_listener *listener, void *data) {
 }
 
 void xdg_activation_init() {
-	activation = wlr_xdg_activation_v1_create(dpy);
+	activation = wlr_xdg_activation_v1_create(server.display);
 	if (!activation)
 		return;
 
@@ -118,7 +123,7 @@ const char *xdg_activation_v1_export_token(void) {
 	return wlr_xdg_activation_token_v1_get_name(wlr_token);
 }
 
-struct wlr_xdg_activation_v1 *activation;
-struct wl_listener activation_request_activate_listener;
-struct wl_listener activation_new_token_listener;
-struct wl_listener activation_destroy_listener;
+static struct wlr_xdg_activation_v1 *activation;
+static struct wl_listener activation_request_activate_listener;
+static struct wl_listener activation_new_token_listener;
+static struct wl_listener activation_destroy_listener;

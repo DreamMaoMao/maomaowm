@@ -1,7 +1,6 @@
 #include "mango/animation/client.h"
 #include <stdint.h>
-#include "mango/mango.h"
-#include "mango/common/globals.h"
+#include "mango/common/server.h"
 #include "mango/layout/layout.h"
 #include "mango/animation/common.h"
 #include "mango/overview/overview.h"
@@ -12,8 +11,9 @@
 #include "mango/manage/monitor.h"
 
 bool client_is_ignore_output_clip(Client *c) {
-	return c == grabc || (!ISSCROLLTILED(c) && !c->animation.tagining &&
-						  !c->animation.tagouting);
+	return c == server.grab_client ||
+		   (!ISSCROLLTILED(c) && !c->animation.tagining &&
+			!c->animation.tagouting);
 }
 
 struct ivec2 compute_edge_offsets(Client *c) {
@@ -267,7 +267,7 @@ void buffer_set_effect(Client *c, BufferData data) {
 		c->animation.tagining)
 		data.should_scale = false;
 
-	if (c == grabc)
+	if (c == server.grab_client)
 		data.should_scale = false;
 
 	if (c->isfullscreen || (config.no_radius_when_single && c->mon &&
@@ -277,7 +277,7 @@ void buffer_set_effect(Client *c, BufferData data) {
 	if (config.blur && !c->noblur)
 		wlr_scene_blur_set_corner_radii(c->blur, data.corner_location);
 
-	/* overview 卡片直接应用圆角 */
+	/* Overview cards get rounded corners directly. */
 	if (c->ov_card_tree) {
 		overview_card_set_corner_radii(c, data.corner_location);
 		return;
@@ -459,7 +459,7 @@ void client_draw_shield(Client *c, struct ivec2 clip_box) {
 	int32_t shield_width = 0;
 	int32_t shield_height = 0;
 
-	if (active_capture_count <= 0 || !c->shield_when_capture) {
+	if (server.active_capture_count <= 0 || !c->shield_when_capture) {
 		if (c->shield->node.enabled) {
 			wlr_scene_node_lower_to_bottom(&c->shield->node);
 			wlr_scene_node_set_position(&c->shield->node, 0, 0);
@@ -742,8 +742,8 @@ void client_set_drop_area(Client *c) {
 	int32_t client_width = c->geom.width - 2 * bw;
 	int32_t client_height = c->geom.height - 2 * bw;
 
-	double rel_x = cursor->x - c->geom.x - bw;
-	double rel_y = cursor->y - c->geom.y - bw;
+	double rel_x = server.cursor->x - c->geom.x - bw;
+	double rel_y = server.cursor->y - c->geom.y - bw;
 
 	struct wlr_box drop_box;
 	const Layout *cur_layout = c->mon->pertag->ltidxs[get_client_tag_idx(c)];
@@ -906,8 +906,11 @@ void client_apply_clip(Client *c, float factor) {
 	if (c->iskilling || !client_surface(c)->mapped)
 		return;
 
-	/* overview 卡片模式：内容由独立卡片树显示，这里更新卡片位置/缩放，
-	 * 同时重绘装饰节点使其适配卡片几何 */
+	/*
+	 * Overview card mode: content is shown by the independent card tree; update
+	 * the card position/scale here and redraw the decoration nodes to match the
+	 * card geometry.
+	 */
 	if (c->ov_card_tree) {
 		struct ivec2 offsets = compute_edge_offsets(c);
 
@@ -916,7 +919,7 @@ void client_apply_clip(Client *c, float factor) {
 		client_get_clip(c, &clip_box);
 		surface_clip_offset = clip_to_hide(c, &clip_box, offsets);
 
-		/* 装饰节点按卡片几何绘制 */
+		/* Decorations are drawn against the card geometry. */
 		client_draw_border(c, offsets);
 		client_draw_shadow(c, offsets);
 		client_draw_groupbar(c, offsets);
@@ -964,8 +967,11 @@ void client_apply_clip(Client *c, float factor) {
 		if (!should_render_client_surface)
 			return;
 
-		/* X11 用 source_box + dest_size 裁剪（buffer 物理尺寸 × scale，
-		 * clip 逻辑尺寸），走 wlr_scene clip 会把内容按物理尺寸放大 */
+		/*
+		 * X11 is clipped with source_box + dest_size (buffer physical size *
+		 * scale, clip logical size); wlr_scene clip would scale content by the
+		 * physical size.
+		 */
 		if (client_is_x11(c))
 			client_update_xwayland_clip(c, &clip_box);
 		else if (!c->overview_scene_surface)
@@ -1002,7 +1008,9 @@ void client_apply_clip(Client *c, float factor) {
 	client_draw_groupbar(c, offsets);
 	client_draw_shield(c, surface_clip_offset);
 	client_draw_blur(c, surface_clip_offset);
-	/* 动画时同步 X11 根 surface 的 dest_size / 裁剪（source_box + dest_size）
+	/*
+	 * During animation, sync the X11 root surface dest_size / clipping
+	 * (source_box + dest_size).
 	 */
 	if (client_is_x11(c))
 		client_update_xwayland_clip(c, &clip_box);
@@ -1020,8 +1028,11 @@ void client_apply_clip(Client *c, float factor) {
 	if (!should_render_client_surface)
 		return;
 
-	/* X11 的裁剪已由上面的 client_update_xwayland_clip 用 source_box 完成；
-	 * wlr_scene clip 会把 buffer 按物理尺寸放大，不能用于 X11 */
+	/*
+	 * X11 clipping is already done above by client_update_xwayland_clip with
+	 * source_box; wlr_scene clip would scale the buffer by its physical size
+	 * and cannot be used for X11.
+	 */
 	if (!c->overview_scene_surface && !client_is_x11(c))
 		wlr_scene_subsurface_tree_set_clip(&c->scene_surface->node, &clip_box);
 
@@ -1161,12 +1172,14 @@ void client_animation_next_tick(Client *c) {
 
 		Client *pointer_c = NULL;
 		double sx, sy;
-		xytonode(cursor->x, cursor->y, NULL, &pointer_c, NULL, NULL, &sx, &sy);
+		node_at_point(server.cursor->x, server.cursor->y, NULL, &pointer_c,
+					  NULL, NULL, &sx, &sy);
 		struct wlr_surface *surface =
 			pointer_c && pointer_c == c ? client_surface(pointer_c) : NULL;
 
-		if (surface && pointer_c == selmon->sel && !selmon->isoverview)
-			wlr_seat_pointer_notify_enter(seat, surface, sx, sy);
+		if (surface && pointer_c == server.selected_monitor->sel &&
+			!server.selected_monitor->isoverview)
+			wlr_seat_pointer_notify_enter(server.seat, surface, sx, sy);
 
 		c->need_output_flush = false;
 	}
@@ -1178,7 +1191,7 @@ void init_fadeout_client(Client *c) {
 	if (!c->scene)
 		return;
 
-	if (c->shield_when_capture && active_capture_count > 0)
+	if (c->shield_when_capture && server.active_capture_count > 0)
 		return;
 
 	if ((c->animation_type_close &&
@@ -1192,19 +1205,23 @@ void init_fadeout_client(Client *c) {
 	wlr_scene_node_set_enabled(&c->scene->node, true);
 	client_set_border_color(c, config.bordercolor);
 	if (c->ov_card_tree) {
-		/* overview 中关闭：fadeout 快照基于已缩放的卡片树。
-		 * 快照按节点坐标累加，卡片树坐标只是相对 (bw,bw)，直接快照会落在
-		 * 层原点附近；先临时把卡片树摆到卡片绝对屏幕坐标再快照 */
+		/*
+		 * Closing in overview: the fadeout snapshot is based on the
+		 * already-scaled card tree. Snapshotting accumulates node coordinates,
+		 * but card tree coordinates are relative to (bw,bw), so a direct
+		 * snapshot would land near the layer origin; temporarily move the card
+		 * tree to the card's absolute screen coordinates before snapshotting.
+		 */
 		int32_t abs_x = c->animation.current.x + (int32_t)c->bw;
 		int32_t abs_y = c->animation.current.y + (int32_t)c->bw;
 		wlr_scene_node_set_position(&c->ov_card_tree->node, abs_x, abs_y);
-		fadeout_client->scene =
-			wlr_scene_tree_snapshot(&c->ov_card_tree->node, layers[LyrFadeOut]);
+		fadeout_client->scene = wlr_scene_tree_snapshot(
+			&c->ov_card_tree->node, server.layers[LyrFadeOut]);
 		overview_destroy_card(c);
 		c->overview_scene_surface = NULL;
 	} else {
 		fadeout_client->scene =
-			wlr_scene_tree_snapshot(&c->scene->node, layers[LyrFadeOut]);
+			wlr_scene_tree_snapshot(&c->scene->node, server.layers[LyrFadeOut]);
 	}
 	wlr_scene_node_set_enabled(&c->scene->node, false);
 
@@ -1260,7 +1277,7 @@ void init_fadeout_client(Client *c) {
 
 	fadeout_client->animation.time_started = get_now_in_ms();
 	wlr_scene_node_set_enabled(&fadeout_client->scene->node, true);
-	wl_list_insert(&fadeout_clients, &fadeout_client->fadeout_link);
+	wl_list_insert(&server.fadeout_clients, &fadeout_client->fadeout_link);
 
 	request_fresh_all_monitors();
 }
@@ -1291,8 +1308,9 @@ void client_commit(Client *c) {
 		}
 	}
 
-	// 禁用动画后提前设置surface位置和大小，
-	// 避免motionnotify 的指针聚焦在上一帧的surface上
+	// When animation is disabled, set the surface position and size early
+	// so pointer_process_motion focus does not hit the surface from the
+	// previous frame.
 	if (!config.animations)
 		client_apply_finish_geometry(c);
 
@@ -1308,10 +1326,12 @@ void client_set_pending_state(Client *c) {
 		c->animation.should_animate = true;
 	else if (config.animations && c->animation.action == OVERVIEW &&
 			 c->animation.overview_enter_anim_set)
-		/* overview 进入动画：设置放大后强制启动，预排阶段不强制，避免抖动 */
+		/* Overview enter animation: force start after setting the zoom; not
+		 * forced during pre-arrangement to avoid jitter. */
 		c->animation.should_animate = true;
-	else if (c == grabc || (!c->is_pending_open_animation &&
-							wlr_box_equal(&c->current, &c->pending)))
+	else if (c == server.grab_client ||
+			 (!c->is_pending_open_animation &&
+			  wlr_box_equal(&c->current, &c->pending)))
 		c->animation.should_animate = false;
 	else
 		c->animation.should_animate = true;
@@ -1323,7 +1343,7 @@ void client_set_pending_state(Client *c) {
 		c->animation.action == OPEN)
 		c->animation.duration = 0;
 
-	if (start_drag_window) {
+	if (server.start_drag_window) {
 		c->animation.should_animate = false;
 		c->animation.duration = 0;
 	}
@@ -1347,17 +1367,18 @@ void resize_apply(Client *c, struct wlr_box geo, ResizeOpts opts) {
 	c->dirty = true;
 
 	struct wlr_box *bbox = (opts.interact || c->isfloating || c->isfullscreen)
-							   ? &sgeom
+							   ? &server.scene_geometry
 							   : &c->mon->w;
 	struct wlr_box clip;
 
-	if (is_scroller_layout(c->mon) && (!c->isfloating || c == grabc)) {
+	if (is_scroller_layout(c->mon) &&
+		(!c->isfloating || c == server.grab_client)) {
 		c->geom = geo;
 		c->geom.width = MANGO_MAX(1 + 2 * (int32_t)c->bw, c->geom.width);
 		c->geom.height = MANGO_MAX(1 + 2 * (int32_t)c->bw, c->geom.height);
 	} else {
 		c->geom = geo;
-		applybounds(c, bbox);
+		client_apply_bounds(c, bbox);
 	}
 
 	if (!c->isnosizehint && !c->ismaximizescreen && !c->isfullscreen &&
@@ -1412,7 +1433,7 @@ void resize_apply(Client *c, struct wlr_box geo, ResizeOpts opts) {
 	if (c->configure_serial != 0)
 		c->mon->resizing_count_pending++;
 
-	if (c == grabc) {
+	if (c == server.grab_client) {
 		struct ivec2 offsets = compute_edge_offsets(c);
 
 		c->animation.running = false;
@@ -1454,12 +1475,13 @@ void resize_apply(Client *c, struct wlr_box geo, ResizeOpts opts) {
 		c->animainit_geom = c->geom;
 
 	if (!opts.skip_ov_enter_anim) {
-		/* 清除进入动画标志（含焦点窗口），避免切换焦点时重复放大 */
+		/* Clears the enter-animation flag (including the focused window) to
+		 * avoid re-zooming when focus changes. */
 		if (config.animations && c->mon->isoverview && c->animation.overining &&
 			!c->animation.overview_enter_anim_set)
 			c->animation.overining = false;
 
-		/* 设置进入放大动画：除 sel 外的窗口 */
+		/* Sets the enter zoom animation for all windows except sel. */
 		if (config.animations && c->mon->isoverview && c != c->mon->sel &&
 			c->animation.action == OVERVIEW &&
 			!c->animation.overview_enter_anim_set) {
@@ -1469,7 +1491,7 @@ void resize_apply(Client *c, struct wlr_box geo, ResizeOpts opts) {
 	}
 
 	client_set_pending_state(c);
-	setborder_color(c);
+	client_update_border_color(c);
 }
 
 bool client_draw_fadeout_frame(Client *c) {
@@ -1484,7 +1506,7 @@ void client_set_unfocused_opacity_animation(Client *c) {
 	float *border_color = get_border_color(c);
 	wlr_scene_node_raise_to_top(&c->border->node);
 	if (!config.animations) {
-		setborder_color(c);
+		client_update_border_color(c);
 		return;
 	}
 
@@ -1508,7 +1530,7 @@ void client_set_focused_opacity_animation(Client *c) {
 	wlr_scene_node_lower_to_bottom(&c->border->node);
 
 	if (!config.animations) {
-		setborder_color(c);
+		client_update_border_color(c);
 		return;
 	}
 
@@ -1552,8 +1574,9 @@ bool client_apply_focus_opacity(Client *c) {
 		float percent = config.animation_fade_in && !c->nofadein
 							? opacity_eased_progress
 							: 1.0;
-		float opacity =
-			c == selmon->sel ? c->focused_opacity : c->unfocused_opacity;
+		float opacity = c == server.selected_monitor->sel
+							? c->focused_opacity
+							: c->unfocused_opacity;
 		float target_opacity = percent * (1.0 - config.fadein_begin_opacity) +
 							   config.fadein_begin_opacity;
 		if (target_opacity > opacity)
@@ -1605,7 +1628,7 @@ bool client_apply_focus_opacity(Client *c) {
 			c->opacity_animation.running = false;
 		else
 			return true;
-	} else if (c == selmon->sel) {
+	} else if (c == server.selected_monitor->sel) {
 		c->opacity_animation.running = false;
 		c->opacity_animation.current_opacity = c->focused_opacity;
 		memcpy(c->opacity_animation.current_border_color, border_color,

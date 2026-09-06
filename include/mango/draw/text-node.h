@@ -8,7 +8,7 @@
 #include <stdint.h>
 #include <wlr/types/wlr_scene.h>
 
-// 原有结构体，假设已存在
+// Original struct, assumed to already exist.
 typedef struct {
 	float fg_color[4];
 	float bg_color[4];
@@ -43,7 +43,7 @@ typedef struct {
 	int32_t padding_y;
 	char *font_desc;
 
-	// 缓存
+	// Cache
 	char *cached_text;
 	char *cached_font_desc;
 	float cached_scale;
@@ -60,7 +60,7 @@ typedef struct {
 
 	bool focused;
 
-	// 测量
+	// Measurement
 	cairo_surface_t *measure_surface;
 	cairo_t *measure_cr;
 	PangoContext *measure_context;
@@ -77,9 +77,9 @@ typedef struct {
 	struct mango_text_buffer *buffer;
 	cairo_surface_t *surface;
 	int surface_pixel_w, surface_pixel_h;
-	void *node_data; // 存储窗口指针
+	void *node_data; // Stores the window pointer
 
-	// 初始配置
+	// Initial config
 	float fg_color[4];
 	float bg_color[4];
 	float focus_fg_color[4];
@@ -91,11 +91,11 @@ typedef struct {
 	int32_t padding_y;
 	char *font_desc;
 
-	// 尺寸
+	// Dimensions
 	int32_t target_width;
 	int32_t target_height;
 
-	// 缓存
+	// Cache
 	char *cached_text;
 	char *cached_font_desc;
 	float cached_scale;
@@ -114,11 +114,11 @@ typedef struct {
 
 	bool focused;
 
-	// 上次绘制参数（用于尺寸变化重绘）
+	// Last draw parameters (used to redraw on size changes)
 	char *last_text;
 	float last_scale;
 
-	// 测量
+	// Measurement
 	cairo_surface_t *measure_surface;
 	cairo_t *measure_cr;
 	PangoContext *measure_context;
