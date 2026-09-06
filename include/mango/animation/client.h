@@ -1,14 +1,14 @@
 #ifndef __ANIMATION_CLIENT_H__
 #define __ANIMATION_CLIENT_H__ 1
 
-#include "mango/mango.h"
+#include "mango/animation/common.h"
+#include "mango/common/types.h"
 
 bool client_is_ignore_output_clip(Client *c);
 struct ivec2 compute_edge_offsets(Client *c);
 
 void client_actual_size(Client *client, int32_t *width, int32_t *height);
 void set_rect_size(struct wlr_scene_rect *rect, int32_t width, int32_t height);
-
 
 bool is_horizontal_stack_layout(Monitor *monitor);
 bool is_horizontal_right_stack_layout(Monitor *monitor);

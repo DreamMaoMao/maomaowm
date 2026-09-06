@@ -1,7 +1,7 @@
 #ifndef __ANIMATION_TAG_H__
 #define __ANIMATION_TAG_H__ 1
 
-#include "mango/mango.h"
+#include "mango/common/types.h"
 
 void set_tagin_animation(Monitor *m, Client *c);
 void set_arrange_visible(Monitor *m, Client *c, bool want_animation);

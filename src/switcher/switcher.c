@@ -3,6 +3,16 @@
 #include "mango/common/server.h"
 #include "mango/manage/monitor.h"
 #include "mango/common/util.h"
+#include <wlr/types/wlr_scene.h>
+#include <wlr/types/wlr_alpha_modifier_v1.h>
+#include <wlr/types/wlr_color_management_v1.h>
+#include <wlr/types/wlr_color_representation_v1.h>
+#include <wlr/types/wlr_compositor.h>
+#include <wlr/types/wlr_linux_dmabuf_v1.h>
+#include <wlr/types/wlr_linux_drm_syncobj_v1.h>
+#include <wlr/types/wlr_output.h>
+#include <wlr/types/wlr_presentation_time.h>
+#include <wlr/types/wlr_xdg_shell.h>
 
 static struct switcher_state switcher_state;
 

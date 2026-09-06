@@ -3,6 +3,11 @@
 #include "mango/common/server.h"
 #include "mango/common/util.h"
 #include "mango/manage/client.h"
+#include "mango/manage/layer.h"
+#include "mango/manage/monitor.h"
+#include <wlr/types/wlr_compositor.h>
+#include <wlr/types/wlr_layer_shell_v1.h>
+#include <wlr/types/wlr_output.h>
 
 void layer_actual_size(LayerSurface *l, int32_t *width, int32_t *height) {
 	if (l->animation.running) {

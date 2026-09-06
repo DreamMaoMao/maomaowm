@@ -12,6 +12,7 @@
 #include "mango/layout/vertical.h"
 #include <assert.h>
 #include "mango/ipc/ipc.h"
+#include <wlr/types/wlr_cursor.h>
 
 void set_size_per(Monitor *m, Client *c) {
 	Client *fc = NULL;

@@ -1,14 +1,12 @@
 #ifndef __EXT_PROTOCOL_WORKSPACE_H__
 #define __EXT_PROTOCOL_WORKSPACE_H__ 1
 
-#include "mango/mango.h"
+#include "mango/common/types.h"
 #include <wlr/types/wlr_ext_workspace_v1.h>
 
 #define EXT_WORKSPACE_ENABLE_CAPS                                              \
 	EXT_WORKSPACE_HANDLE_V1_WORKSPACE_CAPABILITIES_ACTIVATE |                  \
 		EXT_WORKSPACE_HANDLE_V1_WORKSPACE_CAPABILITIES_DEACTIVATE
-
-typedef struct Monitor Monitor;
 
 struct workspace {
 	struct wl_list link;

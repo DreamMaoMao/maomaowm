@@ -1,7 +1,7 @@
 #ifndef __EXT_PROTOCOL_TEXT_INPUT_H__
 #define __EXT_PROTOCOL_TEXT_INPUT_H__ 1
 
-#include "mango/mango.h"
+#include "mango/common/types.h"
 #include <wlr/types/wlr_input_method_v2.h>
 #include <wlr/types/wlr_text_input_v3.h>
 

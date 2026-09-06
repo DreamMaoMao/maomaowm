@@ -2,8 +2,16 @@
 #include "mango/common/server.h"
 #include "mango/manage/monitor.h"
 #include "mango/common/util.h"
+#include "mango/input/device.h"
+#include "mango/input/keyboard.h"
+#include "mango/manage/client.h"
 
 #include <assert.h>
+#include <wlr/types/wlr_compositor.h>
+#include <wlr/types/wlr_layer_shell_v1.h>
+#include <wlr/types/wlr_output_layout.h>
+#include <wlr/types/wlr_virtual_keyboard_v1.h>
+#include <wlr/types/wlr_xdg_shell.h>
 
 Monitor *output_from_wlr_output(struct wlr_output *wlr_output) {
 	Monitor *m = NULL;

@@ -1,7 +1,7 @@
 #ifndef __EXT_PROTOCOL_TEARING_H__
 #define __EXT_PROTOCOL_TEARING_H__ 1
 
-#include "mango/mango.h"
+#include "mango/common/types.h"
 #include <stdbool.h>
 #include <wlr/types/wlr_tearing_control_v1.h>
 

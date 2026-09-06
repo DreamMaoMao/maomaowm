@@ -1,7 +1,7 @@
 #ifndef __MANAGE_MISC_H__
 #define __MANAGE_MISC_H__ 1
 
-#include "mango/mango.h"
+#include "mango/common/types.h"
 #include <sys/types.h>
 
 pid_t get_parent_process(pid_t p);

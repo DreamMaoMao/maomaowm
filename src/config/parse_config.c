@@ -20,6 +20,18 @@
 #include "mango/input/keyboard.h"
 #include "mango/manage/monitor.h"
 #include "mango/ipc/ipc.h"
+#include "mango/input/device.h"
+#include "mango/switcher/switcher.h"
+#include <linux/input-event-codes.h>
+#include <wlr/types/wlr_scene.h>
+#include <unistd.h>
+#include <wlr/backend/libinput.h>
+#include <wlr/interfaces/wlr_keyboard.h>
+#include <wlr/types/wlr_cursor.h>
+#include <wlr/types/wlr_input_device.h>
+#include <wlr/types/wlr_keyboard_group.h>
+#include <wlr/types/wlr_output_layout.h>
+#include <wlr/types/wlr_xcursor_manager.h>
 
 #ifndef SYSCONFDIR
 #define SYSCONFDIR "/etc"

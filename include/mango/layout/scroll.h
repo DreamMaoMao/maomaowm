@@ -1,7 +1,27 @@
 #ifndef __LAYOUT_SCROLL_H__
 #define __LAYOUT_SCROLL_H__ 1
 
-#include "mango/mango.h"
+#include "mango/common/types.h"
+#include <stdbool.h>
+#include <stdint.h>
+#include <wlr/util/box.h>
+
+struct ScrollerStackNode {
+	Client *client;
+	float scroller_proportion;
+	float stack_proportion;
+	float scroller_proportion_single;
+
+	struct ScrollerStackNode *next_in_stack;
+	struct ScrollerStackNode *prev_in_stack;
+	struct ScrollerStackNode *all_next;
+};
+
+struct TagScrollerState {
+	struct ScrollerStackNode
+		*all_first; /* Singly linked list head for all nodes. */
+	int count;
+};
 
 /* Gets or creates the scroller state for a given tag of the specified monitor.
  */

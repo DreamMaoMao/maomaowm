@@ -2,6 +2,7 @@
 #include "mango/common/server.h"
 #include "mango/manage/client.h"
 #include "mango/manage/monitor.h"
+#include "mango/common/util.h"
 
 void tile(Monitor *m) {
 	int32_t i, n = 0, h, r, ie = server.enable_gaps, mw, my, ty;

@@ -4,6 +4,7 @@
 #include "mango/layout/layout.h"
 #include "mango/manage/monitor.h"
 #include "mango/manage/client.h"
+#include "mango/common/util.h"
 
 void set_tagin_animation(Monitor *m, Client *c) {
 	if (c->animation.running) {

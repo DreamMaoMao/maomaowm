@@ -4,7 +4,23 @@
 /* See LICENSE.dwm file for copyright and license details. */
 #include <stdint.h>
 #include <time.h>
+#include <wayland-server-core.h>
 #include <wayland-util.h>
+
+/* Generic helpers shared by every module. */
+#define MANGO_MAX(A, B) ((A) > (B) ? (A) : (B))
+#define MANGO_MIN(A, B) ((A) < (B) ? (A) : (B))
+#define GEZERO(A) ((A) >= 0 ? (A) : 0)
+
+#define LENGTH(X) (sizeof X / sizeof X[0])
+#define END(A) ((A) + LENGTH(A))
+#define LISTEN(E, L, H) wl_signal_add((E), ((L)->notify = (H), (L)))
+#define LISTEN_STATIC(E, H)                                                    \
+	do {                                                                       \
+		struct wl_listener *_l = ecalloc(1, sizeof(*_l));                      \
+		_l->notify = (H);                                                      \
+		wl_signal_add((E), _l);                                                \
+	} while (0)
 
 void die(const char *fmt, ...);
 void *ecalloc(size_t nmemb, size_t size);

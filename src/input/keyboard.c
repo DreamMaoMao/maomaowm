@@ -10,6 +10,19 @@
 #include "ctype.h"
 #include "mango/ext-protocol/text-input.h"
 #include "mango/common/util.h"
+#include "mango/manage/monitor.h"
+#include <wlr/backend/libinput.h>
+#include <wlr/interfaces/wlr_keyboard.h>
+#include <wlr/types/wlr_idle_notify_v1.h>
+#include <wlr/types/wlr_input_device.h>
+#include <wlr/types/wlr_keyboard_group.h>
+#include <wlr/types/wlr_keyboard_shortcuts_inhibit_v1.h>
+#include <wlr/types/wlr_compositor.h>
+#include <wlr/types/wlr_virtual_keyboard_v1.h>
+#include <wlr/types/wlr_xdg_shell.h>
+#ifdef XWAYLAND
+#include <wlr/xwayland.h>
+#endif
 
 void handle_keyboard_key_watch(struct wl_listener *listener, void *data) {
 	InputDevice *id = wl_container_of(listener, id, key_watch);

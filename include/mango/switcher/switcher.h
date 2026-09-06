@@ -1,7 +1,9 @@
 #ifndef __SWITCHER_SWITCHER_H__
 #define __SWITCHER_SWITCHER_H__ 1
 
-#include "mango/mango.h"
+#include "mango/common/types.h"
+#include "mango/dispatch/bind.h"
+#include <wayland-server-core.h>
 
 #define SW_PAD 6
 #define SW_GAP 14
@@ -12,6 +14,9 @@
 #define SW_ASPECT_MAX (12.0f / 5.0f)
 
 extern const float switcher_panel_color[4];
+
+/* Switcher candidate scope. */
+enum { SW_CURRENT_TAG, SW_ALL_TAG, SW_ALL_MON };
 
 struct switcher_tile {
 	Client *c;

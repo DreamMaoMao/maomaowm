@@ -1,7 +1,27 @@
 #ifndef __DWINDLE_H__
 #define __DWINDLE_H__
 
-#include "mango/mango.h"
+#include "mango/common/types.h"
+#include <stdbool.h>
+#include <stdint.h>
+
+typedef struct DwindleNode DwindleNode;
+struct DwindleNode {
+	bool is_split;
+	bool split_h;
+	bool split_locked;
+	bool custom_leaf_split_h;
+	float ratio;
+	float drag_init_ratio;
+	int32_t container_x;
+	int32_t container_y;
+	int32_t container_w;
+	int32_t container_h;
+	DwindleNode *parent;
+	DwindleNode *first;
+	DwindleNode *second;
+	Client *client;
+};
 
 DwindleNode *dwindle_new_leaf(Client *c);
 

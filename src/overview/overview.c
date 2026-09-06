@@ -5,6 +5,27 @@
 #include "mango/manage/monitor.h"
 #include "mango/animation/client.h"
 #include "mango/common/util.h"
+#include <wlr/types/wlr_scene.h>
+#include <wlr/types/wlr_compositor.h>
+#include <wlr/types/wlr_xdg_shell.h>
+#include <wlr/util/edges.h>
+
+/* Overview card surface node: each surface (including subsurfaces) maps to a
+ * scene_surface node in the card tree; sx/sy are its coordinates relative to
+ * the root surface. */
+struct ov_card_surface {
+	Client *c;
+	struct wlr_surface *surface;
+	struct wlr_scene_surface *scene_surface;
+	struct wlr_scene_buffer *buffer;
+	int sx, sy; /* Coordinates relative to the root surface */
+	bool is_root;
+	struct wl_list link;
+	struct wl_listener commit; /* Recomputes scaling after commit (commit resets
+								  dest/source). */
+	struct wl_listener
+		destroy; /* Removes the node when the surface is destroyed. */
+};
 
 // Returns 0 when the target window shares its tag with other windows.
 uint32_t want_restore_fullscreen(Client *target_client) {

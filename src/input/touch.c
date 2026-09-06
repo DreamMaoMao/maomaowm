@@ -9,6 +9,13 @@
 #include <wayland-client-core.h>
 #include "mango/ipc/ipc.h"
 #include "mango/common/util.h"
+#include <linux/input-event-codes.h>
+#include <wlr/backend/libinput.h>
+#include <wlr/types/wlr_cursor.h>
+#include <wlr/types/wlr_idle_notify_v1.h>
+#include <wlr/types/wlr_input_device.h>
+#include <wlr/types/wlr_seat.h>
+#include <wlr/types/wlr_compositor.h>
 
 void handle_cursor_touch_up(struct wl_listener *listener, void *data);
 void handle_cursor_touch_cancel(struct wl_listener *listener, void *data);

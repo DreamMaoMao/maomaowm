@@ -1,7 +1,222 @@
 #ifndef __MANAGE_CLIENT_H__
 #define __MANAGE_CLIENT_H__ 1
 
+#include "mango/animation/common.h"
+#include "mango/common/types.h"
 #include "mango/config/parse_config.h"
+#include <stdint.h>
+#include <sys/types.h>
+#include <wayland-server-core.h>
+#include <wlr/util/box.h>
+
+/* Client / surface kinds stored in Client.type, LayerSurface.type, Popup.type
+ * and SnapshotMetadata.type. */
+enum {
+	XDGShell,
+	LayerShell,
+	X11,
+	Snapshot,
+	XdgPopup,
+	XdgImPopup,
+	GroupBar
+}; /* client types */
+
+#ifdef XWAYLAND
+enum {
+	NetWMWindowTypeDialog,
+	NetWMWindowTypeSplash,
+	NetWMWindowTypeToolbar,
+	NetWMWindowTypeUtility,
+	NetLast
+}; /* EWMH atoms */
+#endif
+
+/* Movement / drop directions used by smartmove, drag-to-tile and tag
+ * animations. */
+enum { UP, DOWN, LEFT, RIGHT, UNDIR }; /* smartmovewin */
+
+#define ISTILED(A)                                                             \
+	(A && !(A)->isfloating && !(A)->isminimized && !(A)->iskilling &&          \
+	 !(A)->ismaximizescreen && !(A)->isfullscreen && !(A)->isunglobal)
+#define ISNORMAL(A)                                                            \
+	(A && !(A)->isminimized && !(A)->iskilling && !(A)->isunglobal)
+#define ISSCROLLTILED(A)                                                       \
+	(A && !(A)->isfloating && !(A)->isminimized && !(A)->iskilling &&          \
+	 !(A)->isunglobal)
+#define ISFAKETILED(A)                                                         \
+	(A && !(A)->isfloating && !(A)->isminimized && !(A)->iskilling &&          \
+	 !(A)->isunglobal)
+#define VISIBLEON(C, M)                                                        \
+	((C) && (M) && (C)->mon == (M) && !(C)->is_logic_hide &&                   \
+	 !(C)->isminimized &&                                                      \
+	 (((C)->tags & (M)->tagset[(M)->seltags] || (C)->isglobal ||               \
+	   (C)->isunglobal)))
+#define TAGMATCH(C, M)                                                         \
+	((C) && (M) && (C)->mon == (M) && !(C)->is_logic_hide &&                   \
+	 !(C)->isminimized && (((C)->tags & (M)->tagset[(M)->seltags])))
+#define ISFULLSCREEN(A)                                                        \
+	((A)->isfullscreen || (A)->ismaximizescreen ||                             \
+	 (A)->overview_ismaximizescreenbak || (A)->overview_isfullscreenbak)
+
+struct Client {
+	/* Must keep these three elements in this order */
+	uint32_t type; // must at first in struct
+	struct wlr_box geom, pending, float_geom, animainit_geom,
+		overview_backup_geom, current,
+		drag_begin_geom; /* layout-relative, includes border */
+	Monitor *mon;
+	struct wlr_scene_tree *scene;
+	struct wlr_scene_rect *border[4]; /* top, bottom, left, right */
+	struct wlr_scene_rect *shield;
+	struct wlr_scene_rect *droparea;
+	struct wlr_scene_rect *splitindicator[4];
+	struct wlr_scene_tree *scene_surface;
+	struct wlr_scene_tree *image_capture_tree;
+	struct wlr_scene *image_capture_scene;
+	struct wlr_ext_image_capture_source_v1 *image_capture_source;
+	struct wlr_scene_surface *image_capture_scene_surface;
+	struct wlr_scene_tree *overview_scene_surface;
+	MangoJumpLabel *jump_label_node;
+	MangoGroupBar *group_bar;
+	struct wl_list link;
+	struct wl_list flink;
+	struct wl_list fadeout_link;
+	union {
+		struct wlr_xdg_surface *xdg;
+		struct wlr_xwayland_surface *xwayland;
+	} surface;
+	struct wl_listener commit;
+	struct wl_listener map;
+	struct wl_listener maximize;
+	struct wl_listener minimize;
+	struct wl_listener unmap;
+	struct wl_listener destroy;
+	struct wl_listener set_title;
+	struct wl_listener fullscreen;
+#ifdef XWAYLAND
+	struct wl_listener activate;
+	struct wl_listener associate;
+	struct wl_listener dissociate;
+	struct wl_listener configure;
+	struct wl_listener set_hints;
+	struct wl_listener set_geometry;
+	struct wl_listener commmitx11;
+	struct wlr_scene_buffer *xwl_root_buffer;
+	float xwayland_scale;	 /* X11 coordinate scale relative to logical
+								coordinates. */
+	struct wlr_box xwl_clip; /* Most recent logical clip area of the XWayland
+								root surface. */
+	bool xwl_clip_active;	 /* Whether source_box clipping is active. */
+	/*
+	 * X11 configure deduplication: until the client acks, surface->current is
+	 * not updated, so repeated arrange calls resend identical configures and
+	 * force clients to re-render/re-upload. Record the most recently requested
+	 * physical size/position here and skip configure if it has not changed.
+	 */
+	int32_t xwl_req_x, xwl_req_y, xwl_req_w, xwl_req_h;
+	bool xwl_req_valid;
+#endif
+	uint32_t bw;
+	uint32_t tags, oldtags, mini_restore_tag;
+	bool dirty;
+	uint32_t configure_serial;
+	struct wlr_foreign_toplevel_handle_v1 *foreign_toplevel;
+	int32_t isfloating, isurgent, isfullscreen, isfakefullscreen,
+		need_float_size_reduce, isminimized, isoverlay, isnosizehint,
+		ignore_maximize, ignore_minimize, idleinhibit_when_focus,
+		vrr_only_fullscreen, force_render, activation_bypass;
+	int32_t ismaximizescreen;
+	int32_t overview_backup_bw;
+	int32_t fullscreen_backup_x, fullscreen_backup_y, fullscreen_backup_w,
+		fullscreen_backup_h;
+	int32_t overview_isfullscreenbak, overview_ismaximizescreenbak,
+		overview_isfloatingbak;
+
+	struct wlr_scene_tree *ov_card_tree; /* Overview card tree (root surface
+											plus all subsurface nodes). */
+	struct wl_list ov_card_surfaces;	 /* struct ov_card_surface list */
+
+	struct wlr_xdg_toplevel_decoration_v1 *decoration;
+	struct wl_listener foreign_activate_request;
+	struct wl_listener foreign_fullscreen_request;
+	struct wl_listener foreign_close_request;
+	struct wl_listener foreign_destroy;
+	struct wl_listener foreign_minimize_request;
+	struct wl_listener foreign_maximize_request;
+	struct wl_listener set_decoration_mode;
+	struct wl_listener destroy_decoration;
+
+	const char *animation_type_open;
+	const char *animation_type_close;
+	int32_t is_in_scratchpad;
+	int32_t iscustomsize;
+	int32_t iscustompos;
+	int32_t iscustom_scroller_proportion;
+	int32_t iscustom_scroller_proportion_single;
+	int32_t is_scratchpad_show;
+	int32_t isglobal;
+	int32_t isnoborder;
+	int32_t isnoanimation;
+	int32_t isopensilent;
+	int32_t istagsilent;
+	int32_t iskilling;
+	int32_t isnamedscratchpad;
+	int32_t shield_when_capture;
+	bool is_pending_open_animation;
+	bool is_restoring_from_ov;
+	float scroller_proportion;
+	float stack_proportion;
+	float old_stack_proportion;
+	bool need_output_flush;
+	struct mango_animation animation;
+	struct mango_opacity_animation opacity_animation;
+	int32_t isterm, noswallow;
+	int32_t allow_csd;
+	int32_t force_fakemaximize;
+	int32_t force_tiled_state;
+	pid_t pid;
+	Client *swallowdby, *swallowing;
+	bool is_clip_to_hide;
+	bool drag_to_tile;
+	bool scratchpad_switching_mon;
+	bool fake_no_border;
+	int32_t nofocus;
+	int32_t nofadein;
+	int32_t nofadeout;
+	int32_t no_force_center;
+	int32_t isunglobal;
+	float focused_opacity;
+	float unfocused_opacity;
+	char oldmonname[128];
+	struct wlr_ext_foreign_toplevel_handle_v1 *ext_foreign_toplevel;
+	double master_mfact_per, master_inner_per, stack_inner_per;
+	double old_master_mfact_per, old_master_inner_per, old_stack_inner_per;
+	double old_scroller_pproportion;
+	bool ismaster;
+	bool old_ismaster;
+	bool cursor_in_upper_half, cursor_in_left_half;
+	bool isleftstack;
+	int32_t tearing_hint;
+	int32_t force_tearing;
+	int32_t allow_shortcuts_inhibit;
+	float scroller_proportion_single;
+	bool isfocusing;
+	char jump_char;
+	bool enable_drop_area_draw;
+	int32_t drop_direction;
+	struct wlr_box drag_tile_float_backup_geom;
+	float grid_col_per;
+	float grid_row_per;
+	float old_grid_col_per;
+	float old_grid_row_per;
+	int32_t grid_col_idx;
+	int32_t grid_row_idx;
+	uint32_t id;
+	Client *group_prev;
+	Client *group_next;
+	bool isgroupfocusing;
+	bool is_logic_hide;
+};
 
 void client_update_geometry(Client *c);
 void client_init_xwayland(Client *c);

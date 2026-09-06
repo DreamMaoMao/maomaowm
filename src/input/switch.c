@@ -3,6 +3,9 @@
 #include "mango/config/parse_config.h"
 #include "mango/ipc/ipc.h"
 #include "mango/input/device.h"
+#include <wlr/backend/libinput.h>
+#include <wlr/types/wlr_input_device.h>
+#include <wlr/types/wlr_switch.h>
 
 void handle_switch_toggle(struct wl_listener *listener, void *data) {
 	// Gets the struct that contains the listener.

@@ -1,7 +1,9 @@
 #ifndef __LAYOUT_OVERVIEW_H__
 #define __LAYOUT_OVERVIEW_H__ 1
 
-#include "mango/mango.h"
+#include "mango/common/types.h"
+#include <stdbool.h>
+#include <stdint.h>
 
 typedef struct {
 	float x, y, w, h;

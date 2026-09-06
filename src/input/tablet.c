@@ -5,9 +5,16 @@
 #include "mango/common/util.h"
 #include "mango/ipc/ipc.h"
 #include "mango/manage/client.h"
+#include "mango/manage/layer.h"
 #include "mango/manage/monitor.h"
 #include "mango/manage/misc.h"
 #include "mango/input/pointer.h"
+#include <linux/input-event-codes.h>
+#include <wlr/backend/libinput.h>
+#include <wlr/types/wlr_cursor.h>
+#include <wlr/types/wlr_idle_notify_v1.h>
+#include <wlr/types/wlr_input_device.h>
+#include <wlr/types/wlr_compositor.h>
 
 void tablet_create(struct wlr_input_device *device) {
 	struct Tablet *tablet = calloc(1, sizeof(struct Tablet));

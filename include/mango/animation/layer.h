@@ -1,7 +1,8 @@
 #ifndef __ANIMATION_LAYER_H__
 #define __ANIMATION_LAYER_H__ 1
 
-#include "mango/mango.h"
+#include "mango/common/types.h"
+#include <wlr/util/box.h>
 
 void layer_actual_size(LayerSurface *l, int32_t *width, int32_t *height);
 void get_layer_area_bound(LayerSurface *l, struct wlr_box *bound);

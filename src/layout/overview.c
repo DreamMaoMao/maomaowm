@@ -2,6 +2,7 @@
 #include "mango/common/server.h"
 #include "mango/manage/client.h"
 #include "mango/config/parse_config.h"
+#include "mango/manage/monitor.h"
 #include <stdbool.h>
 
 int compare_layout_items(const void *a, const void *b) {

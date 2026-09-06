@@ -26,7 +26,7 @@ struct mango_text_buffer {
 	struct wlr_buffer base;
 	cairo_surface_t *surface;
 };
-typedef struct {
+typedef struct MangoJumpLabel {
 	struct wlr_scene_buffer *scene_buffer;
 	struct mango_text_buffer *buffer;
 	cairo_surface_t *surface;
@@ -71,7 +71,7 @@ typedef struct {
 	int32_t logical_height;
 } MangoJumpLabel;
 
-typedef struct {
+typedef struct MangoGroupBar {
 	uint32_t type; // must at first in struct
 	struct wlr_scene_buffer *scene_buffer;
 	struct mango_text_buffer *buffer;

@@ -1,6 +1,11 @@
 #include "mango/animation/common.h"
 #include "mango/common/server.h"
 #include "mango/config/parse_config.h"
+#include "mango/manage/client.h"
+#include "mango/manage/monitor.h"
+#include <wlr/types/wlr_compositor.h>
+#include <wlr/types/wlr_output.h>
+#include <wlr/types/wlr_subcompositor.h>
 
 struct dvec2 calculate_animation_curve_at(double t, int32_t type) {
 	struct dvec2 point;

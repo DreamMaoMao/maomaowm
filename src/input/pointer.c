@@ -15,6 +15,20 @@
 #include "mango/manage/misc.h"
 #include "mango/input/device.h"
 #include "mango/input/keyboard.h"
+#include <linux/input-event-codes.h>
+#include <wlr/types/wlr_scene.h>
+#include <wlr/backend/libinput.h>
+#include <wlr/types/wlr_cursor.h>
+#include <wlr/types/wlr_data_device.h>
+#include <wlr/types/wlr_idle_notify_v1.h>
+#include <wlr/types/wlr_input_device.h>
+#include <wlr/types/wlr_layer_shell_v1.h>
+#include <wlr/types/wlr_pointer_constraints_v1.h>
+#include <wlr/types/wlr_pointer_gestures_v1.h>
+#include <wlr/types/wlr_relative_pointer_v1.h>
+#include <wlr/types/wlr_seat.h>
+#include <wlr/types/wlr_virtual_pointer_v1.h>
+#include <wlr/util/region.h>
 
 static struct LastCursor last_cursor;
 

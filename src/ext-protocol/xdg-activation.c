@@ -4,6 +4,7 @@
 #include <stdlib.h>
 #include "mango/common/util.h"
 #include "mango/ipc/ipc.h"
+#include <wlr/types/wlr_compositor.h>
 
 static struct wlr_xdg_activation_v1 *activation;
 static struct wl_listener activation_request_activate_listener;

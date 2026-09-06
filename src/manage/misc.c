@@ -10,6 +10,35 @@
 #include "mango/manage/monitor.h"
 
 #include <ctype.h>
+#include <wlr/types/wlr_scene.h>
+#include <wlr/backend/session.h>
+#include <wlr/types/wlr_compositor.h>
+#include <wlr/types/wlr_data_device.h>
+#include <wlr/types/wlr_drm_lease_v1.h>
+#include <wlr/types/wlr_ext_image_capture_source_v1.h>
+#include <wlr/types/wlr_ext_image_copy_capture_v1.h>
+#include <wlr/types/wlr_ext_foreign_toplevel_list_v1.h>
+#include <wlr/types/wlr_idle_inhibit_v1.h>
+#include <wlr/types/wlr_idle_notify_v1.h>
+#include <wlr/types/wlr_layer_shell_v1.h>
+#include <wlr/types/wlr_primary_selection.h>
+#include <wlr/types/wlr_seat.h>
+#include <wlr/types/wlr_session_lock_v1.h>
+#include <wlr/types/wlr_xdg_decoration_v1.h>
+
+typedef struct SessionLock {
+	struct wlr_scene_tree *scene;
+
+	struct wlr_session_lock_v1 *lock;
+	struct wl_listener new_surface;
+	struct wl_listener unlock;
+	struct wl_listener destroy;
+} SessionLock;
+
+struct capture_session_tracker {
+	struct wl_listener session_destroy;
+	struct wlr_ext_image_copy_capture_session_v1 *session;
+};
 
 static const LayoutMapping layout_mappings[] = {
 	{"English (US)", "us"},

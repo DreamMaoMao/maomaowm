@@ -5,6 +5,15 @@
 #include "mango/input/touch.h"
 #include "mango/input/switch.h"
 #include "mango/common/server.h"
+#include <wlr/backend/libinput.h>
+#include <wlr/types/wlr_input_device.h>
+#include <wlr/types/wlr_keyboard.h>
+#include <wlr/types/wlr_keyboard_group.h>
+#include <wlr/types/wlr_pointer.h>
+#include <wlr/types/wlr_switch.h>
+#include <wlr/types/wlr_tablet_pad.h>
+#include <wlr/types/wlr_tablet_tool.h>
+#include <wlr/types/wlr_touch.h>
 
 void handle_input_device_destroy(struct wl_listener *listener, void *data) {
 	InputDevice *input_dev =

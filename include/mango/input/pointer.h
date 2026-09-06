@@ -1,8 +1,36 @@
 #ifndef __INPUT_POINTER_H__
 #define __INPUT_POINTER_H__
 
-#include "mango/mango.h"
+#include "mango/common/types.h"
+#include <libinput.h>
+#include <stdbool.h>
 #include <stdint.h>
+#include <wlr/types/wlr_cursor_shape_v1.h>
+#include <wlr/types/wlr_pointer.h>
+
+/* Resize corners. */
+enum { TOP_LEFT, TOP_RIGHT, BOTTOM_LEFT, BOTTOM_RIGHT };
+
+/* Trackpad swipe directions. */
+enum { SWIPE_UP, SWIPE_DOWN, SWIPE_LEFT, SWIPE_RIGHT };
+
+/* Cursor states. */
+enum { CurNormal, CurPressed, CurMove, CurResize }; /* cursor */
+
+/* Scroll wheel direction. */
+enum { AxisUp, AxisDown, AxisLeft, AxisRight };
+
+typedef struct PointerConstraint {
+	struct wlr_pointer_constraint_v1 *constraint;
+	struct wl_listener destroy;
+} PointerConstraint;
+
+struct LastCursor {
+	enum wp_cursor_shape_device_v1_shape shape;
+	struct wlr_surface *surface;
+	int32_t hotspot_x;
+	int32_t hotspot_y;
+};
 
 void toggle_hotarea(int32_t x_root, int32_t y_root);
 bool pointer_is_trackpad(struct wlr_pointer *pointer);

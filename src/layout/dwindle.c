@@ -3,6 +3,7 @@
 #include "mango/manage/client.h"
 #include "mango/common/util.h"
 #include "mango/manage/monitor.h"
+#include <wlr/types/wlr_cursor.h>
 
 static DwindleNode *locked_horizontal_node = NULL;
 static DwindleNode *locked_vertical_node = NULL;

@@ -1,8 +1,12 @@
-#include "mango/mango.h"
 #include "mango/manage/client.h"
 #include "mango/layout/arrange.h"
 #include "mango/ext-protocol/foreign-toplevel.h"
 #include "mango/common/server.h"
+#include "mango/common/util.h"
+#include "mango/manage/monitor.h"
+#include <wlr/types/wlr_scene.h>
+#include <wlr/types/wlr_compositor.h>
+#include <wlr/types/wlr_xdg_shell.h>
 
 void handle_foreign_activate_request(struct wl_listener *listener, void *data) {
 	Client *c = wl_container_of(listener, c, foreign_activate_request);

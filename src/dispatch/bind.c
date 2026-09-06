@@ -18,6 +18,22 @@
 #include "mango/overview/overview.h"
 #include "mango/layout/dwindle.h"
 #include "mango/common/util.h"
+#include "mango/input/device.h"
+#include "mango/input/keyboard.h"
+#include <fcntl.h>
+#include <unistd.h>
+#include <wordexp.h>
+#include <wlr/backend.h>
+#include <wlr/backend/headless.h>
+#include <wlr/backend/multi.h>
+#include <wlr/backend/session.h>
+#include <wlr/interfaces/wlr_keyboard.h>
+#include <wlr/types/wlr_compositor.h>
+#include <wlr/types/wlr_cursor.h>
+#include <wlr/types/wlr_keyboard.h>
+#include <wlr/types/wlr_keyboard_group.h>
+#include <wlr/types/wlr_output.h>
+#include <wlr/types/wlr_seat.h>
 
 void bind_to_view(const Arg *arg) {
 	if (!server.selected_monitor)

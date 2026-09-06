@@ -1,7 +1,9 @@
 #ifndef ___ARRANGE_H__
 #define ___ARRANGE_H__
 
-#include "mango/mango.h"
+#include "mango/common/types.h"
+#include <stdbool.h>
+#include <stdint.h>
 
 void set_size_per(Monitor *m, Client *c);
 

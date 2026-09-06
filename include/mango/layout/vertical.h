@@ -1,7 +1,7 @@
 #ifndef __LAYOUT_VERTICAL_H__
 #define __LAYOUT_VERTICAL_H__ 1
 
-#include "mango/mango.h"
+#include "mango/common/types.h"
 
 void vertical_tile(Monitor *m);
 void vertical_deck(Monitor *m);

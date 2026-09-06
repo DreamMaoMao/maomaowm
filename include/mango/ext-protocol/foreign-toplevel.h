@@ -1,7 +1,7 @@
 #ifndef __EXT_PROTOCOL_FOREIGN_TOPLEVEL_H__
 #define __EXT_PROTOCOL_FOREIGN_TOPLEVEL_H__ 1
 
-#include "mango/mango.h"
+#include "mango/common/types.h"
 #include <wlr/types/wlr_foreign_toplevel_management_v1.h>
 
 void handle_foreign_activate_request(struct wl_listener *listener, void *data);

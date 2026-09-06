@@ -1,7 +1,8 @@
 #ifndef __CONFIG_PARSE_CONFIG_H__
 #define __CONFIG_PARSE_CONFIG_H__ 1
 
-#include "mango/mango.h"
+#include "mango/common/types.h"
+#include "mango/dispatch/bind.h"
 #include <stdbool.h>
 #include <stdint.h>
 #include <xkbcommon/xkbcommon.h>
@@ -18,6 +19,35 @@
 // Float version: keeps the fractional part.
 #define CLAMP_FLOAT(x, min, max)                                               \
 	((x) < (min) ? (min) : ((x) > (max) ? (max) : (x)))
+
+/* Rule application helpers (window / layer rules). */
+#define APPLY_INT_PROP(obj, rule, prop)                                        \
+	if (rule->prop >= 0)                                                       \
+	obj->prop = rule->prop
+
+#define APPLY_FLOAT_PROP(obj, rule, prop)                                      \
+	if (rule->prop > 0.0f)                                                     \
+	obj->prop = rule->prop
+
+#define APPLY_STRING_PROP(obj, rule, prop)                                     \
+	if (rule->prop != NULL)                                                    \
+	obj->prop = rule->prop
+
+/* Tag animation / folding / global switch state. */
+enum { VERTICAL, HORIZONTAL };
+enum { UNFOLD, FOLD, INVALIDFOLD };
+enum { STATE_UNSPECIFIED = 0, STATE_ENABLED, STATE_DISABLED };
+
+enum tearing_mode {
+	TEARING_DISABLED = 0,
+	TEARING_ENABLED,
+	TEARING_FULLSCREEN_ONLY,
+};
+
+enum seat_config_shortcuts_inhibit {
+	SHORTCUTS_INHIBIT_DISABLE,
+	SHORTCUTS_INHIBIT_ENABLE,
+};
 
 /* Variables */
 // Default jump-label character sequence (static array, used when jump_labels is
@@ -510,7 +540,8 @@ void standalone_keyboard_apply_config(KeyboardGroup *group,
 void create_standalone_keyboard(InputDevice *input_dev,
 								struct wlr_keyboard *keyboard,
 								ConfigDeviceRule *rule);
-void handle_standalone_keyboard_destroy(struct wl_listener *listener, void *data);
+void handle_standalone_keyboard_destroy(struct wl_listener *listener,
+										void *data);
 
 bool apply_rule_to_state(Monitor *m, const ConfigMonitorRule *rule,
 						 struct wlr_output_state *state);
@@ -577,7 +608,6 @@ void set_value_default();
 void set_default_key_bindings(Config *config);
 
 bool parse_config(void);
-
 
 void reapply_monitor_rules(void);
 

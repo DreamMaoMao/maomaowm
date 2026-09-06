@@ -1,6 +1,10 @@
 #include "mango/ext-protocol/xdg-output.h"
 #include "mango/common/server.h"
 #include "mango/config/parse_config.h"
+#include "mango/manage/monitor.h"
+#ifdef XWAYLAND
+#include <wlr/xwayland.h>
+#endif
 
 static struct wl_global *xdg_output_global;
 static struct wl_list xdg_outputs;

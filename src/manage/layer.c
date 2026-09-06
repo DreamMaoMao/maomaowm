@@ -8,6 +8,12 @@
 #include "mango/common/util.h"
 #include "mango/ipc/ipc.h"
 #include "mango/input/pointer.h"
+#include "mango/manage/monitor.h"
+#include <wlr/types/wlr_scene.h>
+#include <wlr/types/wlr_compositor.h>
+#include <wlr/types/wlr_layer_shell_v1.h>
+#include <wlr/types/wlr_output.h>
+#include <wlr/types/wlr_xdg_shell.h>
 
 /* Maps the wlr_layer_shell layer enum to scene layers. */
 static const int32_t layermap[] = {LyrBg, LyrBottom, LyrTop, LyrOverlay};

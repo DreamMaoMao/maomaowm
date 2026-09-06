@@ -20,6 +20,25 @@
 #include "mango/animation/common.h"
 #include "mango/dispatch/bind.h"
 #include "mango/animation/layer.h"
+#include <fcntl.h>
+#include <wlr/types/wlr_scene.h>
+#include <unistd.h>
+#include <wlr/backend.h>
+#include <wlr/backend/headless.h>
+#include <wlr/backend/session.h>
+#include <wlr/backend/wayland.h>
+#include <wlr/render/allocator.h>
+#include <wlr/render/wlr_renderer.h>
+#include <wlr/types/wlr_compositor.h>
+#include <wlr/types/wlr_cursor.h>
+#include <wlr/types/wlr_drm_lease_v1.h>
+#include <wlr/types/wlr_layer_shell_v1.h>
+#include <wlr/types/wlr_output_layout.h>
+#include <wlr/types/wlr_output_management_v1.h>
+#include <wlr/types/wlr_output_power_management_v1.h>
+#include <wlr/types/wlr_single_pixel_buffer_v1.h>
+#include <wlr/types/wlr_session_lock_v1.h>
+#include <wlr/types/wlr_switch.h>
 
 bool is_special_active(const Monitor *m) {
 	return m && !m->isoverview && (m->tagset[m->seltags] & TAG0_MASK);

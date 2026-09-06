@@ -1,11 +1,38 @@
 #ifndef __MANGO_SERVER_H__
 #define __MANGO_SERVER_H__ 1
 
-#include "mango/mango.h"
+#include "mango/common/types.h"
+#include <stdbool.h>
+#include <stdint.h>
+#include <wayland-server-core.h>
+#include <wlr/util/box.h>
 
 /* Tag masks */
 #define TAG0_MASK (1U << 31)
 #define TAGMASK (server.tagmask)
+
+/* Scene layer ids; the scene tree keeps one tree per layer. */
+enum {
+	LyrBg,
+	LyrBottom,
+	LyrTile,
+	LyrMaximize,
+	LyrTop,
+	LyrSpecialDim,
+	LyrSpecialTile,
+	LyrSpecialMaximize,
+	LyrSpecialTop,
+	LyrFadeOut,
+	LyrOverlay,
+	LyrIMPopup,
+	LyrBlock,
+	NUM_LAYERS
+};
+
+typedef struct KeyMode {
+	char mode[28];
+	bool isdefault;
+} KeyMode;
 
 struct MangoServer {
 	/* Display server / rendering core */

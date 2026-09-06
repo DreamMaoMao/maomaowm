@@ -1,7 +1,25 @@
 #ifndef __BIND_H__
 #define __BIND_H__ 1
 
-#include "mango/mango.h"
+#include "mango/common/types.h"
+#include <stdint.h>
+
+/* The generic argument carried by a binding action. */
+typedef struct Arg {
+	int32_t i;
+	int32_t i2;
+	float f;
+	float f2;
+	char *v;
+	char *v2;
+	char *v3;
+	uint32_t ui;
+	uint32_t ui2;
+	Client *tc;
+} Arg;
+
+enum { PREV, NEXT };
+enum { FORCE, UNFORCE };
 
 void minimize_window(const Arg *arg);
 void restore_minimized(const Arg *arg);

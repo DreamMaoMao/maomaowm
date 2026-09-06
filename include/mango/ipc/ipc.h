@@ -4,7 +4,27 @@
 #include <cjson/cJSON.h>
 #include <stdint.h>
 #include <wayland-util.h>
-#include "mango/mango.h"
+#include "mango/common/types.h"
+
+enum ipc_watch_type {
+	IPC_WATCH_NONE = 0,
+	IPC_WATCH_MONITOR = 1 << 0,
+	IPC_WATCH_CLIENT = 1 << 1,
+	IPC_WATCH_TAGS = 1 << 2,
+	IPC_WATCH_ALL_MONITORS = 1 << 3,
+	IPC_WATCH_ALL_TAGS = 1 << 4,
+	IPC_WATCH_ALL_CLIENTS = 1 << 5,
+	IPC_WATCH_KEYMODE = 1 << 6,
+	IPC_WATCH_KB_LAYOUT = 1 << 7,
+	IPC_WATCH_LAST_OPEN_SURFACE = 1 << 8,
+	IPC_WATCH_FOCUSING_CLIENT = 1 << 9,
+	IPC_WATCH_DEVICE = 1 << 10,
+};
+
+#define IPC_WATCH_ARRANGGE                                                     \
+	IPC_WATCH_MONITOR | IPC_WATCH_CLIENT | IPC_WATCH_TAGS |                    \
+		IPC_WATCH_ALL_MONITORS | IPC_WATCH_ALL_TAGS | IPC_WATCH_ALL_CLIENTS |  \
+		IPC_WATCH_LAST_OPEN_SURFACE | IPC_WATCH_FOCUSING_CLIENT
 
 struct ipc_client_state {
 	int fd;

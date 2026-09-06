@@ -1,7 +1,49 @@
 #ifndef __MANAGE_LAYER_H__
 #define __MANAGE_LAYER_H__ 1
 
-#include "mango/mango.h"
+#include "mango/animation/common.h"
+#include "mango/common/types.h"
+#include <stdbool.h>
+#include <stdint.h>
+#include <wayland-server-core.h>
+#include <wlr/util/box.h>
+
+typedef struct LayerSurface {
+	/* Must keep these three elements in this order */
+	uint32_t type; // must at first in struct
+	struct wlr_box geom, current, pending, animainit_geom;
+	Monitor *mon;
+	struct wlr_scene_tree *scene;
+	struct wlr_scene_tree *popups;
+	struct wlr_scene_rect *shield;
+	struct wlr_scene_layer_surface_v1 *scene_layer;
+	struct wl_list link;
+	struct wl_list fadeout_link;
+	int32_t mapped;
+	struct wlr_layer_surface_v1 *layer_surface;
+
+	struct wl_listener destroy;
+	struct wl_listener map;
+	struct wl_listener unmap;
+	struct wl_listener surface_commit;
+
+	struct mango_animation animation;
+	bool dirty;
+	int32_t noanim;
+	char *animation_type_open;
+	char *animation_type_close;
+	bool shield_when_capture;
+	bool need_output_flush;
+	bool being_unmapped;
+} LayerSurface;
+
+typedef struct Popup {
+	uint32_t type; // must at first in struct
+	struct wlr_xdg_popup *wlr_popup;
+	struct wl_listener destroy;
+	struct wl_listener commit;
+	struct wl_listener reposition;
+} Popup;
 
 void arrange_layer(Monitor *m, struct wl_list *list,
 				   struct wlr_box *usable_area, int32_t exclusive);

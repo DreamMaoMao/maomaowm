@@ -1,7 +1,7 @@
 #ifndef __HORIZONTAL_H__
 #define __HORIZONTAL_H__
 
-#include "mango/mango.h"
+#include "mango/common/types.h"
 
 void tile(Monitor *m);
 
