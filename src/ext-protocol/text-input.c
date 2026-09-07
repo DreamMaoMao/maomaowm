@@ -1,10 +1,10 @@
 #include "mango/ext-protocol/text-input.h"
 #include "mango/common/server.h"
-#include "mango/manage/monitor.h"
 #include "mango/common/util.h"
 #include "mango/input/device.h"
 #include "mango/input/keyboard.h"
 #include "mango/manage/client.h"
+#include "mango/manage/monitor.h"
 
 #include <assert.h>
 #include <wlr/types/wlr_compositor.h>

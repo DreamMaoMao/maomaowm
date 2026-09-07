@@ -1,10 +1,10 @@
 #ifndef ___IPC_H__
 #define ___IPC_H__
 
+#include "mango/common/types.h"
 #include <cjson/cJSON.h>
 #include <stdint.h>
 #include <wayland-util.h>
-#include "mango/common/types.h"
 
 enum ipc_watch_type {
 	IPC_WATCH_NONE = 0,

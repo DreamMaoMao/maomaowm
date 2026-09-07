@@ -2,13 +2,13 @@
 #define __MANAGE_MONITOR_H__ 1
 
 #include "mango/common/types.h"
-#include "mango/config/preset.h"
 #include "mango/config/parse_config.h"
+#include "mango/config/preset.h"
 #include <limits.h>
 #include <stdint.h>
 #include <wayland-server-core.h>
-#include <wlr/types/wlr_output_layout.h>
 #include <wlr/types/wlr_output.h>
+#include <wlr/types/wlr_output_layout.h>
 #include <wlr/util/box.h>
 
 #define INSIDEMON(A)                                                           \

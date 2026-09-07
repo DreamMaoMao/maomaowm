@@ -1,18 +1,18 @@
 #include "mango/manage/layer.h"
-#include "mango/manage/client.h"
-#include "mango/layout/arrange.h"
-#include "mango/ext-protocol/text-input.h"
-#include "mango/common/server.h"
 #include "mango/animation/layer.h"
 #include "mango/common/log.h"
+#include "mango/common/server.h"
 #include "mango/common/util.h"
-#include "mango/ipc/ipc.h"
+#include "mango/ext-protocol/text-input.h"
 #include "mango/input/pointer.h"
+#include "mango/ipc/ipc.h"
+#include "mango/layout/arrange.h"
+#include "mango/manage/client.h"
 #include "mango/manage/monitor.h"
-#include <wlr/types/wlr_scene.h>
 #include <wlr/types/wlr_compositor.h>
 #include <wlr/types/wlr_layer_shell_v1.h>
 #include <wlr/types/wlr_output.h>
+#include <wlr/types/wlr_scene.h>
 #include <wlr/types/wlr_xdg_shell.h>
 
 /* Maps the wlr_layer_shell layer enum to scene layers. */

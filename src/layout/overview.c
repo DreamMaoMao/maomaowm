@@ -1,7 +1,7 @@
 #include "mango/layout/overview.h"
 #include "mango/common/server.h"
-#include "mango/manage/client.h"
 #include "mango/config/parse_config.h"
+#include "mango/manage/client.h"
 #include "mango/manage/monitor.h"
 #include <stdbool.h>
 

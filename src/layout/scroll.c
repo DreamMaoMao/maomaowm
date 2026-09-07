@@ -1,8 +1,8 @@
 #include "mango/layout/scroll.h"
 #include "mango/common/server.h"
-#include "mango/manage/client.h"
-#include "mango/layout/arrange.h"
 #include "mango/common/util.h"
+#include "mango/layout/arrange.h"
+#include "mango/manage/client.h"
 #include "mango/manage/monitor.h"
 
 /* Gets or creates the scroller state for a given tag of the specified monitor.

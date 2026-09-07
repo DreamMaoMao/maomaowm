@@ -1,17 +1,17 @@
 #include "mango/layout/arrange.h"
-#include "mango/common/server.h"
-#include "mango/layout/layout.h"
-#include "mango/manage/monitor.h"
-#include "mango/layout/dwindle.h"
-#include "mango/layout/scroll.h"
-#include "mango/manage/client.h"
 #include "mango/animation/tag.h"
-#include "mango/input/pointer.h"
-#include "mango/manage/misc.h"
+#include "mango/common/server.h"
 #include "mango/dispatch/bind.h"
-#include "mango/layout/vertical.h"
-#include <assert.h>
+#include "mango/input/pointer.h"
 #include "mango/ipc/ipc.h"
+#include "mango/layout/dwindle.h"
+#include "mango/layout/layout.h"
+#include "mango/layout/scroll.h"
+#include "mango/layout/vertical.h"
+#include "mango/manage/client.h"
+#include "mango/manage/misc.h"
+#include "mango/manage/monitor.h"
+#include <assert.h>
 #include <wlr/types/wlr_cursor.h>
 
 void set_size_per(Monitor *m, Client *c) {

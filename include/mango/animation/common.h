@@ -1,10 +1,10 @@
 #ifndef __ANIMATION_COMMON_H__
 #define __ANIMATION_COMMON_H__ 1
 
-#include <wlr/types/wlr_scene.h>
 #include <stdbool.h>
 #include <stdint.h>
 #include <wayland-server-core.h>
+#include <wlr/types/wlr_scene.h>
 #include <wlr/util/box.h>
 
 #define BAKED_POINTS_COUNT 256

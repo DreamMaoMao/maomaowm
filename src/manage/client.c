@@ -1,24 +1,23 @@
 #include "mango/manage/client.h"
-#include "mango/common/server.h"
-#include "mango/layout/layout.h"
-#include "mango/layout/scroll.h"
-#include "mango/layout/arrange.h"
-#include "mango/layout/dwindle.h"
-#include "mango/overview/overview.h"
-#include "mango/switcher/switcher.h"
-#include "mango/dispatch/bind.h"
 #include "mango/animation/client.h"
+#include "mango/common/server.h"
+#include "mango/common/util.h"
+#include "mango/dispatch/bind.h"
 #include "mango/ext-protocol/foreign-toplevel.h"
 #include "mango/ext-protocol/text-input.h"
-#include "mango/common/util.h"
-#include "mango/manage/monitor.h"
-#include "mango/ipc/ipc.h"
-#include "mango/manage/misc.h"
 #include "mango/input/pointer.h"
+#include "mango/ipc/ipc.h"
+#include "mango/layout/arrange.h"
+#include "mango/layout/dwindle.h"
+#include "mango/layout/layout.h"
+#include "mango/layout/scroll.h"
 #include "mango/manage/layer.h"
+#include "mango/manage/misc.h"
+#include "mango/manage/monitor.h"
+#include "mango/overview/overview.h"
+#include "mango/switcher/switcher.h"
 #include <fcntl.h>
 #include <linux/input-event-codes.h>
-#include <wlr/types/wlr_scene.h>
 #include <unistd.h>
 #include <wlr/types/wlr_alpha_modifier_v1.h>
 #include <wlr/types/wlr_color_management_v1.h>
@@ -26,12 +25,13 @@
 #include <wlr/types/wlr_compositor.h>
 #include <wlr/types/wlr_cursor.h>
 #include <wlr/types/wlr_ext_foreign_toplevel_list_v1.h>
-#include <wlr/types/wlr_fractional_scale_v1.h>
 #include <wlr/types/wlr_foreign_toplevel_management_v1.h>
+#include <wlr/types/wlr_fractional_scale_v1.h>
 #include <wlr/types/wlr_layer_shell_v1.h>
 #include <wlr/types/wlr_linux_drm_syncobj_v1.h>
 #include <wlr/types/wlr_pointer_constraints_v1.h>
 #include <wlr/types/wlr_presentation_time.h>
+#include <wlr/types/wlr_scene.h>
 #include <wlr/types/wlr_seat.h>
 #include <wlr/types/wlr_subcompositor.h>
 #include <wlr/types/wlr_xcursor_manager.h>
@@ -40,8 +40,8 @@
 #include <wlr/types/wlr_xdg_shell.h>
 #ifdef XWAYLAND
 #include <X11/Xlib.h>
-#include <xcb/xcb_icccm.h>
 #include <wlr/xwayland.h>
+#include <xcb/xcb_icccm.h>
 #endif
 
 /* Placeholder appid/title used when no client surface type can be matched. */

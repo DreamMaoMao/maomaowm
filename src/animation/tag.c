@@ -1,10 +1,10 @@
 #include "mango/animation/tag.h"
 #include "mango/animation/client.h"
 #include "mango/common/server.h"
-#include "mango/layout/layout.h"
-#include "mango/manage/monitor.h"
-#include "mango/manage/client.h"
 #include "mango/common/util.h"
+#include "mango/layout/layout.h"
+#include "mango/manage/client.h"
+#include "mango/manage/monitor.h"
 
 void set_tagin_animation(Monitor *m, Client *c) {
 	if (c->animation.running) {

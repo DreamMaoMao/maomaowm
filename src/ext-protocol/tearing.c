@@ -1,8 +1,8 @@
 #include "mango/ext-protocol/tearing.h"
-#include "mango/common/server.h"
 #include "mango/common/log.h"
-#include "mango/manage/client.h"
+#include "mango/common/server.h"
 #include "mango/common/util.h"
+#include "mango/manage/client.h"
 #include "mango/manage/monitor.h"
 
 void handle_controller_set_hint(struct wl_listener *listener, void *data) {

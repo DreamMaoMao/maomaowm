@@ -1,9 +1,9 @@
 #ifndef __TOUCH_H__
 #define __TOUCH_H__
 
-#include <wlr/types/wlr_touch.h>
 #include <wayland-server-core.h>
 #include <wayland-server-protocol.h>
+#include <wlr/types/wlr_touch.h>
 
 void touch_create(struct wlr_touch *touch);
 

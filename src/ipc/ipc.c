@@ -1,5 +1,16 @@
+#include "mango/ipc/ipc.h"
+#include "mango/common/log.h"
+#include "mango/common/server.h"
+#include "mango/common/util.h"
+#include "mango/ext-protocol/ext-workspace.h"
+#include "mango/input/device.h"
+#include "mango/input/keyboard.h"
+#include "mango/layout/layout.h"
+#include "mango/manage/client.h"
+#include "mango/manage/monitor.h"
 #include <errno.h>
 #include <fcntl.h>
+#include <libinput.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -7,24 +18,13 @@
 #include <sys/socket.h>
 #include <sys/un.h>
 #include <unistd.h>
-#include "mango/ipc/ipc.h"
-#include "mango/common/server.h"
-#include "mango/common/util.h"
-#include "mango/input/device.h"
-#include "mango/input/keyboard.h"
-#include "mango/common/log.h"
-#include "mango/layout/layout.h"
-#include "mango/ext-protocol/ext-workspace.h"
-#include "mango/manage/client.h"
-#include "mango/manage/monitor.h"
-#include <libinput.h>
 #include <wayland-server-core.h>
 #include <wlr/backend/libinput.h>
+#include <wlr/types/wlr_compositor.h>
 #include <wlr/types/wlr_cursor.h>
 #include <wlr/types/wlr_ext_foreign_toplevel_list_v1.h>
 #include <wlr/types/wlr_input_device.h>
 #include <wlr/types/wlr_keyboard.h>
-#include <wlr/types/wlr_compositor.h>
 
 static struct wl_list ipc_watch_clients;
 static int ipc_device_watch_count;

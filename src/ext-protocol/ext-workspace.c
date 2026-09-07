@@ -1,9 +1,9 @@
-#include "mango/dispatch/bind.h"
-#include "mango/manage/client.h"
+#include "mango/ext-protocol/ext-workspace.h"
 #include "mango/common/log.h"
 #include "mango/common/server.h"
-#include "mango/ext-protocol/ext-workspace.h"
 #include "mango/common/util.h"
+#include "mango/dispatch/bind.h"
+#include "mango/manage/client.h"
 #include "mango/manage/monitor.h"
 
 static struct wl_list workspaces;
