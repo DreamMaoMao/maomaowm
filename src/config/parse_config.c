@@ -18,6 +18,7 @@
 #include "mango/input/pointer.h"
 #include "mango/ipc/ipc.h"
 #include "mango/layout/arrange.h"
+#include "mango/layout/group.h"
 #include "mango/layout/layout.h"
 #include "mango/manage/client.h"
 #include "mango/manage/monitor.h"
@@ -1068,6 +1069,8 @@ bool parse_option(Config *config, char *key, char *value, int line_number) {
 		config->borderpx = atoi(value);
 	} else if (strcmp(key, "group_bar_height") == 0) {
 		config->group_bar_height = atoi(value);
+	} else if (strcmp(key, "group_capture_spawn") == 0) {
+		config->group_capture_spawn = atoi(value);
 	} else if (strcmp(key, "rootcolor") == 0) {
 		int64_t color = parse_color(value);
 		if (color == -1) {
@@ -1524,6 +1527,7 @@ bool parse_option(Config *config, char *key, char *value, int line_number) {
 		// string rule value, relay to a client property
 		rule->animation_type_open = NULL;
 		rule->animation_type_close = NULL;
+		rule->grouptitle = NULL;
 
 		// float rule value, relay to a client property
 		rule->focused_opacity = 0;
@@ -1649,6 +1653,8 @@ bool parse_option(Config *config, char *key, char *value, int line_number) {
 					rule->isfullscreen = atoi(val);
 				} else if (strcmp(key, "isfakefullscreen") == 0) {
 					rule->isfakefullscreen = atoi(val);
+				} else if (strcmp(key, "grouptitle") == 0) {
+					rule->grouptitle = strdup(val);
 				} else if (strcmp(key, "globalkeybinding") == 0) {
 					char mod_str[256], keysym_str[256];
 					sscanf(val, "%255[^-]-%255[a-zA-Z]", mod_str, keysym_str);
@@ -3259,10 +3265,13 @@ void free_config(void) {
 				free((void *)rule->animation_type_close);
 			if (rule->monitor)
 				free((void *)rule->monitor);
+			if (rule->grouptitle)
+				free((void *)rule->grouptitle);
 			rule->id = NULL;
 			rule->title = NULL;
 			rule->animation_type_open = NULL;
 			rule->animation_type_close = NULL;
+			rule->grouptitle = NULL;
 			rule->monitor = NULL;
 			// Frees arg.v of globalkeybinding if dynamically allocated.
 			if (rule->globalkeybinding.arg.v) {
@@ -3709,6 +3718,7 @@ void override_config(void) {
 	config.special_gappov = CLAMP_INT(config.special_gappov, 0, 1000);
 	config.borderpx = CLAMP_INT(config.borderpx, 0, 200);
 	config.group_bar_height = CLAMP_INT(config.group_bar_height, 0, 500);
+	config.group_capture_spawn = CLAMP_INT(config.group_capture_spawn, 0, 1);
 	config.smartgaps = CLAMP_INT(config.smartgaps, 0, 1);
 	config.blur = CLAMP_INT(config.blur, 0, 1);
 	config.blur_layer = CLAMP_INT(config.blur_layer, 0, 1);
@@ -3853,6 +3863,7 @@ void set_value_default() {
 
 	config.borderpx = 4;
 	config.group_bar_height = 50;
+	config.group_capture_spawn = 0;
 	config.overviewgappi = 5;
 	config.overviewgappo = 30;
 	config.overcircle_center_ratio = 0.5f;
@@ -4539,6 +4550,21 @@ FuncType parse_func_name(char *func_name, Arg *arg, char *arg_value,
 		(*arg).i = parse_direction(arg_value);
 	} else if (strcmp(func_name, "groupleave") == 0) {
 		func = group_leave;
+	} else if (strcmp(func_name, "groupinit") == 0) {
+		func = group_init;
+	} else if (strcmp(func_name, "groupall") == 0) {
+		func = group_all;
+	} else if (strcmp(func_name, "groupmerge") == 0) {
+		func = group_merge;
+		(*arg).i = parse_direction(arg_value);
+	} else if (strcmp(func_name, "groupdisband") == 0) {
+		func = group_disband;
+	} else if (strcmp(func_name, "grouptitle") == 0) {
+		func = set_grouptitle;
+		(*arg).v = strdup(arg_value);
+	} else if (strcmp( func_name, "groupsmart") == 0) {
+		func = group_smart;
+		(*arg).i = parse_direction(arg_value);
 	} else if (strcmp(func_name, "focusid") == 0) {
 		func = focus_by_id;
 	} else if (strcmp(func_name, "incnmaster") == 0) {

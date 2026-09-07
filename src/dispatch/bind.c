@@ -258,98 +258,6 @@ void focus_window_or_workspace(const Arg *arg) {
 	return;
 }
 
-void group_join(const Arg *arg) {
-
-	if (!server.selected_monitor)
-		return;
-
-	Monitor *oldmon = NULL;
-
-	Client *need_join_client = arg->tc ? arg->tc : server.selected_monitor->sel;
-	if (!need_join_client || !need_join_client->mon)
-		return;
-
-	if (need_join_client->mon->isoverview)
-		return;
-
-	Client *need_replace_client = NULL;
-	need_replace_client = direction_select(arg);
-
-	if (!need_replace_client || !need_replace_client->mon)
-		return;
-
-	if (need_join_client == need_replace_client)
-		return;
-
-	if (need_join_client->group_next || need_join_client->group_prev) {
-		group_leave(&(Arg){.tc = need_join_client});
-	}
-
-	if (need_join_client->mon != need_replace_client->mon) {
-		oldmon = need_join_client->mon;
-		need_join_client->mon = need_replace_client->mon;
-	}
-
-	if (!need_replace_client->group_prev && !need_replace_client->group_next) {
-		need_replace_client->isgroupfocusing = true;
-	}
-
-	need_join_client->group_next = need_replace_client;
-
-	if (need_replace_client->group_prev) {
-		need_replace_client->group_prev->group_next = need_join_client;
-	}
-
-	need_join_client->group_prev = need_replace_client->group_prev;
-
-	need_replace_client->group_prev = need_join_client;
-
-	client_focus_group_member(need_join_client);
-	arrange(need_join_client->mon, false, false);
-
-	// oldmon may already be destroyed.
-	if (oldmon) {
-		arrange(oldmon, false, false);
-	}
-
-	return;
-}
-
-void group_leave(const Arg *arg) {
-
-	if (!server.selected_monitor)
-		return;
-	Client *tc = arg->tc ? arg->tc : server.selected_monitor->sel;
-	if (!tc || !tc->mon || !tc->isgroupfocusing)
-		return;
-	if (!tc->group_next && !tc->group_prev) {
-		return;
-	}
-
-	if (tc->mon->isoverview)
-		return;
-
-	Client *rc = tc->group_next ? tc->group_next : tc->group_prev;
-
-	client_focus_group_member(rc);
-	client_group_detach(tc);
-
-	tc->isgroupfocusing = false;
-	tc->mon = rc->mon;
-	client_unpark(tc, rc);
-	/* rc stays focused: put tc right behind it in the focus stack. */
-	wl_list_remove(&tc->flink);
-	wl_list_insert(rc->flink.next, &tc->flink);
-
-	if (!rc->group_prev && !rc->group_next) {
-		rc->isgroupfocusing = false;
-	}
-
-	arrange(tc->mon, false, false);
-
-	return;
-}
-
 void focus_last(const Arg *arg) {
 	Client *c = NULL;
 	Client *tc = NULL;
@@ -490,34 +398,6 @@ void over_circle(const Arg *arg) {
 	toggle_overview(arg);
 	if (!server.selected_monitor->isoverview)
 		server.selected_monitor->ov_tab_layout = 0;
-}
-
-void group_focus(const Arg *arg) {
-	Client *c = arg->tc ? arg->tc : server.selected_monitor->sel;
-	if (!c || !c->mon)
-		return;
-
-	if (!c->group_prev && !c->group_next) {
-		return;
-	}
-
-	if (c->mon->isoverview)
-		return;
-
-	Client *tc = NULL;
-
-	if (arg->i == NEXT) {
-		tc = c->group_next;
-	} else {
-		tc = c->group_prev;
-	}
-
-	if (!tc)
-		return;
-
-	client_focus_group_member(tc);
-	arrange(tc->mon, false, false);
-	return;
 }
 
 void inc_nmaster(const Arg *arg) {

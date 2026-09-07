@@ -10,6 +10,7 @@ util.o
 *-protocol.h
 *-protocol.c
 *-protocol.o
+/test
 
 .envrc
 .direnv

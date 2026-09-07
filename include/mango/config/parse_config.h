@@ -109,6 +109,7 @@ typedef struct {
 	const char *animation_type_close;
 	const char *layer_animation_type_open;
 	const char *layer_animation_type_close;
+	char *grouptitle;
 	int32_t isnoborder;
 	int32_t isnoshadow;
 	int32_t isnoradius;
@@ -458,6 +459,7 @@ typedef struct {
 	uint32_t special_gappov;
 	uint32_t borderpx;
 	uint32_t group_bar_height;
+	int32_t group_capture_spawn;
 	float scratchpad_width_ratio;
 	float scratchpad_height_ratio;
 	float special_dim;

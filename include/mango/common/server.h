@@ -147,6 +147,9 @@ struct MangoServer {
 	double swipe_dy;
 
 	bool render_border;
+	bool group_capture_inhibit_arrange; /* suppress arranges while a
+										   group-captured spawn is being set up
+										 */
 
 	/* Other runtime state */
 	uint32_t chvt_backup_tag;

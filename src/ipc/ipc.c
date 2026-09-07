@@ -504,6 +504,8 @@ cJSON *build_client_json(Client *c) {
 	cJSON_AddStringToObject(obj, "foreign_toplevel_id",
 							c->ext_foreign_toplevel->identifier);
 	cJSON_AddStringToObject(obj, "title", client_get_title(c));
+	cJSON_AddStringToObject(obj, "grouptitle",
+							c->grouptitle ? c->grouptitle : "");
 	cJSON_AddStringToObject(obj, "appid", client_get_appid(c));
 	cJSON_AddStringToObject(obj, "monitor",
 							c->mon ? c->mon->wlr_output->name : "");
