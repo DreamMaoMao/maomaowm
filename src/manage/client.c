@@ -2623,8 +2623,6 @@ void client_view_on_monitor(const Arg *arg, bool want_animation, Monitor *m,
 
 		if (arg->ui & TAG0_MASK)
 			m->pertag->curtag = 0;
-		else if (arg->ui == (~0 & TAGMASK))
-			m->pertag->curtag = 0;
 		else {
 			for (i = 0; !(arg->ui & 1 << i) && i < (uint32_t)config.tag_num &&
 						arg->ui != 0;

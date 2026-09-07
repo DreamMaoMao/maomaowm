@@ -48,7 +48,7 @@ void bind_to_view(const Arg *arg) {
 		if (server.selected_monitor->pertag->prevtag)
 			target = 1 << (server.selected_monitor->pertag->prevtag - 1);
 		else
-			// prevtag==0: previous view was all-tags or special,
+			// prevtag==0: previous view was the special workspace,
 			// decide by the other tagset
 			target = (server.selected_monitor
 						  ->tagset[server.selected_monitor->seltags ^ 1] &
