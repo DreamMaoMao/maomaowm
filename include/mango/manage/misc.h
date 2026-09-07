@@ -2,6 +2,7 @@
 #define __MANAGE_MISC_H__ 1
 
 #include "mango/common/types.h"
+#include <stdbool.h>
 #include <sys/types.h>
 
 pid_t get_parent_process(pid_t p);
