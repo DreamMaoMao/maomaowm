@@ -337,12 +337,15 @@ void switcher_remove_client(Client *c) {
 	switcher_apply_highlight();
 }
 
+static bool switcher_client_eligible(Client *c) {
+	return c && c->mon && !c->iskilling && !c->isminimized && !c->isunglobal &&
+		   client_surface(c) && client_surface(c)->mapped &&
+		   !client_is_unmanaged(c) && !client_is_x11_popup(c);
+}
+
 void switcher_commit_client(Client *tc) {
 	switcher_close();
-	if (!tc || !tc->mon || tc->iskilling || tc->isminimized || tc->isunglobal ||
-		tc->is_logic_hide || !client_surface(tc) ||
-		!client_surface(tc)->mapped || client_is_unmanaged(tc) ||
-		client_is_x11_popup(tc))
+	if (!switcher_client_eligible(tc))
 		return;
 	if (!VISIBLEON(tc, tc->mon))
 		client_view_on_monitor(&(Arg){.ui = get_tags_first_tag(tc->tags)}, true,
@@ -469,9 +472,7 @@ void switcher(const Arg *arg) {
 bool switcher_is_active(void) { return switcher_state.tree != NULL; }
 
 bool switcher_candidate(Client *c) {
-	if (!c->mon || c->iskilling || c->isminimized || c->isunglobal ||
-		c->is_logic_hide || !client_surface(c) || !client_surface(c)->mapped ||
-		client_is_unmanaged(c) || client_is_x11_popup(c))
+	if (!switcher_client_eligible(c))
 		return false;
 
 	if (switcher_state.scope == SW_CURRENT_TAG)

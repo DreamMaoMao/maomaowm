@@ -719,7 +719,6 @@ void handle_keyboard_key(struct wl_listener *listener, void *data) {
 			Client *c;
 			wl_list_for_each(c, &server.clients, link) {
 				if (c->mon == server.selected_monitor && c->jump_char != '\0' &&
-					!c->is_logic_hide &&
 					(c_char == c->jump_char ||
 					 toupper((unsigned char)c_char) ==
 						 toupper((unsigned char)c->jump_char))) {

@@ -335,7 +335,11 @@ void group_leave(const Arg *arg) {
 	client_group_detach(tc);
 
 	tc->isgroupfocusing = false;
-	tc->is_logic_hide = false;
+	tc->mon = rc->mon;
+	client_unpark(tc, rc);
+	/* rc stays focused: put tc right behind it in the focus stack. */
+	wl_list_remove(&tc->flink);
+	wl_list_insert(rc->flink.next, &tc->flink);
 
 	if (!rc->group_prev && !rc->group_next) {
 		rc->isgroupfocusing = false;

@@ -144,8 +144,7 @@ uint32_t get_tag_status(uint32_t tag, Monitor *m) {
 	Client *c = NULL;
 	uint32_t status = 0;
 	wl_list_for_each(c, &server.clients, link) {
-		if (c->mon == m && !c->is_logic_hide &&
-			c->tags & 1 << (tag - 1) & TAGMASK) {
+		if (c->mon == m && c->tags & 1 << (tag - 1) & TAGMASK) {
 			if (c->isurgent) {
 				status = 2;
 				break;
@@ -1251,9 +1250,6 @@ void handle_output_frame(struct wl_listener *listener, void *data) {
 	}
 
 	wl_list_for_each_safe(c, tmp, &server.fadeout_clients, fadeout_link) {
-		if (c->is_logic_hide)
-			continue;
-
 		need_more_frames = client_draw_fadeout_frame(c) || need_more_frames;
 	}
 
@@ -1262,9 +1258,6 @@ void handle_output_frame(struct wl_listener *listener, void *data) {
 	}
 
 	wl_list_for_each(c, &server.clients, link) {
-		if (c->is_logic_hide)
-			continue;
-
 		need_more_frames = client_draw_frame(c) || need_more_frames;
 
 		if (!c->force_render && c->configure_serial &&

@@ -52,16 +52,10 @@ void set_tagin_animation(Monitor *m, Client *c) {
 }
 
 void set_arrange_visible(Monitor *m, Client *c, bool want_animation) {
-
-	/* A swallowed window disappears completely and stays hidden. */
-	if (c->is_logic_hide)
-		return;
-
 	bool was_enabled = c->scene->node.enabled;
 
 	if (!ISTILED(c) || (!c->is_clip_to_hide || !is_scroller_layout(c->mon))) {
 		c->is_clip_to_hide = false;
-		c->is_logic_hide = false;
 		wlr_scene_node_set_enabled(&c->scene->node, true);
 		/* In overview the real surface tree is replaced by the card tree, so it
 		 * stays disabled. */
@@ -143,17 +137,9 @@ void set_tagout_animation(Monitor *m, Client *c) {
 	}
 }
 void set_arrange_hidden(Monitor *m, Client *c, bool want_animation) {
-	/* A swallowed window disappears completely and stays hidden (avoids
-	 * triggering a tag animation flash). */
-	if (c->is_logic_hide) {
-		wlr_scene_node_set_enabled(&c->scene->node, false);
-		return;
-	}
-
 	/* In overview every tag window must show its card and must not be disabled
 	 * by the hiding logic. */
 	if (c->ov_card_tree) {
-		c->is_logic_hide = false;
 		c->is_clip_to_hide = false;
 		wlr_scene_node_set_enabled(&c->scene->node, true);
 		c->animation.running = false;

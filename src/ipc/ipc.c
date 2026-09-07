@@ -102,7 +102,7 @@ cJSON *build_tags_json(Monitor *m) {
 		if (tag_bit & active_tagset)
 			is_active = true;
 		wl_list_for_each(c, &server.clients, link) {
-			if (c->mon != m || c->is_logic_hide)
+			if (c->mon != m)
 				continue;
 			if (!(c->tags & tag_bit & TAGMASK))
 				continue;
@@ -651,7 +651,7 @@ void handle_command(int client_fd, const char *cmd_raw) {
 
 		Client *c, *focused = client_focus_top(m);
 		wl_list_for_each(c, &server.clients, link) {
-			if (c->mon != m || c->is_logic_hide || !(c->tags & tag_bit))
+			if (c->mon != m || !(c->tags & tag_bit))
 				continue;
 			if (c == focused)
 				focused_client = 1;
