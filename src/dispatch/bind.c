@@ -462,28 +462,27 @@ void over_circle(const Arg *arg) {
 	if (!server.selected_monitor || server.grab_client)
 		return;
 
+	bool next = arg->i == OVERCIRCLE_NEXT || arg->i == OVERCIRCLE_CURRENT_NEXT;
+	bool current =
+		arg->i == OVERCIRCLE_CURRENT_NEXT || arg->i == OVERCIRCLE_CURRENT_PREV;
 	Client *sel = arg->tc ? arg->tc : server.selected_monitor->sel;
 
 	if (server.selected_monitor->isoverview &&
 		!server.selected_monitor->is_jump_mode &&
 		!server.selected_monitor->ov_normal_mode && sel) {
 		server.selected_monitor->ov_tab_layout = 1;
-		Client *tc = arg->i == NEXT ? get_next_stack_client(sel, false)
-									: get_next_stack_client(sel, true);
+		Client *tc = next ? get_next_stack_client(sel, false)
+						  : get_next_stack_client(sel, true);
 		if (!tc)
 			return;
 
 		client_focus(tc, 1);
-
-		/* Rearranges after focus change so the tab layout follows focus. */
 		arrange(server.selected_monitor, true, false);
 		return;
 	}
 
-	/* Entering overview: enables the centered tab layout; the rest is handled
-	 * by toggle_overview. */
 	server.selected_monitor->ov_tab_layout = 1;
-	toggle_overview(arg);
+	toggle_overview(&(Arg){.tc = arg->tc, .i = current});
 	if (!server.selected_monitor->isoverview)
 		server.selected_monitor->ov_tab_layout = 0;
 }
@@ -2205,6 +2204,11 @@ void fix_mon_tagset_from_overview(Monitor *m) {
 	}
 }
 
+static bool overview_client_on_current_tags(Client *c, bool only_current,
+											uint32_t current_tags) {
+	return !only_current || c->isglobal || (c->tags & current_tags);
+}
+
 void toggle_overview(const Arg *arg) {
 	Client *c = NULL;
 	if (!server.selected_monitor || server.grab_client)
@@ -2215,6 +2219,8 @@ void toggle_overview(const Arg *arg) {
 	server.selected_monitor->isoverview ^= 1;
 	uint32_t target = 0;
 	uint32_t visible_client_number = 0;
+	bool only_current = arg->i == 1;
+	uint32_t current_tags = 0;
 
 	if (!server.selected_monitor->isoverview) {
 		server.selected_monitor->ov_tab_layout = 0;
@@ -2223,12 +2229,16 @@ void toggle_overview(const Arg *arg) {
 	}
 
 	if (server.selected_monitor->isoverview) {
-		wl_list_for_each(c, &server.clients,
-						 link) if (c && c->mon == server.selected_monitor &&
-								   !client_is_unmanaged(c) &&
-								   !client_is_x11_popup(c) && !c->isminimized &&
-								   !c->isunglobal && !(c->tags & TAG0_MASK)) {
-			visible_client_number++;
+		current_tags =
+			server.selected_monitor->tagset[server.selected_monitor->seltags] &
+			TAGMASK;
+		wl_list_for_each(c, &server.clients, link) {
+			if (!c || c->mon != server.selected_monitor)
+				continue;
+			if (!client_is_unmanaged(c) && !client_is_x11_popup(c) &&
+				!c->isminimized && !c->isunglobal && !(c->tags & TAG0_MASK) &&
+				overview_client_on_current_tags(c, only_current, current_tags))
+				visible_client_number++;
 		}
 		if (visible_client_number > 0) {
 			server.selected_monitor->ovbk_current_tagset =
@@ -2237,7 +2247,7 @@ void toggle_overview(const Arg *arg) {
 			server.selected_monitor->ovbk_prev_tagset =
 				server.selected_monitor
 					->tagset[server.selected_monitor->seltags ^ 1];
-			target = ~0 & TAGMASK;
+			target = only_current ? current_tags : (~0 & TAGMASK);
 		} else {
 			server.selected_monitor->isoverview ^= 1;
 			server.selected_monitor->ov_tab_layout = 0;
@@ -2268,21 +2278,23 @@ void toggle_overview(const Arg *arg) {
 		}
 
 		wl_list_for_each(c, &server.clients, link) {
-			if (c && c->mon == server.selected_monitor &&
-				!client_is_unmanaged(c) && !client_is_x11_popup(c) &&
-				!c->isunglobal && !c->isminimized && !(c->tags & TAG0_MASK) &&
-				client_surface(c)->mapped) {
-				c->animation.overining = true;
-				if (!server.selected_monitor->is_jump_mode &&
-					!server.selected_monitor->ov_normal_mode)
-					/* Tab layout: skip view arrangement first; set it when the
-					 * unified rearrange runs after entering. */
-					c->animation.overview_enter_anim_set = true;
-				else
-					/* Other modes: set zoom during view arrangement. */
-					c->animation.overview_enter_anim_set = false;
-				overview_backup(c);
-			}
+			if (!c || c->mon != server.selected_monitor)
+				continue;
+			if (client_is_unmanaged(c) || client_is_x11_popup(c) ||
+				c->isunglobal || c->isminimized || (c->tags & TAG0_MASK) ||
+				!client_surface(c)->mapped ||
+				!overview_client_on_current_tags(c, only_current, current_tags))
+				continue;
+			c->animation.overining = true;
+			if (!server.selected_monitor->is_jump_mode &&
+				!server.selected_monitor->ov_normal_mode)
+				/* Tab layout: skip view arrangement first; set it when the
+				 * unified rearrange runs after entering. */
+				c->animation.overview_enter_anim_set = true;
+			else
+				/* Other modes: set zoom during view arrangement. */
+				c->animation.overview_enter_anim_set = false;
+			overview_backup(c);
 		}
 	} else {
 		server.selected_monitor->ov_normal_mode =

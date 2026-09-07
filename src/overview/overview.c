@@ -272,6 +272,8 @@ void overview_restore(Client *c, const Arg *arg) {
 	/* Swallowed/hidden windows stay as they are (not restored, not shown). */
 	if (c->is_logic_hide)
 		return;
+	if (!c->ov_card_tree && !c->overview_scene_surface)
+		return;
 
 	c->isfloating = c->overview_isfloatingbak;
 	c->isfullscreen = c->overview_isfullscreenbak;
