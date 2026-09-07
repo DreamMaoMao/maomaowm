@@ -3,6 +3,7 @@
 #include "mango/config/parse_config.h"
 #include "mango/manage/client.h"
 #include "mango/manage/monitor.h"
+#include <math.h>
 #include <stdbool.h>
 
 int compare_layout_items(const void *a, const void *b) {
@@ -84,6 +85,132 @@ bool try_place(OvPlacedRect *placed, int placed_cnt, float w, float h,
 	out->w = w;
 	out->h = h;
 	return true;
+}
+
+// Centers each packed row on the widest row's axis without creating overlaps.
+static void center_placed_rows(OvPlacedRect *placed, int n, float gap) {
+	if (n <= 1)
+		return;
+
+	int *row_of = calloc(n, sizeof(int));
+	float *row_y = calloc(n, sizeof(float));
+	int *row_order = calloc(n, sizeof(int));
+	if (!row_of || !row_y || !row_order) {
+		free(row_of);
+		free(row_y);
+		free(row_order);
+		return;
+	}
+
+	int row_cnt = 0;
+	for (int i = 0; i < n; i++) {
+		int r = -1;
+		for (int j = 0; j < row_cnt; j++) {
+			if (fabsf(placed[i].y - row_y[j]) < 0.5f) {
+				r = j;
+				break;
+			}
+		}
+		if (r < 0) {
+			r = row_cnt++;
+			row_y[r] = placed[i].y;
+		}
+		row_of[i] = r;
+	}
+
+	for (int i = 0; i < row_cnt; i++)
+		row_order[i] = i;
+	for (int i = 1; i < row_cnt; i++) {
+		int key = row_order[i];
+		int j = i - 1;
+		while (j >= 0 && row_y[row_order[j]] > row_y[key]) {
+			row_order[j + 1] = row_order[j];
+			j--;
+		}
+		row_order[j + 1] = key;
+	}
+
+	float grid_w = 0.0f;
+	for (int r = 0; r < row_cnt; r++) {
+		float left = 1e30f;
+		float right = -1e30f;
+		for (int i = 0; i < n; i++) {
+			if (row_of[i] != r)
+				continue;
+			if (placed[i].x < left)
+				left = placed[i].x;
+			float e = placed[i].x + placed[i].w;
+			if (e > right)
+				right = e;
+		}
+		float span = right - left;
+		if (span > grid_w)
+			grid_w = span;
+	}
+
+	for (int oi = 0; oi < row_cnt; oi++) {
+		int r = row_order[oi];
+		float left = 1e30f;
+		float right = -1e30f;
+		for (int i = 0; i < n; i++) {
+			if (row_of[i] != r)
+				continue;
+			if (placed[i].x < left)
+				left = placed[i].x;
+			float e = placed[i].x + placed[i].w;
+			if (e > right)
+				right = e;
+		}
+		float span = right - left;
+		float delta = grid_w * 0.5f - (left + span * 0.5f);
+		float lo = -1e30f;
+		float hi = 1e30f;
+
+		// Rows sharing a vertical band keep the gap and never swap sides.
+		for (int i = 0; i < n; i++) {
+			if (row_of[i] != r)
+				continue;
+			OvPlacedRect *a = &placed[i];
+			for (int j = 0; j < n; j++) {
+				OvPlacedRect *b = &placed[j];
+				if (row_of[j] == r)
+					continue;
+				if (!(a->y + a->h + gap <= b->y || a->y >= b->y + b->h + gap)) {
+					if (b->x < a->x) {
+						float min_delta = b->x + b->w + gap - a->x;
+						if (min_delta > lo)
+							lo = min_delta;
+					} else {
+						float max_delta = b->x - gap - a->x - a->w;
+						if (max_delta < hi)
+							hi = max_delta;
+					}
+				}
+			}
+		}
+
+		if (-left > lo)
+			lo = -left;
+		if (grid_w - right < hi)
+			hi = grid_w - right;
+
+		if (lo <= hi) {
+			if (delta < lo)
+				delta = lo;
+			if (delta > hi)
+				delta = hi;
+			if (fabsf(delta) > 0.5f) {
+				for (int i = 0; i < n; i++) {
+					if (row_of[i] == r)
+						placed[i].x += delta;
+				}
+			}
+		}
+	}
+
+	free(row_of);
+	free(row_y);
+	free(row_order);
 }
 
 void overview_scale(Monitor *m) {
@@ -179,36 +306,7 @@ void overview_scale(Monitor *m) {
 			placed[placed_cnt++] = out;
 		}
 
-		if (n > 1) {
-			float grid_box_w = 0;
-			for (int k = 0; k < n - 1; k++) {
-				float r = placed[k].x + placed[k].w;
-				if (r > grid_box_w)
-					grid_box_w = r;
-			}
-
-			OvPlacedRect *last = &placed[n - 1];
-			float max_x = grid_box_w - last->w;
-
-			if (max_x > last->x) {
-				for (int k = 0; k < n - 1; k++) {
-					OvPlacedRect p = placed[k];
-					if (!(last->y + last->h + target_gappi <= p.y ||
-						  last->y >= p.y + p.h + target_gappi)) {
-						if (p.x > last->x) {
-							float limit = p.x - target_gappi - last->w;
-							if (limit < max_x) {
-								max_x = limit;
-							}
-						}
-					}
-				}
-
-				if (max_x > last->x) {
-					last->x += (max_x - last->x) / 2.0f;
-				}
-			}
-		}
+		center_placed_rows(placed, n, (float)target_gappi);
 
 		float box_w = 0, box_h = 0;
 		for (int k = 0; k < n; k++) {
