@@ -4733,6 +4733,10 @@ FuncType parse_func_name(char *func_name, Arg *arg, char *arg_value,
 		char *values[] = {arg_value, arg_value2, arg_value3, arg_value4,
 						  arg_value5};
 		(*arg).v = combine_args_until_empty(values, 5);
+	} else if (strcmp(func_name, "spawn_tag") == 0) {
+		func = spawn_tag;
+		(*arg).v = strdup(arg_value);
+		(*arg).ui = parse_tag_mask(arg_value2);
 	} else if (strcmp(func_name, "spawn_on_empty") == 0) {
 		func = spawn_on_empty;
 		(*arg).v = strdup(arg_value);
