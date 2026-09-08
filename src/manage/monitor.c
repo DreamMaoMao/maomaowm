@@ -1340,12 +1340,12 @@ void check_vrr_enable(Client *c) {
  * Output / Monitor: output creation/destruction, mode/adaptive sync/ICC,
  * output manager protocol, rendering, and frame-skip control.
  */
-void handle_renderer_lost(struct wl_listener *listener, void *data) {
+static void do_renderer_recreate(void *data) {
 	struct wlr_renderer *old_drw = server.renderer;
 	struct wlr_allocator *old_alloc = server.allocator;
 	struct Monitor *m = NULL;
 
-	mango_error(true, WLR_DEBUG, "gpu reset");
+	server.recreate_renderer_source = NULL;
 
 	if (!(server.renderer = fx_renderer_create(server.backend)))
 		die("couldn't recreate renderer");
@@ -1366,6 +1366,16 @@ void handle_renderer_lost(struct wl_listener *listener, void *data) {
 
 	wlr_allocator_destroy(old_alloc);
 	wlr_renderer_destroy(old_drw);
+}
+
+void handle_renderer_lost(struct wl_listener *listener, void *data) {
+	if (server.recreate_renderer_source)
+		return;
+
+	mango_error(true, WLR_DEBUG, "gpu reset");
+
+	server.recreate_renderer_source = wl_event_loop_add_idle(
+		server.event_loop, do_renderer_recreate, NULL);
 }
 
 void setgaps(int32_t oh, int32_t ov, int32_t ih, int32_t iv) {
