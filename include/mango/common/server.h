@@ -194,6 +194,7 @@ struct MangoServer {
 	struct wl_listener cursor_motion_listener;
 	struct wl_listener cursor_motion_absolute_listener;
 	struct wl_listener gpu_reset_listener;
+	struct wl_event_source *recreate_renderer_source;
 	struct wl_listener layout_change_listener;
 	struct wl_listener new_idle_inhibitor_listener;
 	struct wl_listener new_input_device_listener;
