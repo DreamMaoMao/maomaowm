@@ -1046,7 +1046,7 @@ void check_size_per_valid(Client *c) {
 }
 
 bool special_keep_bg_client(Monitor *m, Client *c) {
-	return is_special_active(m) && !c->is_logic_hide && !c->isminimized &&
+	return is_special_active(m) && !c->isminimized &&
 		   ((m->pertag->prevtag > 0 &&
 			 (c->tags & (1 << (m->pertag->prevtag - 1)))) ||
 			(c->tags & (m->tagset[m->seltags ^ 1] & ~TAG0_MASK)));
@@ -1160,7 +1160,6 @@ void pre_calculate_before_arrange(Monitor *m, bool want_animation,
 	}
 
 	wl_list_for_each(c, &server.clients, link) {
-
 		if (from_view && (c->isglobal || c->isunglobal)) {
 			set_size_per(m, c);
 		}
@@ -1333,8 +1332,7 @@ void tag_gather_apply(Monitor *m) {
 
 	// collect occupied tags on this monitor.
 	wl_list_for_each(c, &server.clients, link) {
-		if (c->mon == m && !c->iskilling && !c->is_logic_hide &&
-			!(c->tags & TAG0_MASK))
+		if (c->mon == m && !c->iskilling && !(c->tags & TAG0_MASK))
 			occupied |= c->tags & server.tagmask;
 	}
 	// the current view counts as occupied even when empty.
@@ -1356,8 +1354,7 @@ void tag_gather_apply(Monitor *m) {
 
 	// remap client tags.
 	wl_list_for_each(c, &server.clients, link) {
-		if (c->mon != m || c->iskilling || c->is_logic_hide ||
-			(c->tags & TAG0_MASK))
+		if (c->mon != m || c->iskilling || (c->tags & TAG0_MASK))
 			continue;
 		c->tags = tag_remap_mask(c->tags, map);
 	}

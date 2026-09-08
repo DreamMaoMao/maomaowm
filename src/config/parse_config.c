@@ -4441,8 +4441,6 @@ void parse_tagrule(Monitor *m) {
 	// Set defaults for every tag.
 	for (i = 0; i <= config.tag_num; i++)
 		tag_slot_set_defaults(m, i);
-	// dedicated state slot for the all-tags view
-	tag_slot_set_defaults(m, PERTAG_ALL_TAGS_IDX);
 
 	for (i = 0; i < config.tag_rules_count; i++) {
 		const ConfigTagRule *tr = &config.tag_rules[i];

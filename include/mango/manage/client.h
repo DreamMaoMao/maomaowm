@@ -47,13 +47,12 @@ enum { UP, DOWN, LEFT, RIGHT, UNDIR }; /* smartmovewin */
 	(A && !(A)->isfloating && !(A)->isminimized && !(A)->iskilling &&          \
 	 !(A)->isunglobal)
 #define VISIBLEON(C, M)                                                        \
-	((C) && (M) && (C)->mon == (M) && !(C)->is_logic_hide &&                   \
-	 !(C)->isminimized &&                                                      \
+	((C) && (M) && (C)->mon == (M) && !(C)->isminimized &&                     \
 	 (((C)->tags & (M)->tagset[(M)->seltags] || (C)->isglobal ||               \
 	   (C)->isunglobal)))
 #define TAGMATCH(C, M)                                                         \
-	((C) && (M) && (C)->mon == (M) && !(C)->is_logic_hide &&                   \
-	 !(C)->isminimized && (((C)->tags & (M)->tagset[(M)->seltags])))
+	((C) && (M) && (C)->mon == (M) && !(C)->isminimized &&                     \
+	 (((C)->tags & (M)->tagset[(M)->seltags])))
 #define ISFULLSCREEN(A)                                                        \
 	((A)->isfullscreen || (A)->ismaximizescreen ||                             \
 	 (A)->overview_ismaximizescreenbak || (A)->overview_isfullscreenbak)
@@ -221,13 +220,15 @@ struct Client {
 	Client *group_prev;
 	Client *group_next;
 	bool isgroupfocusing;
-	bool is_logic_hide;
 };
 
 void client_update_geometry(Client *c);
 void client_init_xwayland(Client *c);
 bool client_init_unmanaged(Client *c);
 void client_apply_xwayland(Client *c);
+void client_park(Client *c);
+void client_unpark(Client *c, Client *anchor);
+bool client_is_parked(Client *c);
 void apply_rule_properties(Client *c, const ConfigWinRule *r);
 bool is_window_rule_matches(const ConfigWinRule *r, const char *appid,
 							const char *title);

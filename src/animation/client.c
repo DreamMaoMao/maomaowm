@@ -390,17 +390,12 @@ void client_draw_groupbar(Client *c, struct ivec2 offsets) {
 	if (!c || !c->group_bar)
 		return;
 
-	if (!c->group_next && !c->group_prev &&
-		c->group_bar->scene_buffer->node.enabled) {
-		wlr_scene_node_set_enabled(&c->group_bar->scene_buffer->node, false);
+	if (!c->group_next && !c->group_prev) {
+		if (c->group_bar->scene_buffer->node.enabled)
+			wlr_scene_node_set_enabled(&c->group_bar->scene_buffer->node,
+									   false);
 		return;
 	}
-
-	if (c->is_logic_hide)
-		return;
-
-	if (!c->group_next && !c->group_prev)
-		return;
 
 	Client *head = c;
 	while (head->group_prev)
@@ -721,7 +716,6 @@ struct ivec2 clip_to_hide(Client *c, struct wlr_box *clip_box,
 		wlr_scene_node_set_enabled(&c->scene->node, false);
 	} else if (c->is_clip_to_hide && VISIBLEON(c, c->mon)) {
 		c->is_clip_to_hide = false;
-		c->is_logic_hide = false;
 		wlr_scene_node_set_enabled(&c->scene->node, true);
 	}
 

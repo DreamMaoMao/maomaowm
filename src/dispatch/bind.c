@@ -48,7 +48,7 @@ void bind_to_view(const Arg *arg) {
 		if (server.selected_monitor->pertag->prevtag)
 			target = 1 << (server.selected_monitor->pertag->prevtag - 1);
 		else
-			// prevtag==0: previous view was all-tags or special,
+			// prevtag==0: previous view was the special workspace,
 			// decide by the other tagset
 			target = (server.selected_monitor
 						  ->tagset[server.selected_monitor->seltags ^ 1] &
@@ -335,7 +335,11 @@ void group_leave(const Arg *arg) {
 	client_group_detach(tc);
 
 	tc->isgroupfocusing = false;
-	tc->is_logic_hide = false;
+	tc->mon = rc->mon;
+	client_unpark(tc, rc);
+	/* rc stays focused: put tc right behind it in the focus stack. */
+	wl_list_remove(&tc->flink);
+	wl_list_insert(rc->flink.next, &tc->flink);
 
 	if (!rc->group_prev && !rc->group_next) {
 		rc->isgroupfocusing = false;

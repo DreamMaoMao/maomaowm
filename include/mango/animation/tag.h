@@ -2,7 +2,7 @@
 #define __ANIMATION_TAG_H__ 1
 
 #include "mango/common/types.h"
-
+#include <stdbool.h>
 void set_tagin_animation(Monitor *m, Client *c);
 void set_arrange_visible(Monitor *m, Client *c, bool want_animation);
 void set_tagout_animation(Monitor *m, Client *c);

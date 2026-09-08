@@ -21,8 +21,7 @@
 	 A->y + A->height <= M->m.y + M->m.height)
 
 #ifndef PERTAG_SLOTS
-#define PERTAG_SLOTS (tag_num_MAX + 2)
-#define PERTAG_ALL_TAGS_IDX (tag_num_MAX + 1)
+#define PERTAG_SLOTS (tag_num_MAX + 1)
 #endif
 
 struct Monitor {

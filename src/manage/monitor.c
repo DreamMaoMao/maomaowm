@@ -48,11 +48,11 @@ bool is_special_active(const Monitor *m) {
 uint32_t get_mon_curtag(const Monitor *m) {
 	if (!m || !m->pertag)
 		return 0;
-	// special workspace uses slot 0; all-tags view (curtag==0) uses its own
-	// slot
+	// special workspace uses slot 0; all-tags is an ordinary multi-tag view
+	// and follows its first tag
 	if (is_special_active(m))
 		return 0;
-	return m->pertag->curtag ? m->pertag->curtag : PERTAG_ALL_TAGS_IDX;
+	return m->pertag->curtag ? m->pertag->curtag : 1;
 }
 
 // true if m still has a live (not minimized/destroyed) special window
@@ -145,8 +145,7 @@ uint32_t get_tag_status(uint32_t tag, Monitor *m) {
 	Client *c = NULL;
 	uint32_t status = 0;
 	wl_list_for_each(c, &server.clients, link) {
-		if (c->mon == m && !c->is_logic_hide &&
-			c->tags & 1 << (tag - 1) & TAGMASK) {
+		if (c->mon == m && c->tags & 1 << (tag - 1) & TAGMASK) {
 			if (c->isurgent) {
 				status = 2;
 				break;
@@ -1266,9 +1265,6 @@ void handle_output_frame(struct wl_listener *listener, void *data) {
 	}
 
 	wl_list_for_each_safe(c, tmp, &server.fadeout_clients, fadeout_link) {
-		if (c->is_logic_hide)
-			continue;
-
 		need_more_frames = client_draw_fadeout_frame(c) || need_more_frames;
 	}
 
@@ -1277,9 +1273,6 @@ void handle_output_frame(struct wl_listener *listener, void *data) {
 	}
 
 	wl_list_for_each(c, &server.clients, link) {
-		if (c->is_logic_hide)
-			continue;
-
 		need_more_frames = client_draw_frame(c) || need_more_frames;
 
 		if (!c->force_render && c->configure_serial &&

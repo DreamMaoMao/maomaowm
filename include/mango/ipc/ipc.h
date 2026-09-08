@@ -3,6 +3,7 @@
 
 #include "mango/common/types.h"
 #include <cjson/cJSON.h>
+#include <stdbool.h>
 #include <stdint.h>
 #include <wayland-util.h>
 

@@ -201,10 +201,6 @@ void overview_card_set_corner_radii(Client *c, struct fx_corner_radii corners) {
 void overview_backup_surface(Client *c) {
 	if (c->ov_card_tree)
 		return;
-	/* A swallowed/hidden window is treated as fully gone: no card is created
-	 * for it and its hidden state is not reset. */
-	if (c->is_logic_hide)
-		return;
 	if (!client_surface(c) || !client_surface(c)->mapped)
 		return;
 
@@ -214,7 +210,6 @@ void overview_backup_surface(Client *c) {
 
 	// In overview every tag window must show its card and must not be disabled
 	// by the subtree hiding logic.
-	c->is_logic_hide = false;
 	c->is_clip_to_hide = false;
 	wlr_scene_node_set_enabled(&c->scene->node, true);
 
@@ -269,10 +264,6 @@ void overview_backup(Client *c) {
 }
 // Restores window state when switching back from overview to the normal view.
 void overview_restore(Client *c, const Arg *arg) {
-	/* Swallowed/hidden windows stay as they are (not restored, not shown). */
-	if (c->is_logic_hide)
-		return;
-
 	c->isfloating = c->overview_isfloatingbak;
 	c->isfullscreen = c->overview_isfullscreenbak;
 	c->ismaximizescreen = c->overview_ismaximizescreenbak;
