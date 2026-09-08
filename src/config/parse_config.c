@@ -2432,6 +2432,16 @@ void free_circle_layout(Config *config) {
 	config->circle_layout_count = 0; // Resets the count.
 }
 
+static void apply_explicit_xcursor_env(void) {
+	for (int32_t i = 0; i < config.env_count; i++) {
+		if (config.env[i]->type &&
+			(strcmp(config.env[i]->type, "XCURSOR_SIZE") == 0 ||
+			 strcmp(config.env[i]->type, "XCURSOR_THEME") == 0)) {
+			setenv(config.env[i]->type, config.env[i]->value, 1);
+		}
+	}
+}
+
 void set_xcursor_env() {
 	if (config.cursor_size > 0) {
 		char size_str[16];
@@ -2444,6 +2454,10 @@ void set_xcursor_env() {
 	if (config.cursor_theme) {
 		setenv("XCURSOR_THEME", config.cursor_theme, 1);
 	}
+
+	/* Explicit env=XCURSOR_SIZE/XCURSOR_THEME entries take precedence over
+	 * the values derived from cursor_size/cursor_theme above. */
+	apply_explicit_xcursor_env();
 }
 
 void reapply_rootbg(void) {
