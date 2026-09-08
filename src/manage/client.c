@@ -1671,9 +1671,12 @@ void client_apply_xwayland(Client *c) {
 	if (client_is_x11(c)) {
 #ifdef XWAYLAND
 		/* c->mon is only determined after applyrules/setmon; apply XWayland
-		 * scaling here. */
+		 * scaling here. overview_backup_geom is snapshotted from the logical
+		 * geometry in handle_client_map before any layout runs; do not
+		 * overwrite it with transient arranged geometry here, otherwise X11
+		 * windows mapped while in overview, and terminals restored after a
+		 * swallowed X11 window closes, keep a stale tiny overview card. */
 		xwayland_apply_scale(c);
-		c->overview_backup_geom = c->geom;
 #endif
 	}
 }
@@ -1871,8 +1874,13 @@ handle_client_map(struct wl_listener *listener, void *data) {
 
 	client_init_xwayland(c);
 
-	if (!client_is_x11(c))
-		client_get_geometry(c, &c->geom);
+#ifdef XWAYLAND
+	if (client_is_x11(c))
+		/* Resolve the XWayland scale before reading the geometry, otherwise
+		 * client_get_geometry returns physical sizes. */
+		xwayland_apply_scale(c);
+#endif
+	client_get_geometry(c, &c->geom);
 
 	if (client_is_x11(c))
 		init_client_properties(c);
@@ -1890,11 +1898,9 @@ handle_client_map(struct wl_listener *listener, void *data) {
 	}
 
 	// init client geom
-	if (!client_is_x11(c)) {
-		c->geom.width += 2 * c->bw;
-		c->geom.height += 2 * c->bw;
-		c->overview_backup_geom = c->geom;
-	}
+	c->geom.width += 2 * c->bw;
+	c->geom.height += 2 * c->bw;
+	c->overview_backup_geom = c->geom;
 
 	struct wlr_ext_foreign_toplevel_handle_v1_state foreign_toplevel_state = {
 		.app_id = client_get_appid(c),
