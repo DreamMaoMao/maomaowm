@@ -377,6 +377,7 @@ static void swipe_drive_apply_pan(Monitor *m, double offset) {
 
 		wlr_scene_node_set_position(&c->scene->node, box.x, box.y);
 		c->animation.current = box;
+		c->current = box;
 		client_apply_clip(c, 1.0f);
 	}
 
