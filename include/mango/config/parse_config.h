@@ -337,6 +337,10 @@ typedef struct {
 	int32_t drag_tile_to_tile;
 	int32_t drag_tile_small;
 	uint32_t swipe_min_threshold;
+	int32_t gesture_live;
+	uint32_t gesture_swipe_distance;
+	double gesture_swipe_cancel_ratio;
+	double gesture_swipe_min_speed_to_force;
 	float focused_opacity;
 	float unfocused_opacity;
 	float *scroller_proportion_preset;

@@ -40,9 +40,12 @@ void client_set_drop_area(Client *c);
 
 /* ---------- central rendering entry point ---------- */
 void client_apply_clip(Client *c, float factor);
+void client_animation_set_progress(Client *c, double p);
+void client_animation_resume(Client *c, double remaining);
 void fadeout_client_animation_next_tick(Client *c);
 void client_animation_next_tick(Client *c);
 void init_fadeout_client(Client *c);
+bool client_animations_enabled(const Client *c);
 
 /* Applies the final window state when animation is disabled: position,
  * clipping/visibility, and geometry state are synchronized. */

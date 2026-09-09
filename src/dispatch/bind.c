@@ -2099,6 +2099,14 @@ void view_to_right_have_client(const Arg *arg) {
 	view_shift_tag_have_client(arg, 1);
 }
 
+void viewprev_have_client(const Arg *arg) {
+	view_shift_tag_have_client(arg, -1);
+}
+
+void viewnext_have_client(const Arg *arg) {
+	view_shift_tag_have_client(arg, 1);
+}
+
 void view_cross_monitor(const Arg *arg) {
 	if (!server.selected_monitor)
 		return;

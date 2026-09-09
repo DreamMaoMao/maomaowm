@@ -142,6 +142,9 @@ struct MangoServer {
 	int32_t axis_apply_dir;
 	int32_t scroller_focus_lock;
 
+	struct Monitor *gesture_drive_mon;
+	bool gesture_drive_active;
+
 	uint32_t swipe_fingers;
 	double swipe_dx;
 	double swipe_dy;

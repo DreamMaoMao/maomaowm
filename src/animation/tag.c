@@ -69,7 +69,7 @@ void set_arrange_visible(Monitor *m, Client *c, bool want_animation) {
 		c->animation.tagouting = false;
 		c->animation.tagouted = false;
 		client_raise_group(c);
-		if (want_animation && config.animations) {
+		if (want_animation && client_animations_enabled(c)) {
 			c->animation.tagining = true;
 			c->animainit_geom = c->geom;
 			c->animainit_geom.y = c->mon->m.y - c->geom.height;
@@ -83,7 +83,7 @@ void set_arrange_visible(Monitor *m, Client *c, bool want_animation) {
 
 	if (!was_enabled && !c->animation.tag_from_rule && want_animation &&
 		m->pertag->prevtag != 0 && m->pertag->curtag != 0 &&
-		config.animations) {
+		client_animations_enabled(c)) {
 		c->animation.tagining = true;
 		set_tagin_animation(m, c);
 	} else {
@@ -149,8 +149,8 @@ void set_arrange_hidden(Monitor *m, Client *c, bool want_animation) {
 	/* Special workspace windows should animate out or hide when special
 	 * workspace is not active */
 	if (c->tags & TAG0_MASK) {
-		if (want_animation && config.animations && !c->animation.tagouted &&
-			c->scene->node.enabled) {
+		if (want_animation && client_animations_enabled(c) &&
+			!c->animation.tagouted && c->scene->node.enabled) {
 			c->animation.tagouting = true;
 			c->animation.tagining = false;
 			c->pending = c->geom;
@@ -170,7 +170,7 @@ void set_arrange_hidden(Monitor *m, Client *c, bool want_animation) {
 
 	if ((c->tags & (1 << (m->pertag->prevtag - 1))) &&
 		m->pertag->prevtag != 0 && m->pertag->curtag != 0 &&
-		config.animations) {
+		client_animations_enabled(c)) {
 		c->animation.tagouting = true;
 		c->animation.tagining = false;
 		set_tagout_animation(m, c);
