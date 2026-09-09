@@ -29,6 +29,8 @@ void focus_window_or_workspace(const Arg *arg);
 void group_join(const Arg *arg);
 void group_leave(const Arg *arg);
 void toggle_overview(const Arg *arg);
+void enter_overview(const Arg *arg);
+void leave_overview(const Arg *arg);
 void switcher(const Arg *arg);
 void toggle_hdr(const Arg *arg);
 void toggle_jump(const Arg *arg);

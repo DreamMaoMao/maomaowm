@@ -167,6 +167,18 @@ static bool swipe_func_drivable(void (*func)(const Arg *), const Arg *arg,
 		return m->isoverview ? motion == SWIPE_DOWN : motion == SWIPE_UP;
 	}
 
+	if (func == enter_overview) {
+		if (motion != SWIPE_UP && motion != SWIPE_DOWN)
+			return false;
+		return !m->isoverview;
+	}
+
+	if (func == leave_overview) {
+		if (motion != SWIPE_UP && motion != SWIPE_DOWN)
+			return false;
+		return m->isoverview;
+	}
+
 	return false;
 }
 
@@ -458,6 +470,8 @@ static bool swipe_drive_begin(uint32_t fingers) {
 		mango_error(true, WLR_DEBUG,
 					"swipe drive: %s fired but produced no transition\n",
 					binding->func == toggle_overview   ? "toggle_overview"
+					: binding->func == enter_overview  ? "enter_overview"
+					: binding->func == leave_overview  ? "leave_overview"
 					: binding->func == focus_direction ? "focus_direction"
 													   : "view switch");
 		return true; /* command had no effect (edge, empty tag, ...) */
@@ -497,6 +511,12 @@ static bool swipe_drive_fire_opposite(void) {
 		swipe_drive.arg = a;
 	} else if (swipe_drive.func == toggle_overview) {
 		toggle_overview(&swipe_drive.arg);
+	} else if (swipe_drive.func == enter_overview) {
+		leave_overview(&swipe_drive.arg);
+		swipe_drive.func = leave_overview;
+	} else if (swipe_drive.func == leave_overview) {
+		enter_overview(&swipe_drive.arg);
+		swipe_drive.func = enter_overview;
 	} else {
 		return false;
 	}

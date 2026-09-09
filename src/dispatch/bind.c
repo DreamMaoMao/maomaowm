@@ -2217,24 +2217,22 @@ void fix_mon_tagset_from_overview(Monitor *m) {
 	}
 }
 
-void toggle_overview(const Arg *arg) {
+/* Enter or leave overview mode on the selected monitor. */
+static void set_overview(const Arg *arg, bool enter) {
 	Client *c = NULL;
-	if (!server.selected_monitor || server.grab_client)
-		return;
-
 	Client *sel = arg->tc ? arg->tc : server.selected_monitor->sel;
-
-	server.selected_monitor->isoverview ^= 1;
 	uint32_t target = 0;
 	uint32_t visible_client_number = 0;
 
-	if (!server.selected_monitor->isoverview) {
+	server.selected_monitor->isoverview = enter;
+
+	if (!enter) {
 		server.selected_monitor->ov_tab_layout = 0;
 		if (server.selected_monitor->is_jump_mode)
 			finish_jump_mode(server.selected_monitor);
 	}
 
-	if (server.selected_monitor->isoverview) {
+	if (enter) {
 		wl_list_for_each(c, &server.clients,
 						 link) if (c && c->mon == server.selected_monitor &&
 								   !client_is_unmanaged(c) &&
@@ -2251,12 +2249,11 @@ void toggle_overview(const Arg *arg) {
 					->tagset[server.selected_monitor->seltags ^ 1];
 			target = ~0 & TAGMASK;
 		} else {
-			server.selected_monitor->isoverview ^= 1;
+			server.selected_monitor->isoverview = false;
 			server.selected_monitor->ov_tab_layout = 0;
 			return;
 		}
-	} else if (!server.selected_monitor->isoverview && sel &&
-			   (sel->tags & TAGMASK) != 0) {
+	} else if (sel && (sel->tags & TAGMASK) != 0) {
 		target = get_tags_first_tag(sel->tags);
 	} else {
 		target =
@@ -2269,7 +2266,7 @@ void toggle_overview(const Arg *arg) {
 			target = 1;
 	}
 
-	if (server.selected_monitor->isoverview) {
+	if (enter) {
 		wlr_seat_pointer_clear_focus(server.seat);
 
 		if (server.cursor_hidden) {
@@ -2315,8 +2312,7 @@ void toggle_overview(const Arg *arg) {
 	client_switch_view(&(Arg){.ui = target}, false);
 
 	/* Tab layout: rearrange after entering. */
-	if (server.selected_monitor->isoverview &&
-		!server.selected_monitor->is_jump_mode &&
+	if (enter && !server.selected_monitor->is_jump_mode &&
 		!server.selected_monitor->ov_normal_mode) {
 
 		Client *cc = NULL;
@@ -2332,11 +2328,34 @@ void toggle_overview(const Arg *arg) {
 	fix_mon_tagset_from_overview(server.selected_monitor);
 	refresh_monitors_workspaces_status(server.selected_monitor);
 
-	if (!server.selected_monitor->isoverview && sel && (sel->tags & target)) {
+	if (!enter && sel && (sel->tags & target)) {
 		client_focus(sel, 1);
 	}
 
 	return;
+}
+
+void toggle_overview(const Arg *arg) {
+	if (!server.selected_monitor || server.grab_client)
+		return;
+
+	set_overview(arg, !server.selected_monitor->isoverview);
+}
+
+void enter_overview(const Arg *arg) {
+	if (!server.selected_monitor || server.grab_client ||
+		server.selected_monitor->isoverview)
+		return;
+
+	set_overview(arg, true);
+}
+
+void leave_overview(const Arg *arg) {
+	if (!server.selected_monitor || server.grab_client ||
+		!server.selected_monitor->isoverview)
+		return;
+
+	set_overview(arg, false);
 }
 
 void toggle_jump(const Arg *arg) {

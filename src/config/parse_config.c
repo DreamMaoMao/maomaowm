@@ -4468,6 +4468,10 @@ FuncType parse_func_name(char *func_name, Arg *arg, char *arg_value,
 		(*arg).v = has_name ? strdup(arg_value2) : NULL;
 	} else if (strcmp(func_name, "toggleoverview") == 0) {
 		func = toggle_overview;
+	} else if (strcmp(func_name, "enteroverview") == 0) {
+		func = enter_overview;
+	} else if (strcmp(func_name, "leaveoverview") == 0) {
+		func = leave_overview;
 	} else if (strcmp(func_name, "togglejump") == 0) {
 		func = toggle_jump;
 	} else if (strcmp(func_name, "set_proportion") == 0) {
