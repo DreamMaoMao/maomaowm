@@ -33,21 +33,10 @@ struct LastCursor {
 };
 
 void toggle_hotarea(int32_t x_root, int32_t y_root);
-bool pointer_is_trackpad(struct wlr_pointer *pointer);
 void // Mouse scroll wheel event
 handle_cursor_axis(struct wl_listener *listener, void *data);
-int32_t pointer_process_swipe_end(struct wlr_pointer_swipe_end_event *event);
-void handle_cursor_swipe_begin(struct wl_listener *listener, void *data);
-void handle_cursor_swipe_update(struct wl_listener *listener, void *data);
-void handle_cursor_swipe_end(struct wl_listener *listener, void *data);
-void handle_cursor_pinch_begin(struct wl_listener *listener, void *data);
-void handle_cursor_pinch_update(struct wl_listener *listener, void *data);
-void handle_cursor_pinch_end(struct wl_listener *listener, void *data);
-void handle_cursor_hold_begin(struct wl_listener *listener, void *data);
-void handle_cursor_hold_end(struct wl_listener *listener, void *data);
 Client *find_closest_tiled_client(Client *c);
 void pointer_place_drag_tile(Client *c);
-bool check_trackpad_disabled(struct wlr_pointer *pointer);
 void // Mouse button event
 handle_cursor_button(struct wl_listener *listener, void *data);
 bool pointer_process_button_press(struct wlr_pointer_button_event *event);
