@@ -1838,7 +1838,6 @@ void init_client_properties(Client *c) {
 	c->has_border_color_override = false;
 	c->has_borderpx_override = false;
 	c->has_border_radius_override = false;
-	c->is_logic_hide = false;
 	c->isgroupfocusing = false;
 	c->group_prev = NULL;
 	c->group_next = NULL;

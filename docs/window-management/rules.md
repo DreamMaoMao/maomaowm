@@ -79,7 +79,7 @@ windowrule=Parameter:Values,Parameter:Values,appid:Values,title:Values
 
 Window rules support assigning a [border texture](/docs/visuals/effects#border-textures) with `active_texture` and `inactive_texture`, using the same format as the global settings.
 
-> **Note:** Texture values contain commas, so they absorb the rest of the rule. A texture option must be the last item in the rule, and only one texture option per rule is allowed — use two separate rules to set both an active and an inactive texture.
+> **Note:** in any window rule, the texture option must be the *last* option, and only one can be used. to set multiple textures, use multiple window rules.
 
 ```ini
 windowrule=appid:foot,active_texture_top:solid_color,FFAA00FF
