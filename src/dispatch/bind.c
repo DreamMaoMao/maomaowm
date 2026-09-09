@@ -2518,6 +2518,211 @@ void scroller_stack(const Arg *arg) {
 	scroller_apply_stack(c, target_client, arg->i);
 }
 
+static int parse_texture_slot(const char *name) {
+	if (name && strcmp(name, "mid") == 0)
+		return 1;
+	if (name && strcmp(name, "bot") == 0)
+		return 2;
+	return 0;
+}
+
+static bool is_texture_slot_name(const char *name) {
+	return name &&
+		(strcmp(name, "top") == 0 || strcmp(name, "mid") == 0 ||
+		 strcmp(name, "bot") == 0);
+}
+
+static int parse_texture_slot_args(const Arg *arg, int *slot,
+								   const char **opts) {
+	*slot = 0;
+	*opts = arg->v2;
+	if (!arg->v2 || !arg->v3 || strcmp(arg->v3, "0") == 0)
+		return 0;
+	if (!is_texture_slot_name(arg->v2))
+		return 0;
+	*slot = parse_texture_slot(arg->v2);
+	*opts = arg->v3;
+	return 1;
+}
+
+void setactivetexture(const Arg *arg) {
+	Client *c = arg->tc						  ? arg->tc
+				: server.selected_monitor ? server.selected_monitor->sel
+										  : NULL;
+	int slot;
+	const char *opts;
+	parse_texture_slot_args(arg, &slot, &opts);
+	if (c)
+		client_texture_from_string(c, true, slot, arg->v, opts);
+	texture_collect_garbage(false);
+}
+void setinactivetexture(const Arg *arg) {
+	Client *c = arg->tc						  ? arg->tc
+				: server.selected_monitor ? server.selected_monitor->sel
+										  : NULL;
+	int slot;
+	const char *opts;
+	parse_texture_slot_args(arg, &slot, &opts);
+	if (c)
+		client_texture_from_string(c, false, slot, arg->v, opts);
+	texture_collect_garbage(false);
+}
+
+void rerender_texture(const Arg *arg) {
+	Client *c = arg->tc					  ? arg->tc
+				: server.selected_monitor ? server.selected_monitor->sel
+										  : NULL;
+	if (c) {
+		client_texture_invalidate(c);
+		texture_collect_garbage(false);
+	}
+}
+
+void set_focus_override(const Arg *arg) {
+	Client *c = arg->tc
+					? arg->tc
+					: server.selected_monitor ? server.selected_monitor->sel
+											  : NULL;
+	if (!c)
+		return;
+	int64_t color = parse_color(arg->v);
+	if (color == -1)
+		return;
+	convert_hex_to_rgba(c->focus_color_override, (uint32_t)color);
+	c->has_focus_color_override = true;
+	client_update_border_color(c);
+}
+
+enum {
+	RULE_RESTORE_PX,
+	RULE_RESTORE_RADIUS,
+	RULE_RESTORE_FOCUS_COLOR,
+	RULE_RESTORE_BORDER_COLOR,
+};
+
+static void client_rules_restore_border(Client *c, int prop) {
+	const char *appid = client_get_appid(c);
+	const char *title = client_get_title(c);
+	if (!appid)
+		appid = "broken";
+	if (!title)
+		title = "broken";
+
+	for (int i = 0; i < config.window_rules_count; i++) {
+		ConfigWinRule *r = &config.window_rules[i];
+		if (!is_window_rule_matches(r, appid, title))
+			continue;
+
+		switch (prop) {
+		case RULE_RESTORE_PX:
+			if (r->borderpx >= 0) {
+				c->borderpx_override = (uint32_t)r->borderpx;
+				c->has_borderpx_override = true;
+			}
+			break;
+		case RULE_RESTORE_RADIUS:
+			if (r->border_radius >= 0) {
+				c->border_radius_override = r->border_radius;
+				c->has_border_radius_override = true;
+			}
+			break;
+		case RULE_RESTORE_FOCUS_COLOR:
+			if (r->focus_color_override[0] || r->focus_color_override[1] ||
+				r->focus_color_override[2] || r->focus_color_override[3]) {
+				memcpy(c->focus_color_override, r->focus_color_override,
+					   sizeof(c->focus_color_override));
+				c->has_focus_color_override = true;
+			}
+			break;
+		case RULE_RESTORE_BORDER_COLOR:
+			if (r->border_color_override[0] || r->border_color_override[1] ||
+				r->border_color_override[2] || r->border_color_override[3]) {
+				memcpy(c->border_color_override, r->border_color_override,
+					   sizeof(c->border_color_override));
+				c->has_border_color_override = true;
+			}
+			break;
+		}
+	}
+}
+
+void clear_focus_override(const Arg *arg) {
+	Client *c = arg->tc
+					? arg->tc
+					: server.selected_monitor ? server.selected_monitor->sel
+											  : NULL;
+	if (!c)
+		return;
+	c->has_focus_color_override = false;
+	client_rules_restore_border(c, RULE_RESTORE_FOCUS_COLOR);
+	client_update_border_color(c);
+}
+
+void set_border_override(const Arg *arg) {
+	Client *c = arg->tc
+					? arg->tc
+					: server.selected_monitor ? server.selected_monitor->sel
+											  : NULL;
+	if (!c)
+		return;
+	int64_t color = parse_color(arg->v);
+	if (color == -1)
+		return;
+	convert_hex_to_rgba(c->border_color_override, (uint32_t)color);
+	c->has_border_color_override = true;
+	client_update_border_color(c);
+}
+
+void clear_border_override(const Arg *arg) {
+	Client *c = arg->tc
+					? arg->tc
+					: server.selected_monitor ? server.selected_monitor->sel
+											  : NULL;
+	if (!c)
+		return;
+	c->has_border_color_override = false;
+	client_rules_restore_border(c, RULE_RESTORE_BORDER_COLOR);
+	client_update_border_color(c);
+}
+
+void set_border_px(const Arg *arg) {
+	Client *c = arg->tc
+					? arg->tc
+					: server.selected_monitor ? server.selected_monitor->sel
+											  : NULL;
+	if (!c)
+		return;
+	if (arg->i < 0) {
+		c->has_borderpx_override = false;
+		client_rules_restore_border(c, RULE_RESTORE_PX);
+	} else {
+		c->borderpx_override = (uint32_t)arg->i;
+		c->has_borderpx_override = true;
+	}
+	client_texture_invalidate(c);
+	client_draw_border(c, (struct ivec2){0, 0, 0, 0});
+	arrange(c->mon, false, false);
+}
+
+void set_border_radius(const Arg *arg) {
+	Client *c = arg->tc
+					? arg->tc
+					: server.selected_monitor ? server.selected_monitor->sel
+											  : NULL;
+	if (!c)
+		return;
+	if (arg->i < 0) {
+		c->has_border_radius_override = false;
+		client_rules_restore_border(c, RULE_RESTORE_RADIUS);
+	} else {
+		c->border_radius_override = arg->i;
+		c->has_border_radius_override = true;
+	}
+	client_texture_invalidate(c);
+	client_draw_border(c, (struct ivec2){0, 0, 0, 0});
+	client_apply_clip(c, 1.0);
+}
+
 void toggle_all_floating(const Arg *arg) {
 	if (!server.selected_monitor)
 		return;

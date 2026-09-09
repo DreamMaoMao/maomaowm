@@ -4,6 +4,7 @@
 #include "mango/animation/common.h"
 #include "mango/common/types.h"
 #include "mango/config/parse_config.h"
+#include "mango/draw/texture.h"
 #include <stdint.h>
 #include <sys/types.h>
 #include <wayland-server-core.h>
@@ -66,6 +67,21 @@ struct Client {
 	Monitor *mon;
 	struct wlr_scene_tree *scene;
 	struct wlr_scene_rect *border; /* top, bottom, left, right */
+	BorderTextureKey active_textures[MANGO_TEXTURE_SLOTS];
+	BorderTextureKey inactive_textures[MANGO_TEXTURE_SLOTS];
+	struct wlr_box texture_size;
+	struct wlr_buffer *active_buf;
+	struct wlr_scene_buffer *active_texture;
+	struct wlr_buffer *inactive_buf;
+	struct wlr_scene_buffer *inactive_texture;
+	float focus_color_override[MANGO_COLOR_COMPONENTS];
+	float border_color_override[MANGO_COLOR_COMPONENTS];
+	bool has_focus_color_override;
+	bool has_border_color_override;
+	uint32_t borderpx_override;
+	bool has_borderpx_override;
+	int32_t border_radius_override;
+	bool has_border_radius_override; 
 	struct wlr_scene_rect *droparea;
 	struct wlr_scene_rect *splitindicator[4];
 	struct wlr_scene_shadow *shadow;
@@ -267,6 +283,15 @@ int32_t client_is_unmanaged(Client *c);
 void client_notify_enter(struct wlr_surface *s, struct wlr_keyboard *kb);
 void client_send_close(Client *c);
 void client_set_border_color(Client *c, const float color[4]);
+void client_clear_texture(BorderTextureKey *texture);
+void client_set_texture(Client *target, bool state, int slot,
+						const BorderTextureKey *texture_source);
+void client_current_textures(const Client *c, bool active,
+							 BorderTextureKey out[MANGO_TEXTURE_SLOTS]);
+void client_texture_invalidate(Client *c);
+void client_texture_from_string(Client *c, bool state, int slot,
+								const char *type, const char *opt);
+bool texture_no_input(struct wlr_scene_buffer *buffer, double *sx, double *sy);
 void client_set_fullscreen(Client *c, int32_t fullscreen);
 void client_set_scale(struct wlr_surface *s, float scale);
 

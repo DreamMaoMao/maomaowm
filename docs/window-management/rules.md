@@ -62,12 +62,29 @@ windowrule=Parameter:Values,Parameter:Values,appid:Values,title:Values
 | `isnoborder` | integer | `0` / `1` | Remove window border |
 | `isnoshadow` | integer | `0` / `1` | Not apply shadow |
 | `isnoradius` | integer | `0` / `1` | Not apply corner radius |
+| `focus_color` | color | `0xRRGGBBAA` | overrides the focused border color |
+| `border_color` | color | `0xRRGGBBAA` | overrides the unfocused border color |
+| `borderpx` | integer | `0-999` | overrides the border thickness (-1 to reset to default) |
+| `border_radius` | integer | `0-99` | overrides the border radius (-1 to reset to default) |
+| `active_texture(_top/_mid/_bot)` | `texture` | see [border texture](/docs/visuals/effects#border-textures) | sets the focused border texture, 3 slots are available for layering, not setting a slot sets top |
+| `inactive_texture(_top/_mid/_bot)` | `texture` | see [border texture](/docs/visuals/effects#border-textures) | sets the unfocused texture, 3 slots are available for layering, not setting a slot sets top |
 | `isnoanimation` | integer | `0` / `1` | Not apply animation |
 | `focused_opacity` | integer | `0` / `1` | Window focused opacity |
 | `unfocused_opacity` | integer | `0` / `1` | Window unfocused opacity |
 | `allow_csd` | integer | `0` / `1` | Allow client side decoration |
 
 > **Tip:** For detailed visual effects configuration, see the [Window Effects](/docs/visuals/effects) page for blur, shadows, and opacity settings.
+
+### Textures
+
+Window rules support assigning a [border texture](/docs/visuals/effects#border-textures) with `active_texture` and `inactive_texture`, using the same format as the global settings.
+
+> **Note:** in any window rule, the texture option must be the *last* option, and only one can be used. to set multiple textures, use multiple window rules.
+
+```ini
+windowrule=appid:foot,active_texture_top:solid_color,FFAA00FF
+windowrule=appid:foot,inactive_texture_bot:radial_gradient,FF0000FF|0000FFFF|1
+```
 
 ### Layout & Scroller
 

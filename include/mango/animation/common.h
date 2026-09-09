@@ -7,6 +7,7 @@
 #include <stdint.h>
 #include <wayland-server-core.h>
 #include <wlr/util/box.h>
+#include "mango/draw/texture.h"
 
 #define BAKED_POINTS_COUNT 256
 
@@ -45,9 +46,11 @@ struct mango_opacity_animation {
 	float initial_opacity;
 	uint32_t time_started;
 	uint32_t duration;
-	float current_border_color[4];
-	float target_border_color[4];
-	float initial_border_color[4];
+	float current_border_color[MANGO_COLOR_COMPONENTS];
+	float target_border_color[MANGO_COLOR_COMPONENTS];
+	float initial_border_color[MANGO_COLOR_COMPONENTS];
+	bool texture_crossfade_running;
+	bool crossfade_is_focus;
 };
 
 typedef struct {

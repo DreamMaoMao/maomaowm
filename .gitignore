@@ -2,6 +2,7 @@
 /.vscode
 /result
 /build
+/test
 /mango-wlonly
 config.h
 /mango

@@ -34,6 +34,7 @@ void client_draw_blur(Client *c, struct ivec2 clip_box);
 void client_draw_split_border(Client *c, bool hit_no_border,
 							  struct ivec2 offsets);
 void client_draw_border(Client *c, struct ivec2 offsets);
+struct wlr_buffer *texture_rerender(Client *target);
 struct ivec2 clip_to_hide(Client *c, struct wlr_box *clip_box,
 						  struct ivec2 offsets);
 void client_set_drop_area(Client *c);

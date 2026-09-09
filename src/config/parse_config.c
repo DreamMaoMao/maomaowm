@@ -21,6 +21,9 @@
 #include "mango/layout/layout.h"
 #include "mango/manage/client.h"
 #include "mango/manage/monitor.h"
+#include "mango/ipc/ipc.h"
+#include "mango/input/device.h"
+#include "mango/draw/texture.h"
 #include "mango/switcher/switcher.h"
 #include <linux/input-event-codes.h>
 #include <scenefx/types/wlr_scene.h>
@@ -361,6 +364,34 @@ void run_exec_once() {
 		spawn_shell(&arg);
 	}
 }
+
+static bool parse_texture_slot_config(BorderTextureKey slots[MANGO_TEXTURE_SLOTS],
+									  int slot, const char *key,
+									  const char *value) {
+	if (!texture_parse_value(value, &slots[slot])) {
+		mango_error(false, WLR_ERROR, "Invalid %s format: %s\n", key, value);
+		return false;
+	}
+	return true;
+}
+
+
+static char *full_rule_value(char *value, char *val, char *rule_copy) {
+	char *full_value = value + (val - rule_copy);
+	while (*full_value == ' ' || *full_value == '\t')
+		full_value++;
+	return full_value;
+}
+static bool parse_rule_texture_slot(BorderTextureKey slots[MANGO_TEXTURE_SLOTS],
+									int slot, char *value, char *val,
+									char *rule_copy, const char *key) {
+	char *full_value = full_rule_value(value, val, rule_copy);
+	if (texture_parse_value(full_value, &slots[slot]))
+		return true;
+	mango_error(false, WLR_ERROR, "Invalid %s format: %s\n", key, full_value);
+	return false;
+}
+
 bool parse_option(Config *config, char *key, char *value, int line_number) {
 	if (strcmp(key, "keymode") == 0) {
 		snprintf(config->keymode, sizeof(config->keymode), "%.27s", value);
@@ -1114,6 +1145,22 @@ bool parse_option(Config *config, char *key, char *value, int line_number) {
 		} else {
 			convert_hex_to_rgba(config->dropcolor, color);
 		}
+	} else if (strcmp(key, "active_texture_top") == 0) {
+		return parse_texture_slot_config(config->active_textures, 0, key, value);
+	} else if (strcmp(key, "active_texture_mid") == 0) {
+		return parse_texture_slot_config(config->active_textures, 1, key, value);
+	} else if (strcmp(key, "active_texture_bot") == 0) {
+		return parse_texture_slot_config(config->active_textures, 2, key, value);
+	} else if (strcmp(key, "inactive_texture_top") == 0) {
+		return parse_texture_slot_config(config->inactive_textures, 0, key, value);
+	} else if (strcmp(key, "inactive_texture_mid") == 0) {
+		return parse_texture_slot_config(config->inactive_textures, 1, key, value);
+	} else if (strcmp(key, "inactive_texture_bot") == 0) {
+		return parse_texture_slot_config(config->inactive_textures, 2, key, value);
+	} else if (strcmp(key, "active_texture") == 0) {
+		return parse_texture_slot_config(config->active_textures, 0, key, value);
+	} else if (strcmp(key, "inactive_texture") == 0) {
+		return parse_texture_slot_config(config->inactive_textures, 0, key, value);
 	} else if (strcmp(key, "splitcolor") == 0) {
 		int64_t color = parse_color(value);
 		if (color == -1) {
@@ -1520,6 +1567,8 @@ bool parse_option(Config *config, char *key, char *value, int line_number) {
 		rule->nofadein = -1;
 		rule->nofadeout = -1;
 		rule->no_force_center = -1;
+		rule->borderpx = -1;
+		rule->border_radius = -1; 
 
 		// string rule value, relay to a client property
 		rule->animation_type_open = NULL;
@@ -1544,7 +1593,10 @@ bool parse_option(Config *config, char *key, char *value, int line_number) {
 		rule->globalkeybinding = (KeyBinding){0};
 
 		bool parse_error = false;
-		char *token = strtok(value, ",");
+		char *rule_copy = strdup(value);
+		if (rule_copy == NULL)
+			return false;
+		char *token = strtok(rule_copy, ",");
 		while (token != NULL) {
 			char *colon = strchr(token, ':');
 			if (colon != NULL) {
@@ -1587,6 +1639,21 @@ bool parse_option(Config *config, char *key, char *value, int line_number) {
 					rule->height = atof(val);
 				} else if (strcmp(key, "isnoborder") == 0) {
 					rule->isnoborder = atoi(val);
+				} else if (strcmp(key, "borderpx") == 0) {
+					rule->borderpx = atoi(val);
+				} else if (strcmp(key, "border_radius") == 0) {
+					rule->border_radius = atoi(val);
+				} else if (strcmp(key, "focus_color") == 0 || strcmp(key, "border_color") == 0) {
+					int64_t color = parse_color(val);
+					if (color == -1) {
+						free(rule_copy);
+						mango_error(false, WLR_ERROR, "Invalid %s format: %s\n", key, val);
+						return false;
+					}
+					if (strcmp(key, "focus_color") == 0)
+						convert_hex_to_rgba(rule->focus_color_override, (uint32_t)color);
+					else
+					 convert_hex_to_rgba(rule->border_color_override, (uint32_t)color);
 				} else if (strcmp(key, "isnoshadow") == 0) {
 					rule->isnoshadow = atoi(val);
 				} else if (strcmp(key, "isnoradius") == 0) {
@@ -1643,6 +1710,62 @@ bool parse_option(Config *config, char *key, char *value, int line_number) {
 					rule->noswallow = atoi(val);
 				} else if (strcmp(key, "noblur") == 0) {
 					rule->noblur = atoi(val);
+				} else if (strcmp(key, "active_texture_top") == 0) {
+					if (!parse_rule_texture_slot(rule->active_textures, 0,
+												 value, val, rule_copy, key)) {
+						free(rule_copy);
+						return false;
+					}
+					break;
+				} else if (strcmp(key, "active_texture_mid") == 0) {
+					if (!parse_rule_texture_slot(rule->active_textures, 1,
+												 value, val, rule_copy, key)) {
+						free(rule_copy);
+						return false;
+					}
+					break;
+				} else if (strcmp(key, "active_texture_bot") == 0) {
+					if (!parse_rule_texture_slot(rule->active_textures, 2,
+												 value, val, rule_copy, key)) {
+						free(rule_copy);
+						return false;
+					}
+					break;
+				} else if (strcmp(key, "inactive_texture_top") == 0) {
+					if (!parse_rule_texture_slot(rule->inactive_textures, 0,
+												 value, val, rule_copy, key)) {
+						free(rule_copy);
+						return false;
+					}
+					break;
+				} else if (strcmp(key, "inactive_texture_mid") == 0) {
+					if (!parse_rule_texture_slot(rule->inactive_textures, 1,
+												 value, val, rule_copy, key)) {
+						free(rule_copy);
+						return false;
+					}
+					break;
+				} else if (strcmp(key, "inactive_texture_bot") == 0) {
+					if (!parse_rule_texture_slot(rule->inactive_textures, 2,
+												 value, val, rule_copy, key)) {
+						free(rule_copy);
+						return false;
+					}
+					break;
+				} else if (strcmp(key, "active_texture") == 0) {
+					if (!parse_rule_texture_slot(rule->active_textures, 0,
+												 value, val, rule_copy, key)) {
+						free(rule_copy);
+						return false;
+					}
+					break;
+				} else if (strcmp(key, "inactive_texture") == 0) {
+					if (!parse_rule_texture_slot(rule->inactive_textures, 0,
+												 value, val, rule_copy, key)) {
+						free(rule_copy);
+						return false;
+					}
+					break;
 				} else if (strcmp(key, "scroller_proportion") == 0) {
 					rule->scroller_proportion = atof(val);
 				} else if (strcmp(key, "isfullscreen") == 0) {
@@ -1658,12 +1781,14 @@ bool parse_option(Config *config, char *key, char *value, int line_number) {
 					rule->globalkeybinding.keysymcode =
 						parse_key(keysym_str, false);
 					if (rule->globalkeybinding.mod == UINT32_MAX) {
+						free(rule_copy);
 						return false;
 					}
 					if (rule->globalkeybinding.keysymcode.type ==
 							KEY_TYPE_SYM &&
 						rule->globalkeybinding.keysymcode.keysym ==
 							XKB_KEY_NoSymbol) {
+						free(rule_copy);
 						return false;
 					}
 				} else {
@@ -1677,6 +1802,7 @@ bool parse_option(Config *config, char *key, char *value, int line_number) {
 			}
 			token = strtok(NULL, ",");
 		}
+		free(rule_copy);
 		config->window_rules_count++;
 		return !parse_error;
 	} else if (strcmp(key, "devicerule") == 0) {
@@ -3282,6 +3408,20 @@ void free_config(void) {
 			if (rule->globalkeybinding.arg.v) {
 				free((void *)rule->globalkeybinding.arg.v);
 			}
+			for (int i = 0; i < MANGO_TEXTURE_SLOTS; i++) {
+				if (rule->active_textures[i].gradient.stops)
+					free(rule->active_textures[i].gradient.stops);
+				if (rule->inactive_textures[i].gradient.stops)
+					free(rule->inactive_textures[i].gradient.stops);
+				free(rule->active_textures[i].string);
+				free(rule->inactive_textures[i].string);
+				rule->active_textures[i].gradient.stops = NULL;
+				rule->active_textures[i].gradient.stopcount = 0;
+				rule->inactive_textures[i].gradient.stops = NULL;
+				rule->inactive_textures[i].gradient.stopcount = 0;
+				rule->active_textures[i].string = NULL;
+				rule->inactive_textures[i].string = NULL;
+			}
 		}
 		free(config.window_rules);
 		config.window_rules = NULL;
@@ -3532,6 +3672,22 @@ void free_config(void) {
 
 	// Frees circle_layout.
 	free_circle_layout(&config);
+
+	// border textures
+	for (int i = 0; i < MANGO_TEXTURE_SLOTS; i++) {
+				if (config.active_textures[i].gradient.stops)
+					free(config.active_textures[i].gradient.stops);
+				if (config.inactive_textures[i].gradient.stops)
+					free(config.inactive_textures[i].gradient.stops);
+				free(config.active_textures[i].string);
+				free(config.inactive_textures[i].string);
+				config.active_textures[i].gradient.stops = NULL;
+				config.active_textures[i].gradient.stopcount = 0;
+				config.inactive_textures[i].gradient.stops = NULL;
+				config.inactive_textures[i].gradient.stopcount = 0;
+				config.active_textures[i].string = NULL;
+				config.inactive_textures[i].string = NULL;
+			}
 
 	// Frees animation resources.
 	free_baked_points();
@@ -4514,6 +4670,7 @@ void reload_config(const Arg *arg) {
 	parse_config();
 	reset_tag(old_tag_num);
 	reset_option();
+	texture_collect_garbage(true);
 	printstatus(IPC_WATCH_ARRANGGE);
 	return;
 }
@@ -4850,6 +5007,34 @@ FuncType parse_func_name(char *func_name, Arg *arg, char *arg_value,
 	} else if (strcmp(func_name, "scroller_stack") == 0) {
 		func = scroller_stack;
 		(*arg).i = parse_direction(arg_value);
+	} else if (strcmp(func_name, "set_inactive_texture") == 0) {
+		func = setinactivetexture;
+		(*arg).v = strdup(arg_value);
+		(*arg).v2 = strdup(arg_value2);
+		(*arg).v3 = strdup(arg_value3);
+	} else if (strcmp(func_name, "set_active_texture") == 0) {
+		func = setactivetexture;
+		(*arg).v = strdup(arg_value);
+		(*arg).v2 = strdup(arg_value2);
+		(*arg).v3 = strdup(arg_value3);
+	} else if (strcmp(func_name, "rerender_texture") == 0) {
+		func = rerender_texture;
+	} else if (strcmp(func_name, "set_focus_override") == 0) {
+		func = set_focus_override;
+		(*arg).v = strdup(arg_value);
+	} else if (strcmp(func_name, "clear_focus_override") == 0) {
+		func = clear_focus_override;
+	} else if (strcmp(func_name, "set_border_override") == 0) {
+		func = set_border_override;
+		(*arg).v = strdup(arg_value);
+	} else if (strcmp(func_name, "clear_border_override") == 0) {
+		func = clear_border_override;
+	} else if (strcmp(func_name, "set_border_px") == 0) {
+		func=set_border_px;
+		(*arg).i = atoi(arg_value);
+	} else if (strcmp(func_name, "set_border_radius") == 0) {
+		func = set_border_radius;
+		(*arg).i = atoi(arg_value);
 	} else if (strcmp(func_name, "toggle_all_floating") == 0) {
 		func = toggle_all_floating;
 	} else if (strcmp(func_name, "dwindle_toggle_split_direction") == 0) {

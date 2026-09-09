@@ -80,3 +80,71 @@ focused_opacity=1.0
 # Opacity for inactive windows
 unfocused_opacity=1.0
 ```
+---
+
+## Border Textures
+> **Note:** Depending on the settings you apply, border textures can have a significant impact on mango's RAM and CPU usage, measured impact in power-user cases is a doubling of both RAM and CPU usage compared to not using the feature at all.
+
+Mango supports various ways of texturing your borders through Cairo software rendering, the following options are available:
+
+| Setting | Default | Description |
+| :--- | :--- | :--- |
+|active_texture(_top/_mid/_bot) | - | sets the active texture (type,opts) |
+|inactive_texture(_top/_mid/_bot) | - | sets the inactive texture (type,opts) |
+
+### Window rules & dispatchers
+
+Textures can be assigned per-window with window rules, or swapped at runtime with the `set_active_texture`, `set_inactive_texture`, and `rerender_texture` dispatchers.
+
+there are 6 total texture slots for each window, a top, middle and bottom slot, these are composited over top of eachother and merged together as two borders (active and inactive).
+
+you can set each slot individually, allowing you to for example have a gradient, a solid color over the whole window (for dimming) and a texture with partial transparency to show the gradient through. 
+
+the slot is entirely optional both in the settings/windowrules (just leave `_top`/`_mid`/`_bot` out), as well as in the dispatcher.
+in the case of leaving out the slot, the `top` slot is used. 
+
+for the dispatcher, slot names are `top`, `mid` and `bot`
+
+- Window-rule texture values contain commas, so they absorb the rest of the rule. They must be the **last item** in the rule, and only one texture option per rule is allowed — use two separate rules to set both an active and an inactive texture.
+- When using a dispatcher through `mmsg dispatch`, pipes (`|`) must be escaped with a backslash (`\`).
+```sh
+mmsg dispatch set_active_texture,linear_gradient,FF0000FF\|0000FFFF\|55 
+```
+
+### Renderers
+
+Multiple types of renderers are available to use:
+
+| Renderer Type | Option Format | Example | Description |
+| :--- | :--- | :--- | :--- |
+| `linear_gradient` | `RRGGBBAA|RRGGBBAA|(0.0-360.0)` | `FF0000FF|0000FFFF|45` | A linear edge-to-edge gradient between two colors, drawn at the given angle (degrees). |
+| `radial_gradient` | `RRGGBBAA|RRGGBBAA|(0.0-2.0)` | `FF0000FF|0000FFFF|1` | A radial gradient that starts at the center of the window and expands outward, scaled by the given factor. |
+| `conic_gradient` | `RRGGBBAA:(0.0-360.0)|...` | `FF0000FF:45|FF00FFFF:135|0000FFFF:225|00FF00FF:315` | A pseudo-conic gradient that cycles through any number of color stops at the given degrees. |
+| `static_image` | `/path/to/image.png` | `/home/MyUser/pictures/sky.png` | Uses the image directly as the border source, centered without resizing. |
+| `tiled_image` | `/path/to/image.png` | `/home/MyUser/pictures/checkerboard.png` | Tiles the image across the border. |
+| `fit_image` | `/path/to/image.png` | `/home/MyUser/pictures/gradient.png` | Stretches and squashes the image to fit the window. |
+| `fit_overlay` | `/path/to/image.png:(0.0-1.0)` | `/home/MyUser/pictures/overlay.png:0.5` | fits the image, does not clip to border. allows you to overlay images on your window|
+| `tile_overlay` | `/path/to/image.png:(0.0-1.0)` | `/home/MyUser/pictures/overlay.png:0.5` | tiles the image, does not clip to border. allows you to overlay images on your window|
+| `segment_image` | `/path/to/image.png` | `/home/MyUser/pictures/ninepatch.png` | Decorates the border using ninepatch-style images, allowing overlap. |
+| `segment_color` | `RRGGBBAA|RRGGBBAA|RRGGBBAA|RRGGBBAA` | `FF0000FF|00FF00FF|0000FFFF|FF00FFFF` | Sets each side of the border separately (top/right/bottom/left). |
+| `solid_color` | `RRGGBBAA` | `FFAA00FF` | A flat, solid-color border. |
+| `solid_color_noclip` | `RRGGBBAA` | `00000040` | Overlays a colored box over the entire window (use an alpha value to dim or colorize). |
+
+> **Note:** The image-based renderers (`static_image`, `tiled_image`, `fit_image`, `tile_overlay`, `fit_overlay`, `segment_image`) only support **PNG** images.
+
+### Renderer look
+
+- **`linear_gradient`** — Paints a straight band across the border so the color transitions from the first value to the second, tilted by the angle you pick (e.g. `45` blends it diagonally).
+- **`radial_gradient`** — Starts at the center of the window and fades outward, so the first color hugs the center and bleeds into the second at the edges.
+- **`conic_gradient`** — Sweeps around the border in a circle, cycling through each color stop as it goes around, letting you build rainbow-style borders from multiple stops.
+- **`static_image`** — Draws the image without scaling, so the portion of the image sitting under the border band is what shows; best large general texture images.
+- **`tiled_image`** — Repeats the image across the border like wallpaper, good for repeating patterns.
+- **`fit_image`** — Stretches the image to the full width and height of the border, so the tim of the picture is visible but gets squashed on squashed windows.
+- **`fit_overlay`** — Renders exactly like `fit_image` but multiplies the entire canvas's alpha by the second value before drawing, letting you fade a fitted image;
+- **`tile_overlay`** — Renders exactly like `tile_image` but multiplies the entire canvas's alpha by the second value before drawing, letting you fade a fitted image; unlike most renderers it keeps the center of the image instead of cutting out a border ring.
+- **`segment_image`** — Keeps the four corners of the image intact and tiles the middle of each edge, like a nine-patch Android drawable, so texture is not warped.
+- **`segment_color`** — Fills each side of the border individually (top, right, bottom, left) with its own solid color, meeting at the corners.
+- **`solid_color`** — A single flat color across the border; the alpha channel of the hex makes it translucent.
+- **`solid_color_noclip`** — Fills the whole window instead of just the border; with a translucent alpha it dims or tints everything underneath.
+
+
