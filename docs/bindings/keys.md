@@ -193,6 +193,8 @@ It is formed by tag numbers `1`–`9`, optionally combined with `|`.
 | `load_config_file` | `file path` | Load configuration from the specified file. Empty path resets to default config location. |
 | `quit` | - | Exit mangowm. |
 | `toggleoverview` | - | Toggle overview mode. |
+| `enteroverview` | - | Enter overview mode. |
+| `leaveoverview` | - | Leave overview mode. |
 | `togglejump` | - | Toggle overview with jump mode. |
 | `create_virtual_output` | - | Create a headless monitor (for VNC/Sunshine). |
 | `destroy_all_virtual_output` | - | Destroy all virtual monitors. |
