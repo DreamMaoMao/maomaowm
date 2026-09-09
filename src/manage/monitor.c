@@ -841,6 +841,11 @@ void monitor_close(Monitor *m) {
 	Client *c = NULL;
 	int32_t i = 0, nmons = wl_list_length(&server.monitors);
 
+	if (server.gesture_drive_mon == m) {
+		server.gesture_drive_active = false;
+		server.gesture_drive_mon = NULL;
+	}
+
 	if (m->isoverview) {
 		toggle_overview(&(Arg){0});
 	}

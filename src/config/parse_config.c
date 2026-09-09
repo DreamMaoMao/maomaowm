@@ -541,6 +541,14 @@ bool parse_option(Config *config, char *key, char *value, int line_number) {
 		config->drag_tile_small = atoi(value);
 	} else if (strcmp(key, "swipe_min_threshold") == 0) {
 		config->swipe_min_threshold = atoi(value);
+	} else if (strcmp(key, "gesture_live") == 0) {
+		config->gesture_live = atoi(value);
+	} else if (strcmp(key, "gesture_swipe_distance") == 0) {
+		config->gesture_swipe_distance = atoi(value);
+	} else if (strcmp(key, "gesture_swipe_cancel_ratio") == 0) {
+		config->gesture_swipe_cancel_ratio = atof(value);
+	} else if (strcmp(key, "gesture_swipe_min_speed_to_force") == 0) {
+		config->gesture_swipe_min_speed_to_force = atof(value);
 	} else if (strcmp(key, "focused_opacity") == 0) {
 		config->focused_opacity = atof(value);
 	} else if (strcmp(key, "unfocused_opacity") == 0) {
@@ -3606,6 +3614,15 @@ void override_config(void) {
 	config.trackpad_natural_scrolling =
 		CLAMP_INT(config.trackpad_natural_scrolling, 0, 1);
 	config.swipe_min_threshold = CLAMP_INT(config.swipe_min_threshold, 1, 1000);
+	config.gesture_live = CLAMP_INT(config.gesture_live, 0, 1);
+	config.gesture_swipe_distance =
+		CLAMP_INT(config.gesture_swipe_distance, 32, 4096);
+	if (config.gesture_swipe_cancel_ratio < 0.05)
+		config.gesture_swipe_cancel_ratio = 0.05;
+	if (config.gesture_swipe_cancel_ratio > 0.95)
+		config.gesture_swipe_cancel_ratio = 0.95;
+	if (config.gesture_swipe_min_speed_to_force < 0)
+		config.gesture_swipe_min_speed_to_force = 0;
 	config.mouse_natural_scrolling =
 		CLAMP_INT(config.mouse_natural_scrolling, 0, 1);
 	config.mouse_accel_profile = CLAMP_INT(config.mouse_accel_profile, 0, 2);
@@ -3773,6 +3790,10 @@ void set_value_default() {
 	config.drag_tile_small = 1;
 	config.enable_floating_snap = 0;
 	config.swipe_min_threshold = 1;
+	config.gesture_live = 1;
+	config.gesture_swipe_distance = 300;
+	config.gesture_swipe_cancel_ratio = 0.5;
+	config.gesture_swipe_min_speed_to_force = 30;
 
 	config.idleinhibit_ignore_visible = 0;
 
@@ -4620,6 +4641,12 @@ FuncType parse_func_name(char *func_name, Arg *arg, char *arg_value,
 		(*arg).ui = parse_mouse_action(arg_value);
 	} else if (strcmp(func_name, "togglemaximizescreen") == 0) {
 		func = toggle_maximize_screen;
+	} else if (strcmp(func_name, "viewprev_have_client") == 0) {
+		func = viewprev_have_client;
+		(*arg).i = atoi(arg_value);
+	} else if (strcmp(func_name, "viewnext_have_client") == 0) {
+		func = viewnext_have_client;
+		(*arg).i = atoi(arg_value);
 	} else if (strcmp(func_name, "viewtoleft_have_client") == 0) {
 		func = view_to_left_have_client;
 		(*arg).i = atoi(arg_value);

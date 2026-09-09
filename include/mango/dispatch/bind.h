@@ -44,6 +44,8 @@ void view_to_right(const Arg *arg);
 void view_insert(const Arg *arg);
 void view_to_left_have_client(const Arg *arg);
 void view_to_right_have_client(const Arg *arg);
+void viewprev_have_client(const Arg *arg);
+void viewnext_have_client(const Arg *arg);
 void view_cross_monitor(const Arg *arg);
 void toggle_floating(const Arg *arg);
 void toggle_fullscreen(const Arg *arg);

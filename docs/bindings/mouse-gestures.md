@@ -72,6 +72,25 @@ gesturebind=MODIFIERS,DIRECTION,FINGERS,COMMAND,PARAMETERS
 
 > **Info:** Gestures require proper touchpad configuration. See [Input Devices](/docs/configuration/input) for touchpad settings like `tap_to_click` and `trackpad_disable_while_typing`.
 
+### Drag previews for bound gestures
+
+`gesture_live=1` shows the transition while dragging for these gesturebind
+commands:
+
+```ini
+# right drag -> previous tag
+gesturebind=none,right,4,viewprev_have_client
+# left drag -> next tag
+gesturebind=none,left,4,viewnext_have_client
+
+# swipe up -> overview
+gesturebind=none,up,4,toggleoverview
+# swipe down -> close overview
+gesturebind=none,down,4,toggleoverview
+```
+
+Set `gesture_live=0` to disable previews and act only on release.
+
 ### Examples
 
 ```ini
@@ -81,9 +100,9 @@ gesturebind=none,right,3,focusdir,right
 gesturebind=none,up,3,focusdir,up
 gesturebind=none,down,3,focusdir,down
 
-# 4-finger: Workspace navigation
-gesturebind=none,left,4,viewtoleft_have_client
-gesturebind=none,right,4,viewtoright_have_client
+# 4-finger: Workspace navigation (right drag -> previous tag, left drag -> next)
+gesturebind=none,right,4,viewprev_have_client
+gesturebind=none,left,4,viewnext_have_client
 gesturebind=none,up,4,toggleoverview
 gesturebind=none,down,4,toggleoverview
 ```
