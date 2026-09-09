@@ -3,6 +3,7 @@
 #include "mango/config/parse_config.h"
 #include "mango/manage/client.h"
 #include "mango/manage/monitor.h"
+#include "mango/overview/overview.h"
 #include <math.h>
 #include <stdbool.h>
 
@@ -555,14 +556,7 @@ void create_jump_hints(Monitor *m) {
 				continue;
 			mango_jump_label_node_update(c->jump_label_node, label_text,
 										 m->wlr_output->scale);
-			wlr_scene_node_set_enabled(&c->jump_label_node->scene_buffer->node,
-									   true);
-			wlr_scene_node_raise_to_top(
-				&c->jump_label_node->scene_buffer->node);
-			wlr_scene_node_set_position(
-				&c->jump_label_node->scene_buffer->node,
-				c->geom.width / 2 - c->jump_label_node->logical_width / 2,
-				c->geom.height / 2 - c->jump_label_node->logical_height / 2);
+			overview_update_jump_label(c);
 			label_idx++;
 		}
 	}
