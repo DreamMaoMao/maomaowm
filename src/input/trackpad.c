@@ -334,7 +334,10 @@ static bool swipe_drive_pan_target(Monitor *m, double offset, Client **out) {
 
 	Client *c = NULL;
 	wl_list_for_each(c, &server.clients, link) {
-		if (c->mon != m || !VISIBLEON(c, m) || !ISTILED(c))
+		/* Scroller pages include maximized/fullscreen windows, which are
+		 * excluded by ISTILED; keep the drag strip consistent with scroller()
+		 * so a maximized/fullscreen page can be panned away like any other. */
+		if (c->mon != m || !VISIBLEON(c, m) || !ISSCROLLTILED(c))
 			continue;
 
 		double cx = c->geom.x + c->geom.width / 2.0;
@@ -363,7 +366,7 @@ static void swipe_drive_apply_pan(Monitor *m, double offset) {
 	bool horizontal = swipe_horizontal;
 
 	wl_list_for_each(c, &server.clients, link) {
-		if (c->mon != m || !VISIBLEON(c, m) || !ISTILED(c))
+		if (c->mon != m || !VISIBLEON(c, m) || !ISSCROLLTILED(c))
 			continue;
 
 		struct wlr_box box = c->geom;
@@ -391,7 +394,7 @@ static double swipe_drive_pan_offset(Monitor *m, double raw) {
 
 	Client *c = NULL;
 	wl_list_for_each(c, &server.clients, link) {
-		if (c->mon != m || !VISIBLEON(c, m) || !ISTILED(c))
+		if (c->mon != m || !VISIBLEON(c, m) || !ISSCROLLTILED(c))
 			continue;
 
 		double center = horizontal ? c->geom.x + c->geom.width / 2.0
@@ -623,7 +626,8 @@ static void swipe_drive_end(void) {
 				if (shift) {
 					Client *c = NULL;
 					wl_list_for_each(c, &server.clients, link) {
-						if (c->mon != m || !VISIBLEON(c, m) || !ISTILED(c))
+						if (c->mon != m || !VISIBLEON(c, m) ||
+							!ISSCROLLTILED(c))
 							continue;
 						if (swipe_horizontal)
 							c->geom.x += shift;
