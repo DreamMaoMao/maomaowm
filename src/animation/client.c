@@ -1,15 +1,15 @@
 #include "mango/animation/client.h"
-#include <stdint.h>
-#include "mango/common/server.h"
-#include "mango/layout/layout.h"
 #include "mango/animation/common.h"
-#include "mango/overview/overview.h"
-#include "mango/layout/dwindle.h"
+#include "mango/common/server.h"
 #include "mango/common/util.h"
+#include "mango/layout/dwindle.h"
+#include "mango/layout/layout.h"
 #include "mango/manage/client.h"
 #include "mango/manage/misc.h"
 #include "mango/manage/monitor.h"
+#include "mango/overview/overview.h"
 #include <scenefx/types/wlr_scene.h>
+#include <stdint.h>
 #include <wlr/types/wlr_compositor.h>
 #include <wlr/types/wlr_cursor.h>
 #include <wlr/types/wlr_seat.h>
@@ -395,17 +395,12 @@ void client_draw_groupbar(Client *c, struct ivec2 offsets) {
 	if (!c || !c->group_bar)
 		return;
 
-	if (!c->group_next && !c->group_prev &&
-		c->group_bar->scene_buffer->node.enabled) {
-		wlr_scene_node_set_enabled(&c->group_bar->scene_buffer->node, false);
+	if (!c->group_next && !c->group_prev) {
+		if (c->group_bar->scene_buffer->node.enabled)
+			wlr_scene_node_set_enabled(&c->group_bar->scene_buffer->node,
+									   false);
 		return;
 	}
-
-	if (c->is_logic_hide)
-		return;
-
-	if (!c->group_next && !c->group_prev)
-		return;
 
 	Client *head = c;
 	while (head->group_prev)
@@ -812,7 +807,6 @@ struct ivec2 clip_to_hide(Client *c, struct wlr_box *clip_box,
 		wlr_scene_node_set_enabled(&c->scene->node, false);
 	} else if (c->is_clip_to_hide && VISIBLEON(c, c->mon)) {
 		c->is_clip_to_hide = false;
-		c->is_logic_hide = false;
 		wlr_scene_node_set_enabled(&c->scene->node, true);
 	}
 

@@ -1,28 +1,27 @@
 #include "mango/dispatch/bind.h"
-#include "mango/common/server.h"
-#include "mango/manage/client.h"
-#include "mango/common/log.h"
-#include "mango/manage/monitor.h"
-#include "mango/input/pointer.h"
-#include "mango/layout/arrange.h"
-#include "mango/layout/layout.h"
-#include "mango/manage/misc.h"
 #include "mango/animation/client.h"
-#include "mango/config/parse_config.h"
-#include "mango/ipc/ipc.h"
-#include "mango/layout/scroll.h"
-#include "mango/ext-protocol/xdg-activation.h"
-#include "mango/ext-protocol/foreign-toplevel.h"
-#include "mango/layout/overview.h"
-#include "mango/ext-protocol/ext-workspace.h"
-#include "mango/overview/overview.h"
-#include "mango/layout/dwindle.h"
+#include "mango/common/log.h"
+#include "mango/common/server.h"
 #include "mango/common/util.h"
+#include "mango/config/parse_config.h"
+#include "mango/ext-protocol/ext-workspace.h"
+#include "mango/ext-protocol/foreign-toplevel.h"
+#include "mango/ext-protocol/xdg-activation.h"
 #include "mango/input/device.h"
 #include "mango/input/keyboard.h"
+#include "mango/input/pointer.h"
+#include "mango/ipc/ipc.h"
+#include "mango/layout/arrange.h"
+#include "mango/layout/dwindle.h"
+#include "mango/layout/layout.h"
+#include "mango/layout/overview.h"
+#include "mango/layout/scroll.h"
+#include "mango/manage/client.h"
+#include "mango/manage/misc.h"
+#include "mango/manage/monitor.h"
+#include "mango/overview/overview.h"
 #include <fcntl.h>
 #include <unistd.h>
-#include <wordexp.h>
 #include <wlr/backend.h>
 #include <wlr/backend/headless.h>
 #include <wlr/backend/multi.h>
@@ -34,6 +33,7 @@
 #include <wlr/types/wlr_keyboard_group.h>
 #include <wlr/types/wlr_output.h>
 #include <wlr/types/wlr_seat.h>
+#include <wordexp.h>
 
 void bind_to_view(const Arg *arg) {
 	if (!server.selected_monitor)
@@ -48,7 +48,7 @@ void bind_to_view(const Arg *arg) {
 		if (server.selected_monitor->pertag->prevtag)
 			target = 1 << (server.selected_monitor->pertag->prevtag - 1);
 		else
-			// prevtag==0: previous view was all-tags or special,
+			// prevtag==0: previous view was the special workspace,
 			// decide by the other tagset
 			target = (server.selected_monitor
 						  ->tagset[server.selected_monitor->seltags ^ 1] &
@@ -335,7 +335,11 @@ void group_leave(const Arg *arg) {
 	client_group_detach(tc);
 
 	tc->isgroupfocusing = false;
-	tc->is_logic_hide = false;
+	tc->mon = rc->mon;
+	client_unpark(tc, rc);
+	/* rc stays focused: put tc right behind it in the focus stack. */
+	wl_list_remove(&tc->flink);
+	wl_list_insert(rc->flink.next, &tc->flink);
 
 	if (!rc->group_prev && !rc->group_next) {
 		rc->isgroupfocusing = false;

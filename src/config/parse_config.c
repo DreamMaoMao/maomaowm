@@ -7,17 +7,19 @@
 #include <stdint.h>
 #include <string.h>
 
+#include "mango/animation/common.h"
 #include "mango/common/log.h"
-#include "mango/dispatch/bind.h"
 #include "mango/common/server.h"
+#include "mango/common/util.h"
+#include "mango/dispatch/bind.h"
 #include "mango/ext-protocol/hdr.h"
+#include "mango/input/device.h"
+#include "mango/input/keyboard.h"
+#include "mango/input/pointer.h"
+#include "mango/ipc/ipc.h"
 #include "mango/layout/arrange.h"
 #include "mango/layout/layout.h"
-#include "mango/animation/common.h"
 #include "mango/manage/client.h"
-#include "mango/common/util.h"
-#include "mango/input/pointer.h"
-#include "mango/input/keyboard.h"
 #include "mango/manage/monitor.h"
 #include "mango/ipc/ipc.h"
 #include "mango/input/device.h"
@@ -2618,6 +2620,16 @@ void free_circle_layout(Config *config) {
 	config->circle_layout_count = 0; // Resets the count.
 }
 
+static void apply_explicit_xcursor_env(void) {
+	for (int32_t i = 0; i < config.env_count; i++) {
+		if (config.env[i]->type &&
+			(strcmp(config.env[i]->type, "XCURSOR_SIZE") == 0 ||
+			 strcmp(config.env[i]->type, "XCURSOR_THEME") == 0)) {
+			setenv(config.env[i]->type, config.env[i]->value, 1);
+		}
+	}
+}
+
 void set_xcursor_env() {
 	if (config.cursor_size > 0) {
 		char size_str[16];
@@ -2630,6 +2642,10 @@ void set_xcursor_env() {
 	if (config.cursor_theme) {
 		setenv("XCURSOR_THEME", config.cursor_theme, 1);
 	}
+
+	/* Explicit env=XCURSOR_SIZE/XCURSOR_THEME entries take precedence over
+	 * the values derived from cursor_size/cursor_theme above. */
+	apply_explicit_xcursor_env();
 }
 
 void reapply_rootbg(void) {
@@ -4595,8 +4611,6 @@ void parse_tagrule(Monitor *m) {
 	// Set defaults for every tag.
 	for (i = 0; i <= config.tag_num; i++)
 		tag_slot_set_defaults(m, i);
-	// dedicated state slot for the all-tags view
-	tag_slot_set_defaults(m, PERTAG_ALL_TAGS_IDX);
 
 	for (i = 0; i < config.tag_rules_count; i++) {
 		const ConfigTagRule *tr = &config.tag_rules[i];

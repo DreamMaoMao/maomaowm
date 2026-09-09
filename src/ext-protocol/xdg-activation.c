@@ -1,9 +1,9 @@
 #include "mango/ext-protocol/xdg-activation.h"
 #include "mango/common/server.h"
-#include "mango/manage/client.h"
-#include <stdlib.h>
 #include "mango/common/util.h"
 #include "mango/ipc/ipc.h"
+#include "mango/manage/client.h"
+#include <stdlib.h>
 #include <wlr/types/wlr_compositor.h>
 
 static struct wlr_xdg_activation_v1 *activation;

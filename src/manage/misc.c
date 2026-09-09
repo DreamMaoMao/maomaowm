@@ -1,12 +1,12 @@
 #include "mango/manage/misc.h"
-#include "mango/manage/client.h"
-#include "mango/manage/layer.h"
 #include "mango/common/log.h"
 #include "mango/common/server.h"
+#include "mango/common/util.h"
 #include "mango/data/static_keymap.h"
 #include "mango/input/pointer.h"
 #include "mango/layout/arrange.h"
-#include "mango/common/util.h"
+#include "mango/manage/client.h"
+#include "mango/manage/layer.h"
 #include "mango/manage/monitor.h"
 
 #include <ctype.h>
@@ -15,9 +15,9 @@
 #include <wlr/types/wlr_compositor.h>
 #include <wlr/types/wlr_data_device.h>
 #include <wlr/types/wlr_drm_lease_v1.h>
+#include <wlr/types/wlr_ext_foreign_toplevel_list_v1.h>
 #include <wlr/types/wlr_ext_image_capture_source_v1.h>
 #include <wlr/types/wlr_ext_image_copy_capture_v1.h>
-#include <wlr/types/wlr_ext_foreign_toplevel_list_v1.h>
 #include <wlr/types/wlr_idle_inhibit_v1.h>
 #include <wlr/types/wlr_idle_notify_v1.h>
 #include <wlr/types/wlr_layer_shell_v1.h>

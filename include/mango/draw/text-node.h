@@ -4,9 +4,9 @@
 #include <cairo.h>
 #include <pango/pango.h>
 #include <pango/pangocairo.h>
+#include <scenefx/types/wlr_scene.h>
 #include <stdbool.h>
 #include <stdint.h>
-#include <scenefx/types/wlr_scene.h>
 
 // Original struct, assumed to already exist.
 typedef struct {

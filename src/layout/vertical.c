@@ -1,8 +1,8 @@
 #include "mango/layout/vertical.h"
 #include "mango/common/server.h"
+#include "mango/common/util.h"
 #include "mango/manage/client.h"
 #include "mango/manage/monitor.h"
-#include "mango/common/util.h"
 
 void vertical_tile(Monitor *m) {
 	int32_t i, n = 0, w, r, ie = server.enable_gaps, mh, mx, tx;

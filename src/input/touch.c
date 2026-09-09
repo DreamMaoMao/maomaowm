@@ -1,21 +1,21 @@
-#include <wlr/types/wlr_touch.h>
 #include "mango/input/touch.h"
-#include "mango/common/server.h"
 #include "mango/common/log.h"
-#include "mango/manage/monitor.h"
-#include "mango/manage/misc.h"
-#include "mango/manage/client.h"
-#include "mango/input/pointer.h"
-#include <wayland-client-core.h>
-#include "mango/ipc/ipc.h"
+#include "mango/common/server.h"
 #include "mango/common/util.h"
+#include "mango/input/pointer.h"
+#include "mango/ipc/ipc.h"
+#include "mango/manage/client.h"
+#include "mango/manage/misc.h"
+#include "mango/manage/monitor.h"
 #include <linux/input-event-codes.h>
+#include <wayland-client-core.h>
 #include <wlr/backend/libinput.h>
+#include <wlr/types/wlr_compositor.h>
 #include <wlr/types/wlr_cursor.h>
 #include <wlr/types/wlr_idle_notify_v1.h>
 #include <wlr/types/wlr_input_device.h>
 #include <wlr/types/wlr_seat.h>
-#include <wlr/types/wlr_compositor.h>
+#include <wlr/types/wlr_touch.h>
 
 void handle_cursor_touch_up(struct wl_listener *listener, void *data);
 void handle_cursor_touch_cancel(struct wl_listener *listener, void *data);

@@ -1,8 +1,8 @@
-#include "mango/manage/client.h"
-#include "mango/layout/arrange.h"
 #include "mango/ext-protocol/foreign-toplevel.h"
 #include "mango/common/server.h"
 #include "mango/common/util.h"
+#include "mango/layout/arrange.h"
+#include "mango/manage/client.h"
 #include "mango/manage/monitor.h"
 #include <scenefx/types/wlr_scene.h>
 #include <wlr/types/wlr_compositor.h>

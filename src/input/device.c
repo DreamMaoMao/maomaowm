@@ -1,10 +1,10 @@
 #include "mango/input/device.h"
-#include "mango/input/keyboard.h"
-#include "mango/input/tablet.h"
-#include "mango/input/pointer.h"
-#include "mango/input/touch.h"
-#include "mango/input/switch.h"
 #include "mango/common/server.h"
+#include "mango/input/keyboard.h"
+#include "mango/input/pointer.h"
+#include "mango/input/switch.h"
+#include "mango/input/tablet.h"
+#include "mango/input/touch.h"
 #include <wlr/backend/libinput.h>
 #include <wlr/types/wlr_input_device.h>
 #include <wlr/types/wlr_keyboard.h>

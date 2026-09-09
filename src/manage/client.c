@@ -1,21 +1,21 @@
 #include "mango/manage/client.h"
-#include "mango/common/server.h"
-#include "mango/layout/layout.h"
-#include "mango/layout/scroll.h"
-#include "mango/layout/arrange.h"
-#include "mango/layout/dwindle.h"
-#include "mango/overview/overview.h"
-#include "mango/switcher/switcher.h"
-#include "mango/dispatch/bind.h"
 #include "mango/animation/client.h"
+#include "mango/common/server.h"
+#include "mango/common/util.h"
+#include "mango/dispatch/bind.h"
 #include "mango/ext-protocol/foreign-toplevel.h"
 #include "mango/ext-protocol/text-input.h"
-#include "mango/common/util.h"
-#include "mango/manage/monitor.h"
-#include "mango/ipc/ipc.h"
-#include "mango/manage/misc.h"
 #include "mango/input/pointer.h"
+#include "mango/ipc/ipc.h"
+#include "mango/layout/arrange.h"
+#include "mango/layout/dwindle.h"
+#include "mango/layout/layout.h"
+#include "mango/layout/scroll.h"
 #include "mango/manage/layer.h"
+#include "mango/manage/misc.h"
+#include "mango/manage/monitor.h"
+#include "mango/overview/overview.h"
+#include "mango/switcher/switcher.h"
 #include <fcntl.h>
 #include <linux/input-event-codes.h>
 #include <scenefx/render/fx_renderer/fx_renderer.h>
@@ -29,8 +29,8 @@
 #include <wlr/types/wlr_compositor.h>
 #include <wlr/types/wlr_cursor.h>
 #include <wlr/types/wlr_ext_foreign_toplevel_list_v1.h>
-#include <wlr/types/wlr_fractional_scale_v1.h>
 #include <wlr/types/wlr_foreign_toplevel_management_v1.h>
+#include <wlr/types/wlr_fractional_scale_v1.h>
 #include <wlr/types/wlr_layer_shell_v1.h>
 #include <wlr/types/wlr_linux_drm_syncobj_v1.h>
 #include <wlr/types/wlr_pointer_constraints_v1.h>
@@ -43,8 +43,8 @@
 #include <wlr/types/wlr_xdg_shell.h>
 #ifdef XWAYLAND
 #include <X11/Xlib.h>
-#include <xcb/xcb_icccm.h>
 #include <wlr/xwayland.h>
+#include <xcb/xcb_icccm.h>
 #endif
 
 /* Placeholder appid/title used when no client surface type can be matched. */
@@ -1510,10 +1510,9 @@ void client_apply_rules(Client *c) {
 			c->swallowing = p;
 			p->swallowdby = c;
 
-			client_replace(c, p, false, true);
-
 			mon = p->mon;
 			newtags = p->tags;
+			client_replace(c, p, false, true);
 		}
 	}
 
@@ -1764,9 +1763,12 @@ void client_apply_xwayland(Client *c) {
 	if (client_is_x11(c)) {
 #ifdef XWAYLAND
 		/* c->mon is only determined after applyrules/setmon; apply XWayland
-		 * scaling here. */
+		 * scaling here. overview_backup_geom is snapshotted from the logical
+		 * geometry in handle_client_map before any layout runs; do not
+		 * overwrite it with transient arranged geometry here, otherwise X11
+		 * windows mapped while in overview, and terminals restored after a
+		 * swallowed X11 window closes, keep a stale tiny overview card. */
 		xwayland_apply_scale(c);
-		c->overview_backup_geom = c->geom;
 #endif
 	}
 }
@@ -1973,8 +1975,13 @@ handle_client_map(struct wl_listener *listener, void *data) {
 
 	client_init_xwayland(c);
 
-	if (!client_is_x11(c))
-		client_get_geometry(c, &c->geom);
+#ifdef XWAYLAND
+	if (client_is_x11(c))
+		/* Resolve the XWayland scale before reading the geometry, otherwise
+		 * client_get_geometry returns physical sizes. */
+		xwayland_apply_scale(c);
+#endif
+	client_get_geometry(c, &c->geom);
 
 	if (client_is_x11(c))
 		init_client_properties(c);
@@ -1992,11 +1999,9 @@ handle_client_map(struct wl_listener *listener, void *data) {
 	}
 
 	// init client geom
-	if (!client_is_x11(c)) {
-		c->geom.width += 2 * c->bw;
-		c->geom.height += 2 * c->bw;
-		c->overview_backup_geom = c->geom;
-	}
+	c->geom.width += 2 * c->bw;
+	c->geom.height += 2 * c->bw;
+	c->overview_backup_geom = c->geom;
 
 	struct wlr_ext_foreign_toplevel_handle_v1_state foreign_toplevel_state = {
 		.app_id = client_get_appid(c),
@@ -2174,6 +2179,9 @@ void handle_client_commit(struct wl_listener *listener, void *data) {
 		return;
 	}
 
+	if (client_is_parked(c))
+		return;
+
 	if (!c || c->iskilling || c->animation.tagouting || c->animation.tagouted ||
 		c->animation.tagining)
 		return;
@@ -2217,8 +2225,8 @@ void handle_client_unmap(struct wl_listener *listener, void *data) {
 	struct ScrollerStackNode *next_node =
 		target_node ? target_node->next_in_stack : NULL;
 
-	if (config.animations && !c->is_clip_to_hide && !c->isminimized &&
-		(!c->mon || VISIBLEON(c, c->mon)))
+	if (config.animations && !client_is_parked(c) && !c->is_clip_to_hide &&
+		!c->isminimized && (!c->mon || VISIBLEON(c, c->mon)))
 		init_fadeout_client(c);
 
 	// If the client is in a stack, remove it from the stack
@@ -2313,9 +2321,11 @@ void handle_client_unmap(struct wl_listener *listener, void *data) {
 
 		client_group_detach(c);
 
-		wl_list_remove(&c->link);
+		if (!wl_list_empty(&c->link))
+			wl_list_remove(&c->link);
 		client_set_monitor(c, NULL, 0, true);
-		wl_list_remove(&c->flink);
+		if (!wl_list_empty(&c->flink))
+			wl_list_remove(&c->flink);
 	}
 
 	if (c->foreign_toplevel) {
@@ -2417,7 +2427,7 @@ void // 0.6
 handle_client_request_fullscreen(struct wl_listener *listener, void *data) {
 	Client *c = wl_container_of(listener, c, fullscreen);
 
-	if (!c || c->iskilling)
+	if (!c || c->iskilling || client_is_parked(c))
 		return;
 
 	client_apply_fullscreen(c, client_wants_fullscreen(c), true);
@@ -2427,7 +2437,8 @@ void handle_client_request_maximize(struct wl_listener *listener, void *data) {
 
 	Client *c = wl_container_of(listener, c, maximize);
 
-	if (!c || !c->mon || c->iskilling || c->ignore_maximize)
+	if (!c || !c->mon || c->iskilling || c->ignore_maximize ||
+		client_is_parked(c))
 		return;
 
 	if (!client_is_x11(c) && !c->surface.xdg->initialized) {
@@ -2445,7 +2456,7 @@ void handle_client_request_minimize(struct wl_listener *listener, void *data) {
 
 	Client *c = wl_container_of(listener, c, minimize);
 
-	if (!c || !c->mon || c->iskilling || c->isminimized)
+	if (!c || !c->mon || c->iskilling || c->isminimized || client_is_parked(c))
 		return;
 
 	if (client_request_minimize(c, data) && !c->ignore_minimize) {
@@ -2789,8 +2800,6 @@ void client_view_on_monitor(const Arg *arg, bool want_animation, Monitor *m,
 
 		if (arg->ui & TAG0_MASK)
 			m->pertag->curtag = 0;
-		else if (arg->ui == (~0 & TAGMASK))
-			m->pertag->curtag = 0;
 		else {
 			for (i = 0; !(arg->ui & 1 << i) && i < (uint32_t)config.tag_num &&
 						arg->ui != 0;
@@ -2902,6 +2911,10 @@ void client_set_monitor(Client *c, Monitor *m, uint32_t newtags, bool focus) {
 	/* Scene graph sends surface leave/enter events on move and resize */
 	if (oldmon)
 		arrange(oldmon, false, false);
+
+	if (client_is_parked(c))
+		return;
+
 	if (m) {
 		/* Make sure window actually overlaps with the monitor */
 		reset_foreign_tolevel(c, oldmon, m);
@@ -2947,7 +2960,7 @@ void view_insert_shift_tags(Monitor *m, uint32_t target) {
 	}
 
 	wl_list_for_each(c, &server.clients, link) {
-		if (c->mon != m || c->iskilling || c->is_logic_hide)
+		if (c->mon != m || c->iskilling)
 			continue;
 		c->tags = tag_remap_mask(c->tags, map);
 	}
@@ -3456,6 +3469,37 @@ void client_exchange(Client *c1, Client *c2) {
 	finish_exchange_arrange_and_focus(c1, c2, m1, m2);
 }
 
+bool client_is_parked(Client *c) { return c && wl_list_empty(&c->link); }
+
+static void client_unlink(Client *c) {
+	if (!c || client_is_parked(c))
+		return;
+	wl_list_remove(&c->link);
+	wl_list_init(&c->link);
+	wl_list_remove(&c->flink);
+	wl_list_init(&c->flink);
+}
+
+void client_park(Client *c) {
+	client_unlink(c);
+	if (!c)
+		return;
+	c->mon = NULL;
+}
+
+void client_unpark(Client *c, Client *anchor) {
+	if (!c)
+		return;
+
+	if (anchor && !client_is_parked(anchor)) {
+		wl_list_safe_reinsert_next(&anchor->link, &c->link);
+		wl_list_safe_reinsert_prev(&anchor->flink, &c->flink);
+	} else if (client_is_parked(c)) {
+		wl_list_insert(server.clients.prev, &c->link);
+		wl_list_insert(&server.focus_stack, &c->flink);
+	}
+}
+
 void client_replace(Client *c, Client *w, bool is_group_change_member,
 					bool is_swallow) {
 	c->bw = w->bw;
@@ -3474,13 +3518,12 @@ void client_replace(Client *c, Client *w, bool is_group_change_member,
 	c->overview_backup_geom = w->overview_backup_geom;
 	c->animation.current = w->animation.current;
 	c->stack_proportion = w->stack_proportion;
-	c->is_logic_hide = w->is_logic_hide;
 
 	if (is_swallow || !is_group_change_member) {
 		client_group_replace(w, c);
 	}
 
-	w->is_logic_hide = true;
+	client_unpark(c, w);
 	mango_group_bar_set_focus(c->group_bar, c->isgroupfocusing);
 
 	/* If the old window is in overview, destroy its card tree. */
@@ -3502,17 +3545,13 @@ void client_replace(Client *c, Client *w, bool is_group_change_member,
 								   false);
 	}
 
-	wl_list_safe_reinsert_next(&w->link, &c->link);
-	wl_list_safe_reinsert_prev(&w->flink, &c->flink);
 	wlr_scene_node_set_enabled(&w->scene->node, false);
 
-	if (!c->is_logic_hide) {
-		wlr_scene_node_set_enabled(&c->scene->node, true);
-		/* In overview the real surface tree is replaced by the card tree, so it
-		 * stays disabled. */
-		if (!c->ov_card_tree)
-			wlr_scene_node_set_enabled(&c->scene_surface->node, true);
-	}
+	wlr_scene_node_set_enabled(&c->scene->node, true);
+	/* In overview the real surface tree is replaced by the card tree, so it
+	 * stays disabled. */
+	if (!c->ov_card_tree)
+		wlr_scene_node_set_enabled(&c->scene_surface->node, true);
 
 	if (w->foreign_toplevel) {
 		wlr_foreign_toplevel_handle_v1_output_leave(w->foreign_toplevel,
@@ -3572,6 +3611,11 @@ void client_replace(Client *c, Client *w, bool is_group_change_member,
 	if (layout->id == SCROLLER || layout->id == VERTICAL_SCROLLER) {
 		sync_scroller_state_to_clients(w->mon, get_client_tag_idx(w));
 	}
+
+	if (w->iskilling)
+		client_unlink(w);
+	else
+		client_park(w);
 }
 
 void client_update_oldmonname_record(Client *c, Monitor *m) {
@@ -3903,7 +3947,7 @@ void client_group_replace(Client *old, Client *new) {
 	old->group_prev = NULL;
 	old->group_next = NULL;
 
-	if (old->is_logic_hide || (!new->group_prev && !new->group_next)) {
+	if (client_is_parked(old) || (!new->group_prev && !new->group_next)) {
 		new->isgroupfocusing = false;
 	} else {
 		new->isgroupfocusing = old->isgroupfocusing;
@@ -4065,6 +4109,8 @@ void handle_xwayland_surface_request_activate(struct wl_listener *listener,
 void handle_xwayland_surface_request_configure(struct wl_listener *listener,
 											   void *data) {
 	Client *c = wl_container_of(listener, c, configure);
+	if (!c || client_is_parked(c))
+		return;
 	struct wlr_xwayland_surface_configure_event *event = data;
 	struct wlr_box new_geo;
 	new_geo.x = event->x;
