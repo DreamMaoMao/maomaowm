@@ -2,6 +2,7 @@
 #include "mango/animation/client.h"
 #include "mango/common/server.h"
 #include "mango/common/util.h"
+#include "mango/draw/text-node.h"
 #include "mango/layout/layout.h"
 #include "mango/manage/client.h"
 #include "mango/manage/monitor.h"
@@ -102,12 +103,13 @@ void overview_layout_card(Client *c) {
 	struct wlr_box geo = c->animation.current;
 	if (geo.width <= 0 || geo.height <= 0)
 		client_get_geometry(c, &geo);
-	int32_t w = geo.width - 2 * (int32_t)c->bw;
-	int32_t h = geo.height - 2 * (int32_t)c->bw;
+	int32_t bw = (int32_t)c->bw;
+	int32_t w = geo.width - 2 * bw;
+	int32_t h = geo.height - 2 * bw;
 	if (w <= 0 || h <= 0)
 		return;
 
-	wlr_scene_node_set_position(&c->ov_card_tree->node, c->bw, c->bw);
+	wlr_scene_node_set_position(&c->ov_card_tree->node, bw, bw);
 
 	// Content origin (geometry offset) and card content size.
 	struct wlr_box clip;
@@ -131,6 +133,26 @@ void overview_layout_card(Client *c) {
 	float scale_x = (float)w / content_w;
 	float scale_y = (float)h / content_h;
 
+	int32_t vx = 0, vy = 0, vw = w, vh = h;
+	if (c->mon) {
+		struct wlr_box content_box = {
+			.x = geo.x + bw,
+			.y = geo.y + bw,
+			.width = w,
+			.height = h,
+		};
+		struct wlr_box vis;
+		if (wlr_box_intersection(&vis, &content_box, &c->mon->m)) {
+			vx = vis.x - content_box.x;
+			vy = vis.y - content_box.y;
+			vw = vis.width;
+			vh = vis.height;
+		} else {
+			vw = 0;
+			vh = 0;
+		}
+	}
+
 	struct ov_card_surface *entry;
 	wl_list_for_each(entry, &c->ov_card_surfaces, link) {
 		struct wlr_surface *es = entry->surface;
@@ -152,13 +174,18 @@ void overview_layout_card(Client *c) {
 				es->current.height > 0
 					? (float)es->current.buffer_height / es->current.height
 					: 1.0f;
-			wlr_scene_node_set_position(&entry->buffer->node, 0, 0);
-			wlr_scene_buffer_set_dest_size(entry->buffer, w, h);
+			if (vw <= 0 || vh <= 0) {
+				wlr_scene_node_set_position(&entry->buffer->node, 0, 0);
+				wlr_scene_buffer_set_dest_size(entry->buffer, 0, 0);
+				continue;
+			}
+			wlr_scene_node_set_position(&entry->buffer->node, vx, vy);
+			wlr_scene_buffer_set_dest_size(entry->buffer, vw, vh);
 			struct wlr_fbox src = {
-				.x = clip.x * ratio_x,
-				.y = clip.y * ratio_y,
-				.width = content_w * ratio_x,
-				.height = content_h * ratio_y,
+				.x = (clip.x + (float)vx / scale_x) * ratio_x,
+				.y = (clip.y + (float)vy / scale_y) * ratio_y,
+				.width = ((float)vw / scale_x) * ratio_x,
+				.height = ((float)vh / scale_y) * ratio_y,
 			};
 			wlr_scene_buffer_set_source_box(entry->buffer, &src);
 		} else {
@@ -166,10 +193,76 @@ void overview_layout_card(Client *c) {
 			 * origin. */
 			int px = (int)((entry->sx - clip.x) * scale_x);
 			int py = (int)((entry->sy - clip.y) * scale_y);
-			wlr_scene_node_set_position(&entry->buffer->node, px, py);
-			wlr_scene_buffer_set_dest_size(entry->buffer, (int)(lw * scale_x),
-										   (int)(lh * scale_y));
+			int dw = (int)(lw * scale_x);
+			int dh = (int)(lh * scale_y);
+
+			int cx0 = MANGO_MAX(px, vx);
+			int cy0 = MANGO_MAX(py, vy);
+			int cx1 = MANGO_MIN(px + dw, vx + vw);
+			int cy1 = MANGO_MIN(py + dh, vy + vh);
+			int cw = cx1 - cx0;
+			int ch = cy1 - cy0;
+			if (cw <= 0 || ch <= 0) {
+				wlr_scene_node_set_position(&entry->buffer->node, 0, 0);
+				wlr_scene_buffer_set_dest_size(entry->buffer, 0, 0);
+				continue;
+			}
+
+			float ratio_x =
+				es->current.width > 0
+					? (float)es->current.buffer_width / es->current.width
+					: 1.0f;
+			float ratio_y =
+				es->current.height > 0
+					? (float)es->current.buffer_height / es->current.height
+					: 1.0f;
+			float ox = (float)(cx0 - px) / scale_x;
+			float oy = (float)(cy0 - py) / scale_y;
+			wlr_scene_node_set_position(&entry->buffer->node, cx0, cy0);
+			wlr_scene_buffer_set_dest_size(entry->buffer, cw, ch);
+			struct wlr_fbox src = {
+				.x = ox * ratio_x,
+				.y = oy * ratio_y,
+				.width = ((float)cw / scale_x) * ratio_x,
+				.height = ((float)ch / scale_y) * ratio_y,
+			};
+			wlr_scene_buffer_set_source_box(entry->buffer, &src);
 		}
+	}
+
+	overview_update_jump_label(c);
+}
+
+void overview_update_jump_label(Client *c) {
+	if (!c || !c->mon || !c->ov_card_tree || !c->jump_label_node ||
+		!c->mon->isoverview || !c->mon->is_jump_mode || !c->jump_char)
+		return;
+
+	struct wlr_scene_node *label = &c->jump_label_node->scene_buffer->node;
+	int32_t lw = c->jump_label_node->logical_width;
+	int32_t lh = c->jump_label_node->logical_height;
+	if (lw <= 0 || lh <= 0) {
+		if (label->enabled)
+			wlr_scene_node_set_enabled(label, false);
+		return;
+	}
+
+	struct wlr_box cur = c->animation.current;
+	int32_t lx = cur.x + (cur.width - lw) / 2;
+	int32_t ly = cur.y + (cur.height - lh) / 2;
+	if (lx < c->mon->m.x || ly < c->mon->m.y ||
+		lx + lw > c->mon->m.x + c->mon->m.width ||
+		ly + lh > c->mon->m.y + c->mon->m.height) {
+		if (label->enabled)
+			wlr_scene_node_set_enabled(label, false);
+		return;
+	}
+
+	wlr_scene_node_set_position(label, (cur.width - lw) / 2,
+								(cur.height - lh) / 2);
+	if (!label->enabled) {
+		wlr_scene_node_set_enabled(label, true);
+		wlr_scene_node_raise_to_top(label);
 	}
 }
 

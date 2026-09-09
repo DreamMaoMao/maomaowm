@@ -926,7 +926,10 @@ void client_apply_clip(Client *c, float factor) {
 
 		struct wlr_box clip_box;
 		struct ivec2 surface_clip_offset;
-		client_get_clip(c, &clip_box);
+		int32_t card_w, card_h;
+		client_actual_size(c, &card_w, &card_h);
+		clip_box =
+			(struct wlr_box){.x = 0, .y = 0, .width = card_w, .height = card_h};
 		surface_clip_offset = clip_to_hide(c, &clip_box, offsets);
 
 		/* Decorations are drawn against the card geometry. */

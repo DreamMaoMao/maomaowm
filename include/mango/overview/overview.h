@@ -27,6 +27,8 @@ void overview_card_surface_add(struct wlr_surface *surface, int sx, int sy,
 // uses client_get_clip geometry offset.
 void overview_layout_card(Client *c);
 
+void overview_update_jump_label(Client *c);
+
 // Destroys the card tree and frees all surface nodes.
 void overview_destroy_card(Client *c);
 
