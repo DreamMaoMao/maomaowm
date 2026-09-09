@@ -1459,10 +1459,11 @@ void resize_apply(Client *c, struct wlr_box geo, ResizeOpts opts) {
 	if (!c->is_pending_open_animation)
 		c->animation.begin_fade_in = false;
 
-	if (c->animation.overining)
+	if (c->animation.overining) {
 		c->animation.action = OVERVIEW;
-	else if (c->animation.action == OPEN && !c->animation.tagining &&
-			 !c->animation.tagouting && wlr_box_equal(&c->geom, &c->current))
+		c->animation.duration = config.animation_duration_tag;
+	} else if (c->animation.action == OPEN && !c->animation.tagining &&
+			   !c->animation.tagouting && wlr_box_equal(&c->geom, &c->current))
 		; /* keep current action */
 	else if (c->animation.tagouting) {
 		c->animation.duration = config.animation_duration_tag;
