@@ -2615,7 +2615,8 @@ void client_focus(Client *c, int32_t lift) {
 
 		client_set_focused_opacity_animation(c);
 
-		if (last_focus_client && last_focus_client != c)
+		if (last_focus_client && last_focus_client != c &&
+			!client_is_parked(last_focus_client))
 			client_texture_invalidate(last_focus_client);
 		client_texture_invalidate(c);
 		// might need disable if it causes performance issues, GC every focus

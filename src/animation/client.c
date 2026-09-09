@@ -28,7 +28,7 @@ bool client_is_ignore_output_clip(Client *c) {
 
 struct ivec2 compute_edge_offsets(Client *c) {
 	struct ivec2 offsets = {0};
-	if (client_is_ignore_output_clip(c))
+	if (!c->mon || client_is_ignore_output_clip(c))
 		return offsets;
 
 	struct wlr_box cur = c->animation.current;
@@ -1600,6 +1600,17 @@ bool client_draw_fadeout_frame(Client *c) {
 	return true;
 }
 
+static bool client_textures_identical(const Client *c) {
+	for (int i = 0; i < MANGO_TEXTURE_SLOTS; i++) {
+		if (!texture_key_equal(&c->active_textures[i],
+							   &c->inactive_textures[i]))
+			return false;
+	}
+	return true;
+}
+
+static void texture_crossfade_finish(Client *c, bool focused);
+
 void client_set_unfocused_opacity_animation(Client *c) {
 	float *border_color = get_border_color(c);
 	wlr_scene_node_raise_to_top(&c->border->node);
@@ -1617,7 +1628,8 @@ void client_set_unfocused_opacity_animation(Client *c) {
 		   c->opacity_animation.current_border_color,
 		   sizeof(c->opacity_animation.initial_border_color));
 	c->opacity_animation.initial_opacity = c->opacity_animation.current_opacity;
-	if (c->active_buf && c->inactive_buf) {
+	if (c->active_buf && c->inactive_buf &&
+		!client_textures_identical(c)) {
 		c->opacity_animation.texture_crossfade_running = true;
 		c->opacity_animation.crossfade_is_focus = false;
 		wlr_scene_node_set_enabled(&c->active_texture->node, true);
@@ -1626,6 +1638,11 @@ void client_set_unfocused_opacity_animation(Client *c) {
 		wlr_scene_node_raise_to_top(&c->inactive_texture->node);
 		wlr_scene_buffer_set_opacity(c->active_texture, 1.0f);
 		wlr_scene_buffer_set_opacity(c->inactive_texture, 0.0f);
+	} else if (c->active_buf && c->inactive_buf) {
+		// Identical textures: no crossfade, but still stamp the final node
+		// state now so the winning (inactive) texture stays raised above the
+		// border for the whole fade; only the uniform opacity animates.
+		texture_crossfade_finish(c, false);
 	}
 	c->opacity_animation.running = true;
 }
@@ -1652,7 +1669,8 @@ void client_set_focused_opacity_animation(Client *c) {
 		   c->opacity_animation.current_border_color,
 		   sizeof(c->opacity_animation.initial_border_color));
 	c->opacity_animation.initial_opacity = c->opacity_animation.current_opacity;
-	if (c->active_buf && c->inactive_buf) {
+	if (c->active_buf && c->inactive_buf &&
+		!client_textures_identical(c)) {
 		c->opacity_animation.texture_crossfade_running = true;
 		c->opacity_animation.crossfade_is_focus = true;
 		wlr_scene_node_set_enabled(&c->active_texture->node, true);
@@ -1661,6 +1679,11 @@ void client_set_focused_opacity_animation(Client *c) {
 		wlr_scene_node_raise_to_top(&c->active_texture->node);
 		wlr_scene_buffer_set_opacity(c->active_texture, 0.0f);
 		wlr_scene_buffer_set_opacity(c->inactive_texture, 1.0f);
+	} else if (c->active_buf && c->inactive_buf) {
+		// Identical textures: no crossfade, but still stamp the final node
+		// state now so the winning (active) texture stays raised above the
+		// border for the whole fade; only the uniform opacity animates.
+		texture_crossfade_finish(c, true);
 	}
 	c->opacity_animation.running = true;
 }

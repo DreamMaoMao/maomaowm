@@ -281,14 +281,15 @@ struct wlr_buffer *texture_render_fit(const BorderTextureKey *key,
 	buf->surface =
 		cairo_image_surface_create(CAIRO_FORMAT_ARGB32, width, height);
 	wlr_buffer_init(&buf->base, &texture_buffer_impl, width, height);
-	int image_width = cairo_image_surface_get_width(image) + 10;
-	int image_height = cairo_image_surface_get_height(image) + 10;
+	int image_width = cairo_image_surface_get_width(image);
+	int image_height = cairo_image_surface_get_height(image);
 
 	cairo_t *render = cairo_create(buf->surface);
 
-	cairo_scale(render, (double)width / image_width,
-				(double)height / image_height);
-	cairo_set_source_surface(render, image, 0, 0);
+	double sx = (double)(width + 10) / image_width;
+	double sy = (double)(height + 10) / image_height;
+	cairo_scale(render, sx, sy);
+	cairo_set_source_surface(render, image, -5.0 / sx, -5.0 / sy);
 	cairo_paint(render);
 
 	cairo_destroy(render);
@@ -307,14 +308,14 @@ struct wlr_buffer *texture_render_fit_opacity(const BorderTextureKey *key,
 	if (copy == NULL)
 		return NULL;
 
-	char *colon = strchr(copy, ':');
-	if (colon == NULL || *(colon + 1) == '\0') {
+	char *separator = strrchr(copy, '|');
+	if (separator == NULL || *(separator + 1) == '\0') {
 		free(copy);
 		return NULL;
 	}
-	*colon = '\0';
+	*separator = '\0';
 
-	float opacity = strtof(colon + 1, NULL);
+	float opacity = strtof(separator + 1, NULL);
 	if (opacity < 0.0f)
 		opacity = 0.0f;
 	if (opacity > 1.0f)
@@ -360,21 +361,21 @@ struct wlr_buffer *texture_render_tile_opacity(const BorderTextureKey *key,
 	if (copy == NULL)
 		return NULL;
 
-	char *colon = strchr(copy, ':');
-	if (colon == NULL || *(colon + 1) == '\0') {
+	char *separator = strrchr(copy, '|');
+	if (separator == NULL || *(separator + 1) == '\0') {
 		free(copy);
 		return NULL;
 	}
-	*colon = '\0';
+	*separator = '\0';
 
-	float opacity = strtof(colon + 1, NULL);
+	float opacity = strtof(separator + 1, NULL);
 	if (opacity < 0.0f)
 		opacity = 0.0f;
 	if (opacity > 1.0f)
 		opacity = 1.0f;
 
 	BorderTextureKey fit_key = {
-		.style = TEXTURE_FIT_IMAGE,
+		.style = TEXTURE_TILED_IMAGE,
 		.string = copy,
 	};
 	struct wlr_buffer *fit = texture_render_tile(&fit_key, target);
