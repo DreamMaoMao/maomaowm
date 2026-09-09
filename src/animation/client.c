@@ -20,11 +20,15 @@
 #include <wlr/xwayland.h>
 #endif
 
+static bool client_gesture_driven(const Client *c) {
+	return server.gesture_drive_active && c &&
+		   c->mon == server.gesture_drive_mon;
+}
+
 bool client_animations_enabled(const Client *c) {
 	if (config.animations)
 		return true;
-	return server.gesture_drive_active && c &&
-		   c->mon == server.gesture_drive_mon;
+	return client_gesture_driven(c);
 }
 
 bool client_is_ignore_output_clip(Client *c) {
@@ -561,7 +565,8 @@ struct ivec2 clip_to_hide(Client *c, struct wlr_box *clip_box,
 		(ISSCROLLTILED(c) || c->animation.tagouting || c->animation.tagining)) {
 		c->is_clip_to_hide = true;
 		wlr_scene_node_set_enabled(&c->scene->node, false);
-	} else if (c->is_clip_to_hide && VISIBLEON(c, c->mon)) {
+	} else if (c->is_clip_to_hide &&
+			   (VISIBLEON(c, c->mon) || client_gesture_driven(c))) {
 		c->is_clip_to_hide = false;
 		wlr_scene_node_set_enabled(&c->scene->node, true);
 	}
