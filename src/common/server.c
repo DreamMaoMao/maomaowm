@@ -7,6 +7,7 @@
 #include "mango/input/pointer.h"
 #include "mango/input/tablet.h"
 #include "mango/input/touch.h"
+#include "mango/input/trackpad.h"
 #include "mango/ipc/ipc.h"
 #include "mango/manage/client.h"
 #include "mango/manage/layer.h"

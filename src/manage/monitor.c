@@ -1379,8 +1379,8 @@ void handle_renderer_lost(struct wl_listener *listener, void *data) {
 
 	mango_error(true, WLR_DEBUG, "gpu reset");
 
-	server.recreate_renderer_source = wl_event_loop_add_idle(
-		server.event_loop, do_renderer_recreate, NULL);
+	server.recreate_renderer_source =
+		wl_event_loop_add_idle(server.event_loop, do_renderer_recreate, NULL);
 }
 
 void setgaps(int32_t oh, int32_t ov, int32_t ih, int32_t iv) {

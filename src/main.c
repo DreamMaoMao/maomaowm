@@ -18,6 +18,7 @@
 #include "mango/input/keyboard.h"
 #include "mango/input/pointer.h"
 #include "mango/input/tablet.h"
+#include "mango/input/trackpad.h"
 #include "mango/ipc/ipc.h"
 #include "mango/layout/arrange.h"
 #include "mango/manage/misc.h"
