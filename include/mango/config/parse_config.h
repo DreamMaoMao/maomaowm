@@ -99,6 +99,8 @@ typedef struct {
 typedef struct {
 	const char *id;
 	const char *title;
+	int32_t is_once;
+	int32_t is_once_applied;
 	uint32_t tags;
 	int32_t isfloating;
 	int32_t isfullscreen;

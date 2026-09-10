@@ -1427,7 +1427,8 @@ bool parse_option(Config *config, char *key, char *value, int line_number) {
 
 		config->layer_rules_count++;
 		return !parse_error;
-	} else if (strcmp(key, "windowrule") == 0) {
+	} else if (strcmp(key, "windowrule") == 0 ||
+			   strcmp(key, "windowrule-once") == 0) {
 		config->window_rules =
 			realloc(config->window_rules,
 					(config->window_rules_count + 1) * sizeof(ConfigWinRule));
@@ -1442,6 +1443,15 @@ bool parse_option(Config *config, char *key, char *value, int line_number) {
 		memset(rule, 0, sizeof(ConfigWinRule));
 
 		// int32_t rule value, relay to a client property
+
+		if (strcmp(key, "windowrule-once") == 0) {
+			rule->is_once = 1;
+			rule->is_once_applied = 0;
+		} else {
+			rule->is_once = 0;
+			rule->is_once_applied = 0;
+		}
+
 		rule->isfloating = -1;
 		rule->isfullscreen = -1;
 		rule->isfakefullscreen = -1;
