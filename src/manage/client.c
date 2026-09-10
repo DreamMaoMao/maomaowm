@@ -1,5 +1,6 @@
 #include "mango/manage/client.h"
 #include "mango/animation/client.h"
+#include "mango/common/log.h"
 #include "mango/common/server.h"
 #include "mango/common/util.h"
 #include "mango/dispatch/bind.h"
@@ -1315,7 +1316,7 @@ void client_apply_rules(Client *c) {
 	/* rule matching */
 	const char *appid, *title;
 	uint32_t i, newtags = 0;
-	const ConfigWinRule *r;
+	ConfigWinRule *r;
 	Monitor *m = NULL;
 	Client *fc = NULL;
 	Client *parent = NULL;
@@ -1344,6 +1345,15 @@ void client_apply_rules(Client *c) {
 		// rule matching
 		if (!is_window_rule_matches(r, appid, title))
 			continue;
+
+		if (r->is_once && r->is_once_applied) {
+			continue;
+		}
+
+		if (r->is_once &&
+			(client_is_x11(c) || !c->surface.xdg->initial_commit)) {
+			r->is_once_applied = 1;
+		}
 
 		// set general properties
 		apply_rule_properties(c, r);
