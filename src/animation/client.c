@@ -433,8 +433,10 @@ void client_draw_groupbar(Client *c, struct ivec2 offsets) {
 		tab_y = c->mon->m.y;
 		th = config.group_bar_height - top_over;
 	}
-	if (bottom_over > 0)
-		th = th - bottom_over;
+	if (bottom_over > 0) {
+		th = th - GEZERO(bottom_over - c->animation.current.height);
+	}
+
 	if (right_over > 0)
 		tw = tw - right_over;
 	if (left_over > 0) {
