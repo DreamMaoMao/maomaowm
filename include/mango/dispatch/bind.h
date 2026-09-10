@@ -20,6 +20,12 @@ typedef struct Arg {
 
 enum { PREV, NEXT };
 enum { FORCE, UNFORCE };
+enum {
+	OVERCIRCLE_PREV = PREV,
+	OVERCIRCLE_NEXT = NEXT,
+	OVERCIRCLE_CURRENT_PREV,
+	OVERCIRCLE_CURRENT_NEXT,
+};
 
 void minimize_window(const Arg *arg);
 void restore_minimized(const Arg *arg);

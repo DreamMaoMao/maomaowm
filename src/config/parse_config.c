@@ -238,6 +238,24 @@ int32_t parse_circle_direction(const char *str) {
 	}
 }
 
+static int32_t parse_overcircle_direction(const char *str) {
+	char lowerStr[16];
+	int32_t i = 0;
+	while (str[i] && i < 15) {
+		lowerStr[i] = tolower(str[i]);
+		i++;
+	}
+	lowerStr[i] = '\0';
+
+	if (strcmp(lowerStr, "next") == 0)
+		return OVERCIRCLE_NEXT;
+	if (strcmp(lowerStr, "current_next") == 0)
+		return OVERCIRCLE_CURRENT_NEXT;
+	if (strcmp(lowerStr, "current_prev") == 0)
+		return OVERCIRCLE_CURRENT_PREV;
+	return OVERCIRCLE_PREV;
+}
+
 int32_t parse_direction(const char *str) {
 	// Converts the input string to lowercase.
 	char lowerStr[10];
@@ -4429,7 +4447,7 @@ FuncType parse_func_name(char *func_name, Arg *arg, char *arg_value,
 		(*arg).i = parse_circle_direction(arg_value);
 	} else if (strcmp(func_name, "overcircle") == 0) {
 		func = over_circle;
-		(*arg).i = parse_circle_direction(arg_value);
+		(*arg).i = parse_overcircle_direction(arg_value);
 	} else if (strcmp(func_name, "groupfocus") == 0) {
 		func = group_focus;
 		(*arg).i = parse_circle_direction(arg_value);
@@ -4478,6 +4496,7 @@ FuncType parse_func_name(char *func_name, Arg *arg, char *arg_value,
 		(*arg).v = has_name ? strdup(arg_value2) : NULL;
 	} else if (strcmp(func_name, "toggleoverview") == 0) {
 		func = toggle_overview;
+		(*arg).i = atoi(arg_value) == 1;
 	} else if (strcmp(func_name, "enteroverview") == 0) {
 		func = enter_overview;
 	} else if (strcmp(func_name, "leaveoverview") == 0) {

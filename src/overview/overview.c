@@ -351,6 +351,9 @@ void overview_backup(Client *c) {
 }
 // Restores window state when switching back from overview to the normal view.
 void overview_restore(Client *c, const Arg *arg) {
+	if (!c->ov_card_tree && !c->overview_scene_surface)
+		return;
+
 	c->isfloating = c->overview_isfloatingbak;
 	c->isfullscreen = c->overview_isfullscreenbak;
 	c->ismaximizescreen = c->overview_ismaximizescreenbak;
