@@ -3239,7 +3239,7 @@ bool check_simple_binding_conflicts(void *arr, size_t count, size_t elem_size,
 
 				conflict_found = true;
 				fprintf(stderr,
-						"\033[1;33m[WARNING]\033[0m %s conflict "
+						"\033[1;33m[WARN]\033[0m %s conflict "
 						"in keymode \033[1;36m%s\033[0m:\n"
 						"  File \033[1;32m\"%s\"\033[0m, line "
 						"\033[1;35m%d\033[0m\n"
