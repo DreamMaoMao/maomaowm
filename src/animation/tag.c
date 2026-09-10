@@ -68,7 +68,6 @@ void set_arrange_visible(Monitor *m, Client *c, bool want_animation) {
 		c->animation.tag_from_rule = false;
 		c->animation.tagouting = false;
 		c->animation.tagouted = false;
-		client_raise_group(c);
 		if (want_animation && client_animations_enabled(c)) {
 			c->animation.tagining = true;
 			c->animainit_geom = c->geom;
@@ -155,7 +154,6 @@ void set_arrange_hidden(Monitor *m, Client *c, bool want_animation) {
 			c->animation.tagining = false;
 			c->pending = c->geom;
 			c->pending.y = c->mon->m.y - c->geom.height;
-			client_raise_group(c);
 			resize(c, c->geom, 0);
 		} else {
 			c->animation.running = false;
