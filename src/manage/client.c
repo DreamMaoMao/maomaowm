@@ -885,6 +885,8 @@ Client *find_client_by_direction(Client *tc, const Arg *arg,
 	Client *tempSameMonitorFocusClients = NULL;
 	int64_t distance = LLONG_MAX;
 	int64_t same_monitor_distance = LLONG_MAX;
+	int64_t best_center_dist = LLONG_MAX;
+	int64_t best_same_monitor_center_dist = LLONG_MAX;
 
 	int32_t tc_l = tc->geom.x;
 	int32_t tc_r = tc->geom.x + tc->geom.width;
@@ -966,12 +968,13 @@ Client *find_client_by_direction(Client *tc, const Arg *arg,
 			if (!match_dir)
 				continue;
 
-			/*
-			 * When focusdir_only_zone_overlap is enabled, directional focus
-			 * requires the target window to overlap the current window on the
-			 * orthogonal axis.
-			 */
-			if (config.focusdir_only_zone_overlap && orth_dist != 0)
+			bool orth_overlap;
+			if (arg->i == LEFT || arg->i == RIGHT)
+				orth_overlap = (c_b >= tc_t && c_t <= tc_b);
+			else
+				orth_overlap = (c_r >= tc_l && c_l <= tc_r);
+
+			if (config.focusdir_only_zone_overlap && !orth_overlap)
 				continue;
 
 			if (step == 0) {
@@ -991,12 +994,28 @@ Client *find_client_by_direction(Client *tc, const Arg *arg,
 			int64_t tmp_distance =
 				penalty + (main_dist * main_dist) + (orth_dist * orth_dist);
 
-			if (tmp_distance < distance) {
+			// compute the center distance in the orthogonal direction
+			// for LEFT/RIGHT, it's the vertical distance; for UP/DOWN, it's the
+			// horizontal distance
+			int64_t center_dist = (arg->i == UP || arg->i == DOWN)
+									  ? (int64_t)c_cx - tc_cx
+									  : (int64_t)c_cy - tc_cy;
+			if (center_dist < 0)
+				center_dist = -center_dist;
+
+			if (tmp_distance < distance ||
+				(tmp_distance == distance && center_dist < best_center_dist)) {
 				distance = tmp_distance;
+				best_center_dist = center_dist;
 				tempFocusClients = c;
 			}
-			if (c->mon == tc->mon && tmp_distance < same_monitor_distance) {
+
+			if (c->mon == tc->mon &&
+				(tmp_distance < same_monitor_distance ||
+				 (tmp_distance == same_monitor_distance &&
+				  center_dist < best_same_monitor_center_dist))) {
 				same_monitor_distance = tmp_distance;
+				best_same_monitor_center_dist = center_dist;
 				tempSameMonitorFocusClients = c;
 			}
 		}
