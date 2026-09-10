@@ -1512,7 +1512,6 @@ void client_apply_rules(Client *c) {
 	// apply overlay rule
 	if (c->isoverlay && c->scene) {
 		wlr_scene_node_reparent(&c->scene->node, server.layers[LyrOverlay]);
-		wlr_scene_node_raise_to_top(&c->scene->node);
 	}
 }
 
@@ -2964,8 +2963,6 @@ void client_apply_fullscreen(
 		c->isfakefullscreen = 0;
 
 		c->bw = 0;
-		wlr_scene_node_raise_to_top(
-			&c->scene->node); // Raises the view to the top.
 		if (!is_scroller_layout(c->mon) || c->isfloating)
 			resize(c, c->mon->m, 1);
 
@@ -3024,7 +3021,6 @@ void client_set_maximize_screen(Client *c, int32_t maximizescreen,
 			maximizescreen_box.y += config.group_bar_height;
 		}
 
-		wlr_scene_node_raise_to_top(&c->scene->node);
 		if (!is_scroller_layout(c->mon) || c->isfloating)
 			resize(c, maximizescreen_box, 0);
 	} else {

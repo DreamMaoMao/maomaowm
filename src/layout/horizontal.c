@@ -593,8 +593,6 @@ void deck(Monitor *m) {
 										  cur_gappih,
 								 .height = m->w.height - 2 * cur_gappov},
 				0);
-			if (c == client_focus_top(m))
-				wlr_scene_node_raise_to_top(&c->scene->node);
 		}
 		i++;
 	}
