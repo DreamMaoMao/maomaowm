@@ -128,6 +128,11 @@ static bool swipe_func_is_view(void (*func)(const Arg *)) {
 	return view_opposite_func(func) != NULL;
 }
 
+static bool swipe_func_is_overview(void (*func)(const Arg *)) {
+	return func == toggle_overview || func == enter_overview ||
+		   func == leave_overview;
+}
+
 static bool swipe_layout_is_scroller(Monitor *m, bool *vertical) {
 	if (!m || !m->pertag)
 		return false;
@@ -661,6 +666,7 @@ static void swipe_drive_end(void) {
 			p = 1.0;
 
 		bool commit =
+			swipe_func_is_overview(swipe_drive.func) ||
 			delta >= distance * config.gesture_swipe_cancel_ratio ||
 			(swipe_drive.speed_points > 0 &&
 			 swipe_drive.avg_speed >= config.gesture_swipe_min_speed_to_force);
