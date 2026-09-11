@@ -173,6 +173,31 @@ void exchange_client(const Arg *arg) {
 	return;
 }
 
+void move_client(const Arg *arg) {
+	if (!server.selected_monitor)
+		return;
+
+	Client *c = arg->tc ? arg->tc : server.selected_monitor->sel;
+	if (!c || !c->mon || c->isfloating)
+		return;
+
+	if ((c->isfullscreen || c->ismaximizescreen) && !is_scroller_layout(c->mon))
+		return;
+
+	Client *tc = direction_select(arg);
+
+	Monitor *dst_mon = tc ? tc->mon : monitor_from_direction(arg->i);
+	const Layout *dst_layout = dst_mon->pertag->ltidxs[get_mon_curtag(dst_mon)];
+
+	if (dst_layout->id == DWINDLE)
+		dwindle_move_next_to(c, tc, config.dwindle_split_ratio, arg->i);
+	else
+		client_move_next_to(c, tc, arg->i);
+
+	if (config.warpcursor)
+		pointer_warp_to_client(c);
+}
+
 void exchange_stack_client(const Arg *arg) {
 	if (!server.selected_monitor)
 		return;

@@ -390,6 +390,8 @@ void client_update_border_color(Client *c);
 void client_exchange(Client *c1, Client *c2);
 void client_replace(Client *c, Client *w, bool is_group_change_member,
 					bool is_swallow);
+bool client_jump_to_monitor(Client *c, Monitor *m, int32_t dir);
+void client_move_next_to(Client *c, Client *target, int32_t dir);
 void client_update_oldmonname_record(Client *c, Monitor *m);
 void client_apply_bounds(Client *c, struct wlr_box *bbox);
 void client_swap_layout_properties(Client *c1, Client *c2);

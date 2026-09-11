@@ -71,6 +71,7 @@ void set_master_factor(const Arg *arg);
 void quit(const Arg *arg);
 void move_resize(const Arg *arg);
 void exchange_client(const Arg *arg);
+void move_client(const Arg *arg);
 void exchange_stack_client(const Arg *arg);
 void kill_client(const Arg *arg);
 void toggle_global(const Arg *arg);
