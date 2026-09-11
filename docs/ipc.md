@@ -35,6 +35,7 @@ description: Control mangowm programmatically using mmsg.
 | `get all-clients` | Returns a JSON array of all active clients. |
 | `get all-monitors` | Returns a JSON array of all connected monitors. |
 | `get all-devices` | Returns a JSON array of all physical input devices, grouped by libinput device group (`name`, `types`, `identifier`, `vendor`, `product`, `interfaces`, `matched`). |
+| `get all-layers` | Returns a JSON array of all open layer surfaces (`monitor`, `layer`, `name`). |
 | `get all-tags` | Returns a JSON object containing the status of all tags. |
 | `get last_open_surface [<mon>]` | Returns the last focused surface name for a monitor,if the mon not set, it will get current monitor. |
 
@@ -44,6 +45,7 @@ mmsg get monitor eDP-1
 mmsg get all-clients
 mmsg get all-monitors
 mmsg get all-devices
+mmsg get all-layers
 mmsg get cursorpos
 ```
 
