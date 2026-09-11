@@ -134,6 +134,46 @@ static bool pointer_constraint_surface_enabled(
 	return false;
 }
 
+/* Warps the pointer into a constraint that was just activated while it was
+ * outside (e.g. the client grabbed the pointer while it was on another
+ * monitor). The protocol expects the pointer to be inside the region once the
+ * constraint is active. */
+static void pointer_warp_into_constraint(
+	struct wlr_pointer_constraint_v1 *constraint, Client *c) {
+	if (!c || !c->mon || c->mon->isoverview ||
+		!pointer_constraint_surface_enabled(constraint)) {
+		return;
+	}
+
+	if (constraint->type == WLR_POINTER_CONSTRAINT_V1_LOCKED) {
+		double lx, ly;
+		if (pointer_constraint_hint_position(c, &lx, &ly) &&
+			(server.cursor->x < c->geom.x || server.cursor->y < c->geom.y ||
+			 server.cursor->x >= c->geom.x + c->geom.width ||
+			 server.cursor->y >= c->geom.y + c->geom.height)) {
+			wlr_cursor_warp(server.cursor, NULL, lx, ly);
+		}
+		return;
+	}
+
+	double scale = pointer_surface_scale(c);
+	pixman_region32_t fallback;
+	pixman_region32_t *region = pointer_constraint_region(constraint, c,
+														  &fallback);
+	double sx = (server.cursor->x - c->geom.x - c->bw) * scale;
+	double sy = (server.cursor->y - c->geom.y - c->bw) * scale;
+	if (!pixman_region32_contains_point(region, floor(sx), floor(sy), NULL)) {
+		double cx, cy;
+		pointer_region_closest_point(region, sx, sy, &cx, &cy);
+		wlr_cursor_warp(server.cursor, NULL,
+						c->geom.x + c->bw + cx / scale,
+						c->geom.y + c->bw + cy / scale);
+	}
+	if (region == &fallback) {
+		pixman_region32_fini(&fallback);
+	}
+}
+
 /* Client the pointer is confined to, or NULL.
  *
  * The constraint belongs to the focused client (see focusclient()), so it is
@@ -526,13 +566,18 @@ void handle_new_pointer_constraint(struct wl_listener *listener, void *data) {
 		return;
 	}
 
-	if (!server.selected_monitor || !server.selected_monitor->sel)
-		return;
-
-	struct wlr_surface *focused_surface =
-		client_surface(server.selected_monitor->sel);
-	if (focused_surface &&
-		focused_surface == pointer_constraint->constraint->surface) {
+	/* Otherwise activate it when it belongs to the keyboard focused client: a
+	 * game may grab the pointer while it is still on another monitor (for
+	 * example when it was launched from a launcher there), so no pointer focus
+	 * is on it yet and the selected monitor is not even its monitor. */
+	Client *c = NULL, *cc = NULL;
+	if (server.seat->keyboard_state.focused_surface) {
+		toplevel_from_wlr_surface(server.seat->keyboard_state.focused_surface,
+								  &c, NULL);
+	}
+	toplevel_from_wlr_surface(pointer_constraint->constraint->surface, &cc,
+							  NULL);
+	if (cc && cc == c) {
 		pointer_constrain_cursor(pointer_constraint->constraint);
 	}
 }
@@ -552,6 +597,10 @@ void pointer_constrain_cursor(struct wlr_pointer_constraint_v1 *constraint) {
 
 	if (constraint) {
 		wlr_pointer_constraint_v1_send_activated(constraint);
+
+		Client *c = NULL;
+		toplevel_from_wlr_surface(constraint->surface, &c, NULL);
+		pointer_warp_into_constraint(constraint, c);
 	}
 }
 
