@@ -63,6 +63,32 @@ void set_arrange_visible(Monitor *m, Client *c, bool want_animation) {
 			wlr_scene_node_set_enabled(&c->scene_surface->node, true);
 	}
 
+	/* Scratchpad clients slide in from above the monitor when shown */
+	if (!(c->tags & TAG0_MASK) && c->is_in_scratchpad && c->is_scratchpad_show &&
+		(!was_enabled || c->animation.tagouting)) {
+		c->animation.tag_from_rule = false;
+		c->animation.tagouted = false;
+		/* Reverse an in-flight hide instead of restarting from the top. */
+		bool reversing = c->animation.tagouting && c->animation.running;
+		c->animation.tagouting = false;
+		if (client_animations_enabled(c)) {
+			c->animation.tagining = true;
+			c->animainit_geom = c->geom;
+			if (reversing) {
+				c->animainit_geom.x = c->animation.current.x;
+				c->animainit_geom.y = c->animation.current.y;
+			} else {
+				c->animainit_geom.y = c->mon->m.y - c->geom.height;
+			}
+		} else {
+			c->animation.tagining = false;
+			c->animainit_geom.x = c->animation.current.x;
+			c->animainit_geom.y = c->animation.current.y;
+		}
+		resize_apply(c, c->geom, (ResizeOpts){.skip_ov_enter_anim = true});
+		return;
+	}
+
 	/* Special workspace clients slide in from above the monitor */
 	if (c->tags & TAG0_MASK) {
 		c->animation.tag_from_rule = false;
@@ -142,6 +168,26 @@ void set_arrange_hidden(Monitor *m, Client *c, bool want_animation) {
 		c->is_clip_to_hide = false;
 		wlr_scene_node_set_enabled(&c->scene->node, true);
 		c->animation.running = false;
+		return;
+	}
+
+	/* Scratchpad windows slide up and out when hidden */
+	if (!(c->tags & TAG0_MASK) && c->is_in_scratchpad && !c->is_scratchpad_show) {
+		if (client_animations_enabled(c) && !c->animation.tagouted &&
+			c->scene->node.enabled) {
+			c->animation.tagouting = true;
+			c->animation.tagining = false;
+			c->pending = c->geom;
+			c->pending.y = c->mon->m.y - c->geom.height;
+			resize(c, c->geom, 0);
+		} else {
+			c->animation.running = false;
+			c->animation.tagouting = false;
+			c->animation.tagining = false;
+			wlr_scene_node_set_enabled(&c->scene->node, false);
+			c->animainit_geom = c->current = c->pending = c->animation.current =
+				c->geom;
+		}
 		return;
 	}
 
