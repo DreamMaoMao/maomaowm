@@ -1537,6 +1537,7 @@ bool parse_option(Config *config, char *key, char *value, int line_number) {
 		rule->isnosizehint = -1;
 		rule->idleinhibit_when_focus = -1;
 		rule->vrr_only_fullscreen = -1;
+		rule->confine_pointer = -1;
 		rule->force_render = -1;
 		rule->activation_bypass = -1;
 		rule->isterm = -1;
@@ -1655,6 +1656,8 @@ bool parse_option(Config *config, char *key, char *value, int line_number) {
 					rule->idleinhibit_when_focus = atoi(val);
 				} else if (strcmp(key, "vrr_only_fullscreen") == 0) {
 					rule->vrr_only_fullscreen = atoi(val);
+				} else if (strcmp(key, "confine_pointer") == 0) {
+					rule->confine_pointer = atoi(val);
 				} else if (strcmp(key, "force_render") == 0) {
 					rule->force_render = atoi(val);
 				} else if (strcmp(key, "activation_bypass") == 0) {

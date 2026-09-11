@@ -44,6 +44,7 @@ windowrule-once=Parameter:Values,Parameter:Values,appid:Values,title:Values
 | `shield_when_capture` | integer | `0` / `1` | Shield window when captured |
 | `force_render` | integer | `0` / `1` | Force render frame even if the window is not visible |
 | `activation_bypass` | integer | `0` / `1` | Bypass xdg-activation authentication: activation requests for this window are treated as authenticated, so the normal activation behavior applies regardless of token validity |
+| `confine_pointer` | integer | `0` / `1` (default 0) | Keep the mouse cursor inside this window while it is focused, even if the window never requests a pointer constraint itself. Useful for games that fail to capture the pointer |
 
 
 ### Geometry & Position
@@ -130,6 +131,9 @@ windowrule=isopensilent:1,appid:com.obsproject.Studio
 
 # Force tearing for games
 windowrule=force_tearing:1,title:vkcube
+
+# Keep the cursor inside a game that does not capture the pointer
+windowrule=confine_pointer:1,title:Counter-Strike 2
 
 # Skip xdg-activation authentication for this app
 windowrule=activation_bypass:1,appid:org.example.App
