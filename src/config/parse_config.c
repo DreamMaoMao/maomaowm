@@ -2688,18 +2688,22 @@ uint32_t parse_mod(const char *mod_str) {
 				case 133:
 				case 134:
 					mod |= WLR_MODIFIER_LOGO;
+					match_success = true;
 					break;
 				case 37:
 				case 105:
 					mod |= WLR_MODIFIER_CTRL;
+					match_success = true;
 					break;
 				case 50:
 				case 62:
 					mod |= WLR_MODIFIER_SHIFT;
+					match_success = true;
 					break;
 				case 64:
 				case 108:
 					mod |= WLR_MODIFIER_ALT;
+					match_success = true;
 					break;
 				default:
 					mango_error(false, WLR_ERROR,
