@@ -186,13 +186,15 @@ void move_client(const Arg *arg) {
 
 	Client *tc = direction_select(arg);
 
-	Monitor *dst_mon = tc ? tc->mon : monitor_from_direction(arg->i);
-	const Layout *dst_layout = dst_mon->pertag->ltidxs[get_mon_curtag(dst_mon)];
-
-	if (dst_layout->id == DWINDLE)
+	if (!tc) {
+		client_jump_to_monitor(c, monitor_from_direction(arg->i), arg->i);
+	} else if (tc->mon->pertag->ltidxs[get_mon_curtag(tc->mon)]->id ==
+			   DWINDLE) {
 		dwindle_move_next_to(c, tc, config.dwindle_split_ratio, arg->i);
-	else
-		client_move_next_to(c, tc, arg->i);
+	} else {
+		tc = get_focused_stack_client(tc, c);
+		client_exchange(c, tc);
+	}
 
 	if (config.warpcursor)
 		pointer_warp_to_client(c);
