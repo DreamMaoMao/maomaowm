@@ -57,6 +57,9 @@ List all monitors.
 List physical input devices, grouped by device, with their types,
 vendor/product IDs, interface count and matched device rule, if any.
 .TP
+\fBget all\-layers\fR
+List all open layer surfaces with their monitor, layer and namespace name.
+.TP
 \fBget all\-tags\fR
 List tags for all monitors.
 .TP
