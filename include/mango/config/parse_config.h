@@ -202,6 +202,7 @@ typedef struct {
 	char *animation_type_open;
 	char *animation_type_close;
 	int32_t shield_when_capture;
+	int32_t animation_direction;
 	int32_t noblur;
 	int32_t noanim;
 	int32_t noshadow;

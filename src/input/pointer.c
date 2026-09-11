@@ -138,8 +138,9 @@ static bool pointer_constraint_surface_enabled(
  * outside (e.g. the client grabbed the pointer while it was on another
  * monitor). The protocol expects the pointer to be inside the region once the
  * constraint is active. */
-static void pointer_warp_into_constraint(
-	struct wlr_pointer_constraint_v1 *constraint, Client *c) {
+static void
+pointer_warp_into_constraint(struct wlr_pointer_constraint_v1 *constraint,
+							 Client *c) {
 	if (!c || !c->mon || c->mon->isoverview ||
 		!pointer_constraint_surface_enabled(constraint)) {
 		return;
@@ -158,15 +159,14 @@ static void pointer_warp_into_constraint(
 
 	double scale = pointer_surface_scale(c);
 	pixman_region32_t fallback;
-	pixman_region32_t *region = pointer_constraint_region(constraint, c,
-														  &fallback);
+	pixman_region32_t *region =
+		pointer_constraint_region(constraint, c, &fallback);
 	double sx = (server.cursor->x - c->geom.x - c->bw) * scale;
 	double sy = (server.cursor->y - c->geom.y - c->bw) * scale;
 	if (!pixman_region32_contains_point(region, floor(sx), floor(sy), NULL)) {
 		double cx, cy;
 		pointer_region_closest_point(region, sx, sy, &cx, &cy);
-		wlr_cursor_warp(server.cursor, NULL,
-						c->geom.x + c->bw + cx / scale,
+		wlr_cursor_warp(server.cursor, NULL, c->geom.x + c->bw + cx / scale,
 						c->geom.y + c->bw + cy / scale);
 	}
 	if (region == &fallback) {

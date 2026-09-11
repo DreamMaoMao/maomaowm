@@ -1436,16 +1436,10 @@ bool parse_option(Config *config, char *key, char *value, int line_number) {
 		}
 
 		ConfigLayerRule *rule = &config->layer_rules[config->layer_rules_count];
-		memset(rule, 0, sizeof(ConfigLayerRule));
+		memset(rule, 0,
+			   sizeof(ConfigLayerRule)); // Zero initialize the whole thing
 
-		// Sets default values.
-		rule->layer_name = NULL;
-		rule->animation_type_open = NULL;
-		rule->animation_type_close = NULL;
-		rule->shield_when_capture = 0;
-		rule->noblur = 0;
-		rule->noanim = 0;
-		rule->noshadow = 0;
+		rule->animation_direction = UNDIR;
 
 		bool parse_error = false;
 		char *token = strtok(value, ",");
@@ -1467,6 +1461,8 @@ bool parse_option(Config *config, char *key, char *value, int line_number) {
 					rule->animation_type_close = strdup(val);
 				} else if (strcmp(key, "shield_when_capture") == 0) {
 					rule->shield_when_capture = CLAMP_INT(atoi(val), 0, 1);
+				} else if (strcmp(key, "animation_direction") == 0) {
+					rule->animation_direction = parse_direction(val);
 				} else if (strcmp(key, "noblur") == 0) {
 					rule->noblur = CLAMP_INT(atoi(val), 0, 1);
 				} else if (strcmp(key, "noanim") == 0) {

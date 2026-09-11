@@ -259,6 +259,7 @@ layerrule=layer_name:Values,Parameter:Values,Parameter:Values
 | `noanim` | integer | `0` / `1` | Disable layer animation |
 | `noshadow` | integer | `0` / `1` | Disable layer shadow |
 | `shield_when_capture`| integer | `0` / `1` | Shield layer when captured.(it is better to combination with `noanim:1`) |
+| `animation_direction`| string | direction | Specific direction in which the animation should go |
 
 > **Tip:** For animation types, see [Animations](/docs/visuals/animations#animation-types). For visual effects, see [Window Effects](/docs/visuals/effects).
 

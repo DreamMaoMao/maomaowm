@@ -108,11 +108,30 @@ void get_layer_target_geometry(LayerSurface *l, struct wlr_box *target_box) {
 	target_box->width = box.width;
 	target_box->height = box.height;
 }
-void set_layer_dir_animaiton(LayerSurface *l, struct wlr_box *geo) {
-	int32_t slide_direction;
+
+int32_t calculate_layer_animation_dir(LayerSurface *l,
+									  struct wlr_box *usable_area) {
 	int32_t horizontal, horizontal_value;
 	int32_t vertical, vertical_value;
 	int32_t center_x, center_y;
+
+	center_x = l->geom.x + l->geom.width / 2;
+	center_y = l->geom.y + l->geom.height / 2;
+	horizontal =
+		center_x > usable_area->x + usable_area->width / 2 ? RIGHT : LEFT;
+	horizontal_value = horizontal == LEFT
+						   ? center_x - usable_area->x
+						   : usable_area->x + usable_area->width - center_x;
+	vertical = center_y > usable_area->y + usable_area->height / 2 ? DOWN : UP;
+	vertical_value = vertical == UP
+						 ? center_y - l->mon->w.y
+						 : usable_area->y + usable_area->height - center_y;
+
+	return horizontal_value < vertical_value ? horizontal : vertical;
+}
+
+void set_layer_dir_animaiton(LayerSurface *l, struct wlr_box *geo) {
+	int32_t slide_direction;
 
 	if (!l)
 		return;
@@ -123,18 +142,10 @@ void set_layer_dir_animaiton(LayerSurface *l, struct wlr_box *geo) {
 	geo->width = l->geom.width;
 	geo->height = l->geom.height;
 
-	center_x = l->geom.x + l->geom.width / 2;
-	center_y = l->geom.y + l->geom.height / 2;
-	horizontal =
-		center_x > usable_area.x + usable_area.width / 2 ? RIGHT : LEFT;
-	horizontal_value = horizontal == LEFT
-						   ? center_x - usable_area.x
-						   : usable_area.x + usable_area.width - center_x;
-	vertical = center_y > usable_area.y + usable_area.height / 2 ? DOWN : UP;
-	vertical_value = vertical == UP
-						 ? center_y - l->mon->w.y
-						 : usable_area.y + usable_area.height - center_y;
-	slide_direction = horizontal_value < vertical_value ? horizontal : vertical;
+	if (l->animation_direction != UNDIR)
+		slide_direction = l->animation_direction;
+	else
+		slide_direction = calculate_layer_animation_dir(l, &usable_area);
 
 	switch (slide_direction) {
 	case UP:
