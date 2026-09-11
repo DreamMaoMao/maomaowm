@@ -125,7 +125,7 @@ bindr=Super,Super_L,spawn,rofi -show run
 | `switcher` | `next/prev`, `all_tag_next/all_tag_prev`, `all_next/all_prev` | Open or cycle the thumbnail switcher. `next`/`prev` list the current tag's windows, `all_tag_next`/`all_tag_prev` list all tags on the current monitor, `all_next`/`all_prev` list all monitors and tags. Releasing any modifier key selects. |
 | `exchange_client` | `left/right/up/down` | Swap the focused window with its neighbor in direction. Both windows change place, and with `exchange_cross_monitor` enabled they also swap monitors. |
 | `exchange_stack_client` | `next/prev` | Exchange window position in stack. |
-| `move_client` | `left/right/up/down` | Move the focused window one step in direction and push its neighbor aside. Without a neighbor in that direction the window moves onto the monitor lying there, which needs `exchange_cross_monitor`; otherwise it stays on the current monitor. |
+| `move_client` | `left/right/up/down` | Move the focused window one step in direction: `dwindle` re-inserts it next to the neighbor keeping the row/column it came from, every other layout swaps it with the neighbor like `exchange_client`. Without a neighbor in that direction the window moves onto the monitor lying there, which needs `exchange_cross_monitor`. |
 | `zoom` | - | Swap focused window with Master. |
 
 ### Group

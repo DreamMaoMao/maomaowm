@@ -3589,39 +3589,6 @@ bool client_jump_to_monitor(Client *c, Monitor *m, int32_t dir) {
 	return true;
 }
 
-void client_move_next_to(Client *c, Client *target, int32_t dir) {
-	if (!c || !c->mon || c == target)
-		return;
-
-	Monitor *src_mon = c->mon;
-	Monitor *dst_mon = target ? target->mon : monitor_from_direction(dir);
-	bool crossed = src_mon != dst_mon;
-
-	if (crossed && !client_jump_to_monitor(c, dst_mon, dir))
-		return;
-
-	if (!target)
-		return;
-
-	if (is_scroller_layout(c->mon)) {
-		exchange_two_scroller_clients(c, target);
-		return;
-	}
-
-	bool insert_before =
-		crossed ? (dir == RIGHT || dir == UP) : (dir == LEFT || dir == UP);
-
-	wl_list_remove(&c->link);
-	if (insert_before)
-		wl_list_insert(target->link.prev, &c->link);
-	else
-		wl_list_insert(&target->link, &c->link);
-
-	arrange(src_mon, false, false);
-	if (crossed)
-		arrange(c->mon, false, false);
-}
-
 void client_update_oldmonname_record(Client *c, Monitor *m) {
 	if (!c || c->iskilling || !client_surface(c)->mapped)
 		return;
