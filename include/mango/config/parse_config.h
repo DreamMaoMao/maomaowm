@@ -204,7 +204,7 @@ typedef struct {
 	/*
 	 * Match condition: name matches the device name or the vendor:product:name
 	 * identifier; type matches
-	 * keyboard/pointer/touchpad/touch/switch/tablet/pad.
+	 * keyboard/pointer/trackpad/touch/switch/tablet/pad.
 	 */
 	char *name;
 	char type[32];
@@ -219,7 +219,7 @@ typedef struct {
 	char kb_variant[128];
 	char kb_options[128];
 
-	/* Mouse / touchpad libinput parameters. */
+	/* Mouse / trackpad libinput parameters. */
 	int32_t natural_scrolling;
 	int32_t accel_profile;
 	double accel_speed;
@@ -413,7 +413,7 @@ typedef struct {
 	int32_t tap_and_drag;
 	int32_t drag_lock;
 	uint32_t button_map;
-	/* Touchpad-specific parameters. */
+	/* Trackpad-specific parameters. */
 	int32_t trackpad_left_handed;
 	int32_t trackpad_middle_button_emulation;
 	int32_t trackpad_disable_while_typing;

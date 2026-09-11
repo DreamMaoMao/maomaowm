@@ -70,7 +70,7 @@ ConfigDeviceRule *find_device_rule(struct wlr_input_device *device) {
 				wlr_libinput_get_device_handle(device);
 			if (libinput_dev &&
 				libinput_device_config_tap_get_finger_count(libinput_dev) > 0)
-				type = "touchpad";
+				type = "trackpad";
 			else
 				type = "pointer";
 		} else {

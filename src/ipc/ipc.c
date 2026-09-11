@@ -42,7 +42,7 @@ const char *ipc_device_type_str(struct wlr_input_device *dev) {
 		return "keyboard";
 	case WLR_INPUT_DEVICE_POINTER:
 		return ld && libinput_device_config_tap_get_finger_count(ld) > 0
-				   ? "touchpad"
+				   ? "trackpad"
 				   : "pointer";
 	case WLR_INPUT_DEVICE_TOUCH:
 		return "touch";

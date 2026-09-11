@@ -1694,7 +1694,20 @@ bool parse_option(Config *config, char *key, char *value, int line_number) {
 				if (strcmp(key, "name") == 0) {
 					rule->name = strdup(val);
 				} else if (strcmp(key, "type") == 0) {
-					snprintf(rule->type, sizeof(rule->type), "%s", val);
+					/* "touchpad" was the historical name of this device
+					 * type; keep it as a deprecated alias so existing
+					 * rules are not silently dropped. */
+					if (strcmp(val, "touchpad") == 0) {
+						mango_error(false, WLR_INFO,
+									"\033[1;33m[WARN]\033[0m device rule "
+									"type \033[1;36mtouchpad\033[0m is "
+									"deprecated, use \033[1;36mtrackpad\033[0m "
+									"instead\n");
+						snprintf(rule->type, sizeof(rule->type), "%s",
+								 "trackpad");
+					} else {
+						snprintf(rule->type, sizeof(rule->type), "%s", val);
+					}
 				} else if (strcmp(key, "repeat_rate") == 0) {
 					rule->repeat_rate = CLAMP_INT(atoi(val), 0, 1000);
 				} else if (strcmp(key, "repeat_delay") == 0) {

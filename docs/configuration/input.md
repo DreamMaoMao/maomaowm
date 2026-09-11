@@ -1,6 +1,6 @@
 ---
 title: Input Devices
-description: Configure keyboard layouts, mouse sensitivity, and touchpad gestures.
+description: Configure keyboard layouts, mouse sensitivity, and trackpad gestures.
 ---
 
 ## Device Configuration
@@ -57,7 +57,7 @@ Configuration for external mice.
 
 ### Trackpad Settings
 
-Specific settings for laptop touchpads. Some settings may require a relogin to take effect.
+Specific settings for laptop trackpads. Some settings may require a relogin to take effect.
 
 | Setting | Default | Description |
 | :--- | :--- | :--- |
@@ -124,7 +124,7 @@ unless a device rule pins them to a fixed output.
 
 - `click_method` values (use `mouse_click_method` / `trackpad_click_method`):
   - `0` — No software click emulation.
-  - `1` — Button areas: use software-defined areas on the touchpad to generate button events.
+  - `1` — Button areas: use software-defined areas on the trackpad to generate button events.
   - `2` — Clickfinger: the number of fingers determines which button is pressed.
 
 - `mouse_accel_profile` or `trackpad_scroll_profile` values:
@@ -206,7 +206,7 @@ The easiest way to get a device's name is to watch for it: run
 mmsg watch all-devices
 ```
 
-then use the device (type on a keyboard, move a mouse, scroll a touchpad).
+then use the device (type on a keyboard, move a mouse, scroll a trackpad).
 Each event prints the name of the device that triggered it, so you can match
 every physical device to its name without guessing. `mmsg get all-devices`
 also lists all connected devices at once if you prefer.
@@ -220,7 +220,9 @@ devicerule=type:<device-type>,option:value
 
 Put the printed `name` after `name:` (the `identifier` field,
 `vendor:product:name`, also works). Use `type:` to match all devices of a
-type: `keyboard`, `pointer`, `touchpad`, `touch`, `switch`, `tablet`, `pad`.
+type: `keyboard`, `pointer`, `trackpad`, `touch`, `switch`, `tablet`, `pad`.
+The historical spelling `touchpad` is still accepted as a deprecated alias for
+`trackpad`.
 
 Exact `name:` matches take priority over `type:` matches; the first matching
 rule wins. A rule with keyboard options (`kb_*`, `repeat_*`) turns that
@@ -232,7 +234,7 @@ unmatched devices stay in the shared, synchronized keyboard group.
 ```ini
 devicerule=name:AT Translated Set 2 keyboard,kb_layout:ru
 devicerule=name:A4Tech USB Mouse,natural_scrolling:1,accel_speed:0.1
-devicerule=type:touchpad,tap_to_click:1
+devicerule=type:trackpad,tap_to_click:1
 devicerule=name:ELAN Touchscreen,monitor:HDMI-A-1
 ```
 
@@ -257,10 +259,10 @@ the XKB defaults), so a rule like `kb_layout:pt` is not affected by a global
 | Pointer | `accel_profile` | `0` none, `1` flat, `2` adaptive |
 | Pointer | `natural_scrolling` | `1` inverts scroll direction |
 | Pointer | `left_handed` | `1` swaps left/right buttons |
-| Touchpad | `tap_to_click` | `1` enables tap-to-click |
-| Touchpad | `tap_and_drag` | `1` enables tap-and-drag |
-| Touchpad | `scroll_method` | `1` two-finger, `2` edge, `4` button |
-| Touchpad | `disable_while_typing` | `1` disables the touchpad while typing |
+| Trackpad | `tap_to_click` | `1` enables tap-to-click |
+| Trackpad | `tap_and_drag` | `1` enables tap-and-drag |
+| Trackpad | `scroll_method` | `1` two-finger, `2` edge, `4` button |
+| Trackpad | `disable_while_typing` | `1` disables the trackpad while typing |
 | Common | `middle_button_emulation` | `1` emulates the middle button |
 | Common | `send_events_mode` | `0` enabled, `1` disabled, `2` disabled with external mouse |
 | Common | `scroll_button` / `click_method` / `drag_lock` / `button_map` | libinput settings, see descriptions below |
