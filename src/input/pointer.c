@@ -151,6 +151,9 @@ handle_cursor_axis(struct wl_listener *listener, void *data) {
 			CLEANMASK(mods) == CLEANMASK(a->mod) && // Same modifier set
 			adir == a->dir &&
 			a->func) { // Wheel direction matches and a handler exists
+
+			keyboard_cancel_pending_release_bind();
+
 			if (event->time_msec - server.axis_apply_time >
 					config.axis_bind_apply_timeout ||
 				server.axis_apply_dir * event->delta < 0) {
@@ -959,6 +962,8 @@ bool pointer_process_button_press(struct wlr_pointer_button_event *event) {
 	if (event->pointer && check_trackpad_disabled(event->pointer)) {
 		return true;
 	}
+
+	keyboard_cancel_pending_release_bind();
 
 	switch (event->state) {
 	case WL_POINTER_BUTTON_STATE_PRESSED:

@@ -749,6 +749,8 @@ void handle_cursor_swipe_begin(struct wl_listener *listener, void *data) {
 		return;
 	}
 
+	keyboard_cancel_pending_release_bind();
+
 	swipe_drive_unfreeze();
 	swipe_active = true;
 	swipe_locked = false;
@@ -815,6 +817,8 @@ void handle_cursor_pinch_begin(struct wl_listener *listener, void *data) {
 		return;
 	}
 
+	keyboard_cancel_pending_release_bind();
+
 	// Forward pinch begin event to client
 	wlr_pointer_gestures_v1_send_pinch_begin(
 		server.pointer_gestures, server.seat, event->time_msec, event->fingers);
@@ -851,6 +855,8 @@ void handle_cursor_hold_begin(struct wl_listener *listener, void *data) {
 	if (!trackpad_enabled()) {
 		return;
 	}
+
+	keyboard_cancel_pending_release_bind();
 
 	// Forward hold begin event to client
 	wlr_pointer_gestures_v1_send_hold_begin(
