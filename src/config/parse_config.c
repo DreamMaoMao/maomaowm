@@ -3908,7 +3908,7 @@ void set_value_default() {
 	config.gesture_live = 1;
 	config.gesture_swipe_distance = 300;
 	config.gesture_swipe_cancel_ratio = 0.5;
-	config.gesture_swipe_min_speed_to_force = 30;
+	config.gesture_swipe_min_speed_to_force = 10;
 
 	config.idleinhibit_ignore_visible = 0;
 

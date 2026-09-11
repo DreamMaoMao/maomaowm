@@ -79,7 +79,7 @@ Specific settings for laptop trackpads. Some settings may require a relogin to t
 | `gesture_live` | `1` | Drive tag/focus/overview transitions while the fingers are still moving (`1`), instead of only after release (`0`). |
 | `gesture_swipe_distance` | `300` | Finger travel (px) that corresponds to one full page transition. |
 | `gesture_swipe_cancel_ratio` | `0.5` | Releasing after the last page was dragged past this fraction commits it; below it, the transition animates back. |
-| `gesture_swipe_min_speed_to_force` | `30` | Average per-event speed (px) that forces a commit even below the cancel ratio (for quick flicks). |
+| `gesture_swipe_min_speed_to_force` | `10` | Average per-event speed (px) that forces a commit even below the cancel ratio (for quick flicks). |
 | `button_map` | `0` | `0` (Left/right/middle), `1` (Left/middle/right). |
 | `trackpad_scroll_factor` | `1.0` | Scroll factor for trackpad scroll speed (0.1–10.0). |
 ---
