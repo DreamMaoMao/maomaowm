@@ -114,6 +114,7 @@ bool special_has_clients(const Monitor *m);
 uint32_t get_monitor_active_tagset(const Monitor *m);
 Monitor *monitor_from_direction(enum wlr_direction dir);
 bool is_scroller_layout(Monitor *m);
+bool is_horizontal_scroller_layout(Monitor *m);
 bool is_monocle_layout(Monitor *m);
 bool is_centertile_layout(Monitor *m);
 void special_update_dim(Monitor *m);

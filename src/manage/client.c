@@ -2284,6 +2284,18 @@ void handle_client_unmap(struct wl_listener *listener, void *data) {
 		c->group_bar = NULL;
 	}
 
+	if (c->titlebar_close) {
+		if (server.titlebar_hover_client == c)
+			server.titlebar_hover_client = NULL;
+		if (server.titlebar_drag_client == c) {
+			server.titlebar_drag_client = NULL;
+			server.titlebar_drag_pending = false;
+			server.titlebar_scroll_active = false;
+		}
+		mango_close_button_destroy(c->titlebar_close);
+		c->titlebar_close = NULL;
+	}
+
 	if (c->image_capture_scene) {
 		wlr_scene_node_destroy(&c->image_capture_scene->tree.node);
 		c->image_capture_scene = NULL;
@@ -2522,6 +2534,16 @@ void client_focus(Client *c, int32_t lift) {
 			last_focus_client->isfocusing = false;
 			client_set_unfocused_opacity_animation(last_focus_client);
 		}
+
+		/* Ungrouped titlebars follow the focused client (grouped bars are
+		 * driven by the group-focus logic instead). */
+		if (config.enable_titlebars && c->group_bar && !c->group_next &&
+			!c->group_prev)
+			mango_group_bar_set_focus(c->group_bar, true);
+		if (last_focus_client && last_focus_client != c &&
+			config.enable_titlebars && last_focus_client->group_bar &&
+			!last_focus_client->group_next && !last_focus_client->group_prev)
+			mango_group_bar_set_focus(last_focus_client->group_bar, false);
 
 		client_set_focused_opacity_animation(c);
 
@@ -3061,7 +3083,7 @@ void client_set_maximize_screen(Client *c, int32_t maximizescreen,
 		maximizescreen_box.width = c->mon->w.width - 2 * config.gappoh;
 		maximizescreen_box.height = c->mon->w.height - 2 * config.gappov;
 
-		if (c->group_next || c->group_prev) {
+		if (client_wants_titlebar(c)) {
 			maximizescreen_box.height -= config.group_bar_height;
 			maximizescreen_box.y += config.group_bar_height;
 		}
@@ -3093,7 +3115,7 @@ void reset_maximizescreen_size(Client *c) {
 	geom.width = c->mon->w.width - 2 * config.gappoh;
 	geom.height = c->mon->w.height - 2 * config.gappov;
 
-	if (c->group_next || c->group_prev) {
+	if (client_wants_titlebar(c)) {
 		geom.height -= config.group_bar_height;
 		geom.y += config.group_bar_height;
 	}
@@ -3437,6 +3459,9 @@ void client_replace(Client *c, Client *w, bool is_group_change_member,
 
 	if (w->group_bar && !is_group_change_member) {
 		wlr_scene_node_set_enabled(&w->group_bar->scene_buffer->node, false);
+		if (w->titlebar_close)
+			wlr_scene_node_set_enabled(&w->titlebar_close->scene_buffer->node,
+									   false);
 	}
 
 	if (w->jump_label_node) {
@@ -3599,8 +3624,7 @@ void client_tile_resize(Client *c, struct wlr_box geo, int32_t interact) {
 	if (!ISFAKETILED(c) || !c->mon)
 		return;
 
-	if (!c->mon->isoverview && !c->isfullscreen &&
-		(c->group_next || c->group_prev)) {
+	if (!c->mon->isoverview && !c->isfullscreen && client_wants_titlebar(c)) {
 		geo.y = geo.y + config.group_bar_height;
 		geo.height -= config.group_bar_height;
 	}
@@ -3660,6 +3684,10 @@ void client_sync_layer(Client *c) {
 		client_reparent_group(c);
 }
 
+bool client_wants_titlebar(Client *c) {
+	return c && (config.enable_titlebars || c->group_next || c->group_prev);
+}
+
 void client_add_group_bar(Client *c) {
 
 	if (config.group_bar_height <= 0) {
@@ -3677,6 +3705,26 @@ void client_add_group_bar(Client *c) {
 						   : server.selected_monitor
 							   ? server.selected_monitor->wlr_output->scale
 							   : 1.0f);
+
+	/* Close button (circle + X), created in the group bar's layer tree so it
+	 * shares the bar's coordinate space. node.data points at the group bar
+	 * (type GroupBar) so node_at_point resolves a click on it to this client's
+	 * bar rather than a bare client hit. */
+	c->titlebar_close = mango_close_button_create(c->group_bar,
+												  server.layers[layer]);
+	if (c->titlebar_close) {
+		float hover[4];
+		for (int i = 0; i < 3; i++)
+			hover[i] = config.title_close_color[i] +
+					   (1.0f - config.title_close_color[i]) * 0.4f;
+		hover[3] = config.title_close_color[3];
+		const float xcol[4] = {1.0f, 1.0f, 1.0f, 1.0f};
+		mango_close_button_set_colors(c->titlebar_close, config.title_close_color,
+									  hover, xcol);
+		wlr_scene_node_place_above(&c->titlebar_close->scene_buffer->node,
+								   &c->group_bar->scene_buffer->node);
+		wlr_scene_node_set_enabled(&c->titlebar_close->scene_buffer->node, false);
+	}
 }
 
 void client_focus_group_member(Client *c) {
@@ -3732,7 +3780,7 @@ void client_check_tab_node_visible(Client *c) {
 	Client *cur = head;
 	while (cur) {
 		if (!c->mon->isoverview && cur->group_bar &&
-			(cur->group_next || cur->group_prev) && TAGMATCH(c, c->mon) &&
+			client_wants_titlebar(cur) && TAGMATCH(c, c->mon) &&
 			ISNORMAL(c) && !c->isfullscreen) {
 			wlr_scene_node_set_enabled(&cur->group_bar->scene_buffer->node,
 									   true);
@@ -3757,6 +3805,10 @@ void client_raise_group(Client *c) {
 		if (cur->group_bar) {
 			wlr_scene_node_raise_to_top(&cur->group_bar->scene_buffer->node);
 		}
+		if (cur->titlebar_close && cur->group_bar) {
+			wlr_scene_node_place_above(&cur->titlebar_close->scene_buffer->node,
+									   &cur->group_bar->scene_buffer->node);
+		}
 		wlr_scene_node_raise_to_top(&cur->scene->node);
 		cur = cur->group_next;
 	}
@@ -3778,6 +3830,10 @@ void client_reparent_group(Client *c) {
 			wlr_scene_node_reparent(&cur->group_bar->scene_buffer->node,
 									server.layers[layer]);
 		}
+		if (cur->titlebar_close) {
+			wlr_scene_node_reparent(&cur->titlebar_close->scene_buffer->node,
+									server.layers[layer]);
+		}
 		wlr_scene_node_reparent(&cur->scene->node, server.layers[layer]);
 		cur = cur->group_next;
 	}
@@ -3790,8 +3846,34 @@ void client_handle_decorate_click(MangoGroupBar *gb) {
 
 	if (gb->node_data) {
 		Client *c = gb->node_data;
-		client_focus_group_member(c);
+
+		/* Ungrouped titlebars aren't handled by the group-focus path (it
+		 * early-returns), so focus the client directly. */
+		if (!c->group_next && !c->group_prev)
+			client_focus(c, 1);
+		else
+			client_focus_group_member(c);
 	}
+}
+
+/* Recolor the close button: a brighter tint on hover, base color otherwise. */
+void client_set_titlebar_close_color(Client *c, bool hover) {
+	if (!c || !c->titlebar_close)
+		return;
+	mango_close_button_set_hover(c->titlebar_close, hover);
+}
+
+/* True if the cursor is currently over the client's titlebar close button. */
+bool client_titlebar_close_hit(Client *c) {
+	if (!c || !c->titlebar_close ||
+		!c->titlebar_close->scene_buffer->node.enabled)
+		return false;
+	int32_t nx, ny;
+	if (!wlr_scene_node_coords(&c->titlebar_close->scene_buffer->node, &nx, &ny))
+		return false;
+	int32_t sz = c->titlebar_close->size;
+	double cx = server.cursor->x, cy = server.cursor->y;
+	return cx >= nx && cx < nx + sz && cy >= ny && cy < ny + sz;
 }
 
 void client_set_group_mon(Client *c, Monitor *m) {

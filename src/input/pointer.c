@@ -495,6 +495,45 @@ void pointer_resize_floating_window(Client *gc) {
 	server.grab_offset_x += cdx;
 	server.grab_offset_y += cdy;
 }
+
+/* Titlebar scroll: how much the strip travels relative to cursor movement
+ * (>1 = the view moves more than the cursor). Applied to both the live preview
+ * and the release commit so the two stay consistent. */
+#define TITLEBAR_SCROLL_SENSITIVITY 1.5
+
+/* Window whose titlebar is under (x,y), ignoring `ignore` (the dragged window,
+ * which sits on top under the cursor). Returns NULL if no titlebar is there. */
+static Client *titlebar_target_at(double x, double y, Client *ignore) {
+	bool en_scene = false, en_bar = false, en_close = false;
+	if (ignore) {
+		en_scene = ignore->scene->node.enabled;
+		wlr_scene_node_set_enabled(&ignore->scene->node, false);
+		if (ignore->group_bar) {
+			en_bar = ignore->group_bar->scene_buffer->node.enabled;
+			wlr_scene_node_set_enabled(&ignore->group_bar->scene_buffer->node,
+									   false);
+		}
+		if (ignore->titlebar_close) {
+			en_close = ignore->titlebar_close->scene_buffer->node.enabled;
+			wlr_scene_node_set_enabled(
+				&ignore->titlebar_close->scene_buffer->node, false);
+		}
+	}
+	MangoGroupBar *gb = NULL;
+	node_at_point(x, y, NULL, NULL, NULL, &gb, NULL, NULL);
+	if (ignore) {
+		wlr_scene_node_set_enabled(&ignore->scene->node, en_scene);
+		if (ignore->group_bar)
+			wlr_scene_node_set_enabled(&ignore->group_bar->scene_buffer->node,
+									   en_bar);
+		if (ignore->titlebar_close)
+			wlr_scene_node_set_enabled(
+				&ignore->titlebar_close->scene_buffer->node, en_close);
+	}
+	Client *t = (gb && gb->node_data) ? (Client *)gb->node_data : NULL;
+	return (t != ignore) ? t : NULL;
+}
+
 void pointer_process_motion(uint32_t time, struct wlr_input_device *device,
 							double dx, double dy, double dx_unaccel,
 							double dy_unaccel) {
@@ -502,6 +541,7 @@ void pointer_process_motion(uint32_t time, struct wlr_input_device *device,
 	Client *c = NULL, *w = NULL;
 	Client *closet_drop_client = NULL;
 	LayerSurface *l = NULL;
+	MangoGroupBar *gb = NULL;
 	struct wlr_surface *surface = NULL;
 	bool should_lock = false;
 
@@ -550,8 +590,25 @@ void pointer_process_motion(uint32_t time, struct wlr_input_device *device,
 	}
 
 	/* Find the client under the pointer and send the event along. */
-	node_at_point(server.cursor->x, server.cursor->y, &surface, &c, NULL, NULL,
+	node_at_point(server.cursor->x, server.cursor->y, &surface, &c, NULL, &gb,
 				  &sx, &sy);
+
+	/* Highlight the titlebar close button under the cursor (and clear the
+	 * previously-highlighted one). */
+	{
+		Client *hover = (gb && gb->node_data &&
+						 client_titlebar_close_hit(gb->node_data))
+							? (Client *)gb->node_data
+							: NULL;
+		if (server.titlebar_hover_client != hover) {
+			if (server.titlebar_hover_client)
+				client_set_titlebar_close_color(server.titlebar_hover_client,
+												 false);
+			if (hover)
+				client_set_titlebar_close_color(hover, true);
+			server.titlebar_hover_client = hover;
+		}
+	}
 
 	if (server.cursor_mode == CurPressed && !server.seat->drag &&
 		surface != server.seat->pointer_state.focused_surface &&
@@ -568,6 +625,59 @@ void pointer_process_motion(uint32_t time, struct wlr_input_device *device,
 								(int32_t)round(server.cursor->x),
 								(int32_t)round(server.cursor->y));
 
+	/* A titlebar left-press turns into either a horizontal view scroll or a
+	 * window move once the pointer travels past a small threshold; a click that
+	 * never moves just focuses. Horizontal drag on a tiled scroller window
+	 * scrolls the view; vertical (or with Super) moves the window. */
+	if (server.titlebar_drag_pending) {
+		double ddx = server.cursor->x - server.titlebar_drag_x;
+		double ddy = server.cursor->y - server.titlebar_drag_y;
+		if (ddx * ddx + ddy * ddy >= 25.0) {
+			Client *dc = server.titlebar_drag_client;
+			server.titlebar_drag_pending = false;
+			bool horizontal = fabs(ddx) > fabs(ddy);
+			bool super = keyboard_hard_modifiers() & WLR_MODIFIER_LOGO;
+			if (dc && !dc->iskilling && !super && horizontal && dc->mon &&
+				ISSCROLLTILED(dc) && is_horizontal_scroller_layout(dc->mon)) {
+				server.titlebar_scroll_active = true;
+				Client *head = scroll_get_stack_head_client(dc);
+				server.titlebar_scroll_orig_x =
+					head ? head->geom.x : dc->geom.x;
+			} else {
+				server.titlebar_drag_client = NULL;
+				if (dc && !dc->iskilling) {
+					/* moving (not scrolling) a grouped window pulls it out of
+					 * the group first */
+					if (dc->group_next || dc->group_prev) {
+						group_leave(&(Arg){.tc = dc});
+						client_focus(dc, 1);
+					}
+					begin_move_client(dc);
+				}
+			}
+		}
+	}
+
+	/* While scrolling via the titlebar, pan the strip 1:1 with the cursor as a
+	 * live preview. The actual focus step is committed on release, so dragging
+	 * back to the start cancels the scroll. */
+	if (server.titlebar_scroll_active) {
+		Client *dc = server.titlebar_drag_client;
+		if (dc && !dc->iskilling && dc->mon) {
+			Client *head = scroll_get_stack_head_client(dc);
+			if (head) {
+				int32_t desired = (int32_t)round(
+					TITLEBAR_SCROLL_SENSITIVITY *
+					(server.cursor->x - server.titlebar_drag_x));
+				int32_t dx =
+					desired - (head->geom.x - server.titlebar_scroll_orig_x);
+				if (dx != 0)
+					scroller_pan_view(dc->mon, dx);
+			}
+		}
+		return;
+	}
+
 	/* If we are currently grabbing the mouse, handle and return */
 	if (server.cursor_mode == CurMove) {
 		/* Move the grabbed client to the new position. */
@@ -578,7 +688,13 @@ void pointer_process_motion(uint32_t time, struct wlr_input_device *device,
 			.width = server.grab_client->geom.width,
 			.height = server.grab_client->geom.height};
 		if (config.drag_tile_to_tile && server.grab_client->drag_to_tile) {
-			closet_drop_client = find_closest_tiled_client(server.grab_client);
+			/* over a titlebar -> whole-window group-join target; otherwise the
+			 * usual edge-insertion target by proximity */
+			Client *tb = titlebar_target_at(server.cursor->x, server.cursor->y,
+											server.grab_client);
+			server.drop_to_group = (tb != NULL);
+			closet_drop_client =
+				tb ? tb : find_closest_tiled_client(server.grab_client);
 			if (closet_drop_client && server.drop_client &&
 				closet_drop_client != server.drop_client) {
 				server.drop_client->enable_drop_area_draw = false;
@@ -1017,8 +1133,29 @@ bool pointer_process_button_press(struct wlr_pointer_button_event *event) {
 			return true;
 		}
 
-		// handle click on tile node
-		client_handle_decorate_click(gb);
+		// handle click on titlebar / group bar
+		if (gb && gb->node_data) {
+			Client *tc = gb->node_data;
+
+			// close button takes priority over focus/drag
+			if (event->button == BTN_LEFT && client_titlebar_close_hit(tc)) {
+				pending_kill_client(tc);
+				return true;
+			}
+
+			client_handle_decorate_click(gb);
+
+			// arm a pending drag; it only starts once the pointer moves past a
+			// threshold (so a plain click just focuses instead of floating)
+			if (event->button == BTN_LEFT && !tc->isfullscreen &&
+				!tc->ismaximizescreen && !client_is_unmanaged(tc)) {
+				server.titlebar_drag_pending = true;
+				server.titlebar_drag_client = tc;
+				server.titlebar_drag_x = server.cursor->x;
+				server.titlebar_drag_y = server.cursor->y;
+			}
+			return true;
+		}
 
 		mods = keyboard_hard_modifiers();
 
@@ -1038,6 +1175,65 @@ bool pointer_process_button_press(struct wlr_pointer_button_event *event) {
 		}
 		break;
 	case WL_POINTER_BUTTON_STATE_RELEASED:
+		server.titlebar_drag_pending = false;
+		server.drop_to_group = false;
+		/* Commit a titlebar scroll: snap to the nearest focus step based on
+		 * total horizontal travel (a half-step dead zone lets the user cancel
+		 * by returning the cursor near the start). */
+		if (server.titlebar_scroll_active) {
+			Client *dc = server.titlebar_drag_client;
+			server.titlebar_scroll_active = false;
+			server.titlebar_drag_client = NULL;
+			if (dc && !dc->iskilling && dc->mon) {
+				const double step = 120.0;
+				double disp =
+					TITLEBAR_SCROLL_SENSITIVITY *
+					(server.cursor->x - server.titlebar_drag_x);
+				int32_t steps = (int32_t)(disp >= 0 ? disp / step + 0.5
+													: disp / step - 0.5);
+				/* restore the pre-drag anchor so the settle is deterministic */
+				Client *head = scroll_get_stack_head_client(dc);
+				if (head)
+					head->geom.x = server.titlebar_scroll_orig_x;
+				int32_t saved_warp = config.warpcursor;
+				config.warpcursor = 0;
+				/* grab-and-pull: drag right (disp>0) -> focus left */
+				for (int32_t i = 0; i < steps; i++)
+					focus_direction(&(Arg){.i = LEFT});
+				for (int32_t i = 0; i < -steps; i++)
+					focus_direction(&(Arg){.i = RIGHT});
+				config.warpcursor = saved_warp;
+				arrange(dc->mon, true, false);
+			}
+			return true;
+		}
+		server.titlebar_drag_client = NULL;
+		/* Dropping a dragged window onto another window's titlebar joins it
+		 * into that window's group. The dragged window (and its own titlebar)
+		 * sits on top under the cursor, so hide its nodes for the hit-test to
+		 * see the titlebar beneath. */
+		if (server.cursor_mode == CurMove && server.grab_client) {
+			Client *jc = server.grab_client;
+			Client *target =
+				titlebar_target_at(server.cursor->x, server.cursor->y, jc);
+			if (target) {
+				server.grab_client = NULL;
+				server.cursor_mode = CurNormal;
+				server.start_drag_window = false;
+				server.last_apply_drag_time = 0;
+				jc->drag_to_tile = false;
+				client_set_floating(jc, 0);
+				if (server.drop_client) {
+					server.drop_client->enable_drop_area_draw = false;
+					client_set_drop_area(server.drop_client);
+					server.drop_client = NULL;
+				}
+				server.drop_to_group = false;
+				client_group_join(jc, target);
+				wlr_seat_pointer_clear_focus(server.seat);
+				return true;
+			}
+		}
 		/* If you released any buttons, we exit interactive move/resize mode. */
 		if (!server.session_locked && server.cursor_mode != CurNormal &&
 			server.cursor_mode != CurPressed) {

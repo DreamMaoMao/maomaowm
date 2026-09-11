@@ -128,6 +128,13 @@ struct MangoServer {
 	int32_t drag_begin_cursor_x, drag_begin_cursor_y; /* client-relative */
 	bool start_drag_window;
 	int32_t last_apply_drag_time;
+	bool titlebar_drag_pending; /* left-press on a titlebar, awaiting drag */
+	Client *titlebar_drag_client;
+	double titlebar_drag_x, titlebar_drag_y; /* press position (also scroll anchor) */
+	bool titlebar_scroll_active;		   /* horizontal drag scrolls the view */
+	int32_t titlebar_scroll_orig_x;		   /* anchor head geom.x before drag */
+	Client *titlebar_hover_client; /* close button currently highlighted */
+	bool drop_to_group; /* drop target is a titlebar -> whole-window highlight */
 
 	/* Outputs / monitors */
 	struct wlr_output_layout *output_layout;

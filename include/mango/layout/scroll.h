@@ -48,6 +48,7 @@ void arrange_stack_vertical_node(struct ScrollerStackNode *head,
 								 struct wlr_box geometry, int32_t gappih);
 void scroller(Monitor *m);
 void vertical_scroller(Monitor *m);
+void scroller_pan_view(Monitor *m, int32_t dx);
 void scroller_remove_client(Client *c);
 void scroller_insert_stack(Client *c, Client *target_client,
 						   bool insert_before);

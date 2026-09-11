@@ -461,6 +461,10 @@ typedef struct {
 	uint32_t special_gappov;
 	uint32_t borderpx;
 	uint32_t group_bar_height;
+	int32_t enable_titlebars;
+	uint32_t titlebar_button_size;
+	uint32_t titlebar_button_margin;
+	float title_close_color[4];
 	float scratchpad_width_ratio;
 	float scratchpad_height_ratio;
 	float special_dim;

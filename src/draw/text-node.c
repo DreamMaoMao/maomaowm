@@ -58,6 +58,24 @@ static const struct wlr_buffer_impl text_buffer_impl = {
 	.end_data_ptr_access = text_buffer_end_data_ptr_access,
 };
 
+/* Wrap a rendered cairo surface as the scene buffer, dropping the old one.
+ * Shared by the jump label, group bar, and close button nodes. */
+static void mango_commit_surface(struct wlr_scene_buffer *sb,
+								 struct mango_text_buffer **slot,
+								 cairo_surface_t *surface, int pw, int ph) {
+	if (*slot) {
+		wlr_buffer_drop(&(*slot)->base);
+		*slot = NULL;
+	}
+	struct mango_text_buffer *buf = calloc(1, sizeof(*buf));
+	if (!buf)
+		return;
+	wlr_buffer_init(&buf->base, &text_buffer_impl, pw, ph);
+	buf->surface = surface;
+	*slot = buf;
+	wlr_scene_buffer_set_buffer(sb, &buf->base);
+}
+
 MangoJumpLabel *mango_jump_label_node_create(struct wlr_scene_tree *parent,
 											 DecorateDrawData data) {
 	MangoJumpLabel *node = calloc(1, sizeof(*node));
@@ -413,21 +431,8 @@ void mango_jump_label_node_update(MangoJumpLabel *node, const char *text,
 	cairo_surface_flush(node->surface);
 	cairo_destroy(cr);
 
-	if (node->buffer) {
-		wlr_buffer_drop(&node->buffer->base);
-		node->buffer = NULL;
-	}
-
-	struct mango_text_buffer *buf = calloc(1, sizeof(*buf));
-	if (!buf) {
-		return;
-	}
-	wlr_buffer_init(&buf->base, &text_buffer_impl, node->surface_pixel_w,
-					node->surface_pixel_h);
-	buf->surface = node->surface;
-	node->buffer = buf;
-
-	wlr_scene_buffer_set_buffer(node->scene_buffer, &buf->base);
+	mango_commit_surface(node->scene_buffer, &node->buffer, node->surface,
+						 node->surface_pixel_w, node->surface_pixel_h);
 
 	node->logical_width = box_logical_w + 2 * node->border_width;
 	node->logical_height = box_logical_h + 2 * node->border_width;
@@ -810,26 +815,160 @@ void mango_group_bar_update(MangoGroupBar *node, const char *text,
 	cairo_surface_flush(node->surface);
 	cairo_destroy(cr);
 
-	if (node->buffer) {
-		wlr_buffer_drop(&node->buffer->base);
-		node->buffer = NULL;
-	}
-
-	struct mango_text_buffer *buf = calloc(1, sizeof(*buf));
-	if (!buf)
-		return;
-
-	wlr_buffer_init(&buf->base, &text_buffer_impl, node->surface_pixel_w,
-					node->surface_pixel_h);
-	buf->surface = node->surface;
-	node->buffer = buf;
-
-	wlr_scene_buffer_set_buffer(node->scene_buffer, &buf->base);
+	mango_commit_surface(node->scene_buffer, &node->buffer, node->surface,
+						 node->surface_pixel_w, node->surface_pixel_h);
 
 	node->logical_width = node->target_width;
 	node->logical_height = node->target_height;
 	wlr_scene_buffer_set_dest_size(node->scene_buffer, node->logical_width,
 								   node->logical_height);
+}
+
+/* Release the close button's GPU buffer and cairo surface. */
+static void mango_close_button_drop_gpu(MangoCloseButton *node) {
+	if (node->buffer) {
+		wlr_buffer_drop(&node->buffer->base);
+		node->buffer = NULL;
+	}
+	if (node->surface) {
+		cairo_surface_destroy(node->surface);
+		node->surface = NULL;
+	}
+}
+
+MangoCloseButton *mango_close_button_create(void *cdata,
+											struct wlr_scene_tree *parent) {
+	MangoCloseButton *node = calloc(1, sizeof(*node));
+	if (!node)
+		return NULL;
+
+	node->scene_buffer = wlr_scene_buffer_create(parent, NULL);
+	if (!node->scene_buffer) {
+		free(node);
+		return NULL;
+	}
+
+	/* sensible defaults: red circle, brighter on hover, white X */
+	node->circle_color[0] = 0.68f;
+	node->circle_color[1] = 0.25f;
+	node->circle_color[2] = 0.12f;
+	node->circle_color[3] = 1.0f;
+	memcpy(node->circle_hover_color, node->circle_color,
+		   sizeof(node->circle_hover_color));
+	node->x_color[0] = node->x_color[1] = node->x_color[2] = node->x_color[3] =
+		1.0f;
+
+	node->cached_valid = false;
+	node->scene_buffer->node.data = cdata;
+	return node;
+}
+
+void mango_close_button_destroy(MangoCloseButton *node) {
+	if (!node)
+		return;
+	mango_close_button_drop_gpu(node);
+	wlr_scene_node_destroy(&node->scene_buffer->node);
+	free(node);
+}
+
+void mango_close_button_set_colors(MangoCloseButton *node, const float circle[4],
+								   const float circle_hover[4],
+								   const float x[4]) {
+	if (!node)
+		return;
+	if (circle)
+		memcpy(node->circle_color, circle, sizeof(node->circle_color));
+	if (circle_hover)
+		memcpy(node->circle_hover_color, circle_hover,
+			   sizeof(node->circle_hover_color));
+	if (x)
+		memcpy(node->x_color, x, sizeof(node->x_color));
+	node->cached_valid = false;
+}
+
+void mango_close_button_set(MangoCloseButton *node, int32_t size, float scale,
+							bool hover) {
+	if (!node)
+		return;
+	if (scale <= 0.0f)
+		scale = 1.0f;
+	if (size < 0)
+		size = 0;
+
+	node->size = size;
+	node->hover = hover;
+
+	if (size <= 0) {
+		wlr_scene_buffer_set_buffer(node->scene_buffer, NULL);
+		mango_close_button_drop_gpu(node);
+		node->cached_valid = false;
+		wlr_scene_buffer_set_dest_size(node->scene_buffer, 0, 0);
+		return;
+	}
+
+	if (node->cached_valid && node->cached_size == size &&
+		node->cached_scale == scale && node->cached_hover == hover)
+		return;
+
+	int32_t px = (int32_t)(size * scale + 0.5f);
+	if (px < 1)
+		px = 1;
+
+	if (!node->surface || node->surface_pixel_w != px ||
+		node->surface_pixel_h != px) {
+		mango_close_button_drop_gpu(node);
+		node->surface = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, px, px);
+		node->surface_pixel_w = px;
+		node->surface_pixel_h = px;
+	}
+
+	cairo_t *cr = cairo_create(node->surface);
+	cairo_set_source_rgba(cr, 0.0, 0.0, 0.0, 0.0);
+	cairo_set_operator(cr, CAIRO_OPERATOR_SOURCE);
+	cairo_paint(cr);
+	cairo_set_operator(cr, CAIRO_OPERATOR_OVER);
+
+	double c = px / 2.0;
+	double r = c; /* circle fills the whole button */
+	const float *circle = hover ? node->circle_hover_color : node->circle_color;
+	cairo_set_source_rgba(cr, circle[0], circle[1], circle[2], circle[3]);
+	cairo_arc(cr, c, c, r, 0, 2 * 3.14159265358979323846);
+	cairo_fill(cr);
+
+	/* the X: two diagonal strokes inset from the circle edge */
+	double inset = px * 0.30;
+	double lw = px * 0.12;
+	if (lw < 1.0)
+		lw = 1.0;
+	cairo_set_line_width(cr, lw);
+	cairo_set_line_cap(cr, CAIRO_LINE_CAP_ROUND);
+	cairo_set_source_rgba(cr, node->x_color[0], node->x_color[1],
+						  node->x_color[2], node->x_color[3]);
+	cairo_move_to(cr, inset, inset);
+	cairo_line_to(cr, px - inset, px - inset);
+	cairo_move_to(cr, px - inset, inset);
+	cairo_line_to(cr, inset, px - inset);
+	cairo_stroke(cr);
+
+	cairo_surface_flush(node->surface);
+	cairo_destroy(cr);
+
+	mango_commit_surface(node->scene_buffer, &node->buffer, node->surface,
+						 node->surface_pixel_w, node->surface_pixel_h);
+	wlr_scene_buffer_set_dest_size(node->scene_buffer, size, size);
+
+	node->cached_size = size;
+	node->cached_scale = scale;
+	node->cached_hover = hover;
+	node->cached_valid = true;
+}
+
+void mango_close_button_set_hover(MangoCloseButton *node, bool hover) {
+	if (!node || node->hover == hover)
+		return;
+	/* re-render at the stored size/scale with the new hover state */
+	float scale = node->cached_scale > 0.0f ? node->cached_scale : 1.0f;
+	mango_close_button_set(node, node->size, scale, hover);
 }
 
 void mango_group_bar_set_focus(MangoGroupBar *node, bool focused) {

@@ -129,6 +129,37 @@ typedef struct MangoGroupBar {
 	int32_t logical_height;
 } MangoGroupBar;
 
+/* Titlebar close button: a filled circle with an X, rendered via Cairo. */
+typedef struct MangoCloseButton {
+	struct wlr_scene_buffer *scene_buffer;
+	struct mango_text_buffer *buffer;
+	cairo_surface_t *surface;
+	int surface_pixel_w, surface_pixel_h;
+
+	int32_t size; /* logical (unscaled) edge length */
+	bool hover;
+
+	float circle_color[4];
+	float circle_hover_color[4];
+	float x_color[4];
+
+	/* cache to skip redundant redraws */
+	int32_t cached_size;
+	float cached_scale;
+	bool cached_hover;
+	bool cached_valid;
+} MangoCloseButton;
+
+MangoCloseButton *mango_close_button_create(void *cdata,
+											struct wlr_scene_tree *parent);
+void mango_close_button_destroy(MangoCloseButton *node);
+void mango_close_button_set_colors(MangoCloseButton *node, const float circle[4],
+								   const float circle_hover[4],
+								   const float x[4]);
+void mango_close_button_set(MangoCloseButton *node, int32_t size, float scale,
+							bool hover);
+void mango_close_button_set_hover(MangoCloseButton *node, bool hover);
+
 void mango_text_global_finish(void);
 MangoJumpLabel *mango_jump_label_node_create(struct wlr_scene_tree *parent,
 											 DecorateDrawData data);

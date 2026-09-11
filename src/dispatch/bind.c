@@ -258,27 +258,19 @@ void focus_window_or_workspace(const Arg *arg) {
 	return;
 }
 
-void group_join(const Arg *arg) {
-
-	if (!server.selected_monitor)
-		return;
-
+/* Join need_join_client into need_replace_client's group (inserting it right
+ * before that client in the stack). Shared by the groupjoin keybind and the
+ * drag-onto-titlebar gesture. */
+void client_group_join(Client *need_join_client, Client *need_replace_client) {
 	Monitor *oldmon = NULL;
 
-	Client *need_join_client = arg->tc ? arg->tc : server.selected_monitor->sel;
 	if (!need_join_client || !need_join_client->mon)
 		return;
-
-	if (need_join_client->mon->isoverview)
-		return;
-
-	Client *need_replace_client = NULL;
-	need_replace_client = direction_select(arg);
-
 	if (!need_replace_client || !need_replace_client->mon)
 		return;
-
 	if (need_join_client == need_replace_client)
+		return;
+	if (need_join_client->mon->isoverview)
 		return;
 
 	if (need_join_client->group_next || need_join_client->group_prev) {
@@ -313,6 +305,21 @@ void group_join(const Arg *arg) {
 	}
 
 	return;
+}
+
+void group_join(const Arg *arg) {
+
+	if (!server.selected_monitor)
+		return;
+
+	Client *need_join_client = arg->tc ? arg->tc : server.selected_monitor->sel;
+	if (!need_join_client || !need_join_client->mon)
+		return;
+
+	if (need_join_client->mon->isoverview)
+		return;
+
+	client_group_join(need_join_client, direction_select(arg));
 }
 
 void group_leave(const Arg *arg) {
@@ -637,14 +644,63 @@ void kill_client(const Arg *arg) {
 	return;
 }
 
+/* Float a tiled window in preparation for an interactive move (shared by
+ * move_resize and the titlebar drag path). */
+static void client_begin_drag_float(Client *c) {
+	c->drag_to_tile = true;
+	exit_scroller_stack(c);
+	client_set_floating(c, 1);
+	c->drag_tile_float_backup_geom = c->float_geom;
+	c->old_stack_inner_per = 0.0f;
+	c->old_master_inner_per = 0.0f;
+	set_size_per(c->mon, c);
+}
+
+/* Begin an interactive move of a specific client (used by the titlebar drag
+ * path). Mirrors the CurMove setup in move_resize but for a known client. */
+void begin_move_client(Client *c) {
+	if (!c || client_is_unmanaged(c) || c->isfullscreen || c->ismaximizescreen)
+		return;
+	if (server.cursor_mode != CurNormal && server.cursor_mode != CurPressed)
+		return;
+
+	server.grab_client = c;
+
+	if (c->isfloating == 0)
+		client_begin_drag_float(c);
+
+	/* Keep move_resize's small drag preview, but position the shrunk window so
+	 * the grab point stays under the cursor (move the client to the cursor)
+	 * rather than recentering the window on the cursor. */
+	if (c->drag_to_tile && config.drag_tile_to_tile && config.drag_tile_small) {
+		int32_t ox = server.cursor->x - c->geom.x;
+		int32_t oy = server.cursor->y - c->geom.y;
+		float fx = c->geom.width > 0 ? (float)ox / (float)c->geom.width : 0.5f;
+		c->geom.width = 300;
+		c->geom.height = 300;
+		c->geom.x = server.cursor->x - (int32_t)(fx * 300.0f);
+		c->geom.y = server.cursor->y - oy;
+		resize(c, c->geom, 1);
+	}
+
+	server.cursor_mode = CurMove;
+	server.grab_offset_x = server.cursor->x - c->geom.x;
+	server.grab_offset_y = server.cursor->y - c->geom.y;
+	wlr_cursor_set_xcursor(server.cursor, server.cursor_manager, "grab");
+}
+
 void move_resize(const Arg *arg) {
 	const char *cursors[] = {"nw-resize", "ne-resize", "sw-resize",
 							 "se-resize"};
+	MangoGroupBar *gb = NULL;
 
 	if (server.cursor_mode != CurNormal && server.cursor_mode != CurPressed)
 		return;
 	node_at_point(server.cursor->x, server.cursor->y, NULL, &server.grab_client,
-				  NULL, NULL, NULL, NULL);
+				  NULL, &gb, NULL, NULL);
+	/* Pressing on a titlebar resolves to the group bar, not the client. */
+	if (!server.grab_client && gb)
+		server.grab_client = gb->node_data;
 	if (!server.grab_client || client_is_unmanaged(server.grab_client) ||
 		server.grab_client->isfullscreen ||
 		server.grab_client->ismaximizescreen) {
@@ -652,14 +708,7 @@ void move_resize(const Arg *arg) {
 		return;
 	}
 	if (server.grab_client->isfloating == 0 && arg->ui == CurMove) {
-		server.grab_client->drag_to_tile = true;
-		exit_scroller_stack(server.grab_client);
-		client_set_floating(server.grab_client, 1);
-		server.grab_client->drag_tile_float_backup_geom =
-			server.grab_client->float_geom;
-		server.grab_client->old_stack_inner_per = 0.0f;
-		server.grab_client->old_master_inner_per = 0.0f;
-		set_size_per(server.grab_client->mon, server.grab_client);
+		client_begin_drag_float(server.grab_client);
 	}
 
 	if (server.grab_client && server.grab_client->drag_to_tile &&
@@ -1840,6 +1889,16 @@ void toggle_gaps(const Arg *arg) {
 
 	server.enable_gaps ^= 1;
 	arrange(server.selected_monitor, false, false);
+	return;
+}
+
+void toggle_titlebars(const Arg *arg) {
+	config.enable_titlebars ^= 1;
+	Monitor *m = NULL;
+	wl_list_for_each(m, &server.monitors, link) {
+		if (m->wlr_output->enabled)
+			arrange(m, false, false);
+	}
 	return;
 }
 

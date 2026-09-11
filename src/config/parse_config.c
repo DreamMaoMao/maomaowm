@@ -1086,6 +1086,21 @@ bool parse_option(Config *config, char *key, char *value, int line_number) {
 		config->borderpx = atoi(value);
 	} else if (strcmp(key, "group_bar_height") == 0) {
 		config->group_bar_height = atoi(value);
+	} else if (strcmp(key, "enable_titlebars") == 0) {
+		config->enable_titlebars = atoi(value);
+	} else if (strcmp(key, "titlebar_button_size") == 0) {
+		config->titlebar_button_size = atoi(value);
+	} else if (strcmp(key, "titlebar_button_margin") == 0) {
+		config->titlebar_button_margin = atoi(value);
+	} else if (strcmp(key, "title_close_color") == 0) {
+		int64_t color = parse_color(value);
+		if (color == -1) {
+			mango_error(false, WLR_ERROR,
+						"Invalid title_close_color format: %s\n", value);
+			return false;
+		} else {
+			convert_hex_to_rgba(config->title_close_color, color);
+		}
 	} else if (strcmp(key, "rootcolor") == 0) {
 		int64_t color = parse_color(value);
 		if (color == -1) {
@@ -3752,6 +3767,10 @@ void override_config(void) {
 	config.special_gappov = CLAMP_INT(config.special_gappov, 0, 1000);
 	config.borderpx = CLAMP_INT(config.borderpx, 0, 200);
 	config.group_bar_height = CLAMP_INT(config.group_bar_height, 0, 500);
+	config.enable_titlebars = CLAMP_INT(config.enable_titlebars, 0, 1);
+	config.titlebar_button_size = CLAMP_INT(config.titlebar_button_size, 4, 100);
+	config.titlebar_button_margin =
+		CLAMP_INT(config.titlebar_button_margin, 0, 50);
 	config.smartgaps = CLAMP_INT(config.smartgaps, 0, 1);
 	config.blur = CLAMP_INT(config.blur, 0, 1);
 	config.blur_layer = CLAMP_INT(config.blur_layer, 0, 1);
@@ -3900,6 +3919,13 @@ void set_value_default() {
 
 	config.borderpx = 4;
 	config.group_bar_height = 50;
+	config.enable_titlebars = 0;
+	config.titlebar_button_size = 16;
+	config.titlebar_button_margin = 4;
+	config.title_close_color[0] = 0xad / 255.0f;
+	config.title_close_color[1] = 0x40 / 255.0f;
+	config.title_close_color[2] = 0x1f / 255.0f;
+	config.title_close_color[3] = 1.0f;
 	config.overviewgappi = 5;
 	config.overviewgappo = 30;
 	config.overcircle_center_ratio = 0.5f;
@@ -4768,6 +4794,8 @@ FuncType parse_func_name(char *func_name, Arg *arg, char *arg_value,
 		(*arg).i = atoi(arg_value);
 	} else if (strcmp(func_name, "togglegaps") == 0) {
 		func = toggle_gaps;
+	} else if (strcmp(func_name, "toggletitlebars") == 0) {
+		func = toggle_titlebars;
 	} else if (strcmp(func_name, "chvt") == 0) {
 		func = change_vt;
 		(*arg).ui = atoi(arg_value);

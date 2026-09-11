@@ -111,6 +111,10 @@ bool is_scroller_layout(Monitor *m) {
 	return false;
 }
 
+bool is_horizontal_scroller_layout(Monitor *m) {
+	return m && m->pertag->ltidxs[get_mon_curtag(m)]->id == SCROLLER;
+}
+
 bool is_monocle_layout(Monitor *m) {
 	if (m->pertag->ltidxs[get_mon_curtag(m)]->id == MONOCLE)
 		return true;
