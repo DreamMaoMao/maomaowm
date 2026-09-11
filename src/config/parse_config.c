@@ -275,6 +275,8 @@ int32_t parse_direction(const char *str) {
 		return LEFT;
 	} else if (strcmp(lowerStr, "right") == 0) {
 		return RIGHT;
+	} else if (strcmp(lowerStr, "alldir") == 0) {
+		return ALLDIR;
 	} else {
 		return UNDIR;
 	}
@@ -2108,16 +2110,6 @@ bool parse_option(Config *config, char *key, char *value, int line_number) {
 		binding->arg.v3 = NULL;
 		binding->arg.tc = NULL;
 
-		// TODO: remove this in next version
-		if (binding->mod == 0 &&
-			(binding->button == BTN_LEFT || binding->button == BTN_RIGHT)) {
-			mango_error(false, WLR_ERROR,
-						"\033[31m%s\033[33m can't "
-						"bind to \033[31m%s\033[33m mod key\033[0m\n",
-						button_str, mod_str);
-			return false;
-		}
-
 		binding->func =
 			parse_func_name(func_name, &binding->arg, arg_value, arg_value2,
 							arg_value3, arg_value4, arg_value5);
@@ -2453,7 +2445,8 @@ bool same_mousebind_key(const void *a, const void *b) {
 bool same_axisbind_key(const void *a, const void *b) {
 	const AxisBinding *aa = (const AxisBinding *)a;
 	const AxisBinding *ab = (const AxisBinding *)b;
-	return aa->mod == ab->mod && aa->dir == ab->dir;
+	return aa->mod == ab->mod &&
+		   (aa->dir == ALLDIR || ab->dir == ALLDIR || aa->dir == ab->dir);
 }
 
 bool same_switchbind_key(const void *a, const void *b) {
@@ -2465,8 +2458,9 @@ bool same_switchbind_key(const void *a, const void *b) {
 bool same_gesturebind_key(const void *a, const void *b) {
 	const GestureBinding *ga = (const GestureBinding *)a;
 	const GestureBinding *gb = (const GestureBinding *)b;
-	return ga->mod == gb->mod && ga->motion == gb->motion &&
-		   ga->fingers_count == gb->fingers_count;
+	return ga->mod == gb->mod && ga->fingers_count == gb->fingers_count &&
+		   (ga->motion == ALLDIR || gb->motion == ALLDIR ||
+			ga->motion == gb->motion);
 }
 
 void get_mousebind_meta(const void *elem, BindingConflictMeta *meta) {

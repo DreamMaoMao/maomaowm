@@ -12,6 +12,7 @@ struct wlr_pointer_swipe_end_event;
 bool pointer_is_trackpad(struct wlr_pointer *pointer);
 bool check_trackpad_disabled(struct wlr_pointer *pointer);
 bool trackpad_enabled(void);
+bool trackpad_gesture_drag_active(void);
 int32_t pointer_process_swipe_end(struct wlr_pointer_swipe_end_event *event);
 void handle_cursor_swipe_begin(struct wl_listener *listener, void *data);
 void handle_cursor_swipe_update(struct wl_listener *listener, void *data);
