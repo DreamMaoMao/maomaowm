@@ -858,10 +858,6 @@ bool parse_option(Config *config, char *key, char *value, int line_number) {
 		config->touch_enable = atoi(value);
 	} else if (strcmp(key, "touch_enable_mouse_emulation") == 0) {
 		config->touch_enable_mouse_emulation = atoi(value);
-	} else if (strcmp(key, "touch_map_to_mon") == 0) {
-		if (config->touch_map_to_mon)
-			free(config->touch_map_to_mon);
-		config->touch_map_to_mon = value[0] ? strdup(value) : NULL;
 	} else if (strcmp(key, "tap_to_click") == 0) {
 		config->tap_to_click = atoi(value);
 	} else if (strcmp(key, "tap_and_drag") == 0) {
@@ -1810,6 +1806,8 @@ bool parse_option(Config *config, char *key, char *value, int line_number) {
 					rule->button_map = (uint32_t)atoi(val);
 				} else if (strcmp(key, "disable_while_typing") == 0) {
 					rule->disable_while_typing = CLAMP_INT(atoi(val), 0, 1);
+				} else if (strcmp(key, "monitor") == 0) {
+					snprintf(rule->monitor, sizeof(rule->monitor), "%s", val);
 				} else {
 					mango_error(false, WLR_ERROR,
 								"Unknown device rule option: %s\n", key);
@@ -3556,11 +3554,6 @@ void free_config(void) {
 		config.tablet_map_to_mon = NULL;
 	}
 
-	if (config.touch_map_to_mon) {
-		free(config.touch_map_to_mon);
-		config.touch_map_to_mon = NULL;
-	}
-
 	if (config.jump_labels) {
 		free(config.jump_labels);
 		config.jump_labels = NULL;
@@ -4182,7 +4175,6 @@ bool parse_config(void) {
 	config.jumplabeldata.font_desc = NULL;
 	config.groupbardata.font_desc = NULL;
 	config.tablet_map_to_mon = NULL;
-	config.touch_map_to_mon = NULL;
 	config.jump_labels = NULL;
 	strcpy(config.keymode, "default");
 
