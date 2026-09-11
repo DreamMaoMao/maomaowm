@@ -403,9 +403,6 @@ typedef struct {
 	uint32_t mouse_click_method;
 	uint32_t mouse_send_events_mode;
 
-	/* tablet */
-	char *tablet_map_to_mon;
-
 	/* Trackpad */
 	int32_t trackpad_natural_scrolling;
 	uint32_t trackpad_accel_profile;

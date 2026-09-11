@@ -122,6 +122,7 @@ uint32_t get_tags_first_tag(uint32_t source_tags);
 Monitor *monitor_at_point(double x, double y);
 Monitor *get_monitor_nearest_to(int32_t lx, int32_t ly);
 bool match_monitor_spec(char *spec, Monitor *m);
+Monitor *device_target_monitor(struct wlr_input_device *device);
 bool mango_output_commit(Monitor *m);
 void enable_adaptive_sync(Monitor *m, struct wlr_output_state *state);
 void disable_adaptive_sync(Monitor *m, struct wlr_output_state *state);
