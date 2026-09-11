@@ -64,7 +64,10 @@ static bool fire_gesture_motion(uint32_t motion, uint32_t fingers) {
 			 (g->isdefaultmode && server.key_mode.isdefault) ||
 			 (strcmp(server.key_mode.mode, g->mode) == 0)) &&
 			CLEANMASK(mods) == CLEANMASK(g->mod) &&
-			fingers == g->fingers_count && motion == g->motion && g->func) {
+			fingers == g->fingers_count && g->func &&
+			(g->motion == ALLDIR || motion == g->motion)) {
+			if (g->func == move_resize)
+				continue;
 			g->func(&g->arg);
 			handled = true;
 		}
@@ -89,6 +92,7 @@ struct SwipeDrive {
 	bool active;
 	bool consumed;
 	bool pan;
+	bool drag;
 	Monitor *mon;
 	uint32_t fingers;
 	Client *start_sel;
@@ -98,6 +102,8 @@ struct SwipeDrive {
 	double prev_axis;
 	double avg_speed;
 	uint32_t speed_points;
+	double drag_prev_dx;
+	double drag_prev_dy;
 	uint32_t motion;
 	void (*func)(const Arg *);
 	Arg arg;
@@ -107,6 +113,10 @@ static struct SwipeDrive swipe_drive;
 static bool swipe_active;
 static bool swipe_locked;
 static bool swipe_horizontal;
+
+bool trackpad_gesture_drag_active(void) {
+	return swipe_active && swipe_drive.drag && swipe_drive.active;
+}
 
 static void (*view_opposite_func(void (*func)(const Arg *)))(const Arg *) {
 	if (func == view_to_left)
@@ -154,6 +164,9 @@ static bool swipe_layout_is_scroller(Monitor *m, bool *vertical) {
 
 static bool swipe_func_drivable(void (*func)(const Arg *), const Arg *arg,
 								uint32_t motion, Monitor *m) {
+	if (func == move_resize)
+		return true;
+
 	if (swipe_func_is_view(func))
 		return true;
 
@@ -197,7 +210,8 @@ static bool swipe_find_binding(uint32_t motion, uint32_t fingers,
 			 (g->isdefaultmode && server.key_mode.isdefault) ||
 			 (strcmp(server.key_mode.mode, g->mode) == 0)) &&
 			CLEANMASK(mods) == CLEANMASK(g->mod) &&
-			fingers == g->fingers_count && motion == g->motion && g->func) {
+			fingers == g->fingers_count && g->func &&
+			(g->motion == ALLDIR || motion == g->motion)) {
 			if (out)
 				*out = g;
 			return true;
@@ -430,7 +444,7 @@ static double swipe_drive_pan_offset(Monitor *m, double raw) {
 
 static bool swipe_drive_begin(uint32_t fingers) {
 	Monitor *m = server.selected_monitor;
-	if (!m || !config.gesture_live)
+	if (!m)
 		return false;
 	Client *sel_before = m->sel;
 
@@ -446,6 +460,10 @@ static bool swipe_drive_begin(uint32_t fingers) {
 	void (*exec_func)(const Arg *) = binding->func;
 	Arg exec_arg = binding->arg;
 
+	bool drag = exec_func == move_resize;
+	if (!config.gesture_live && !drag)
+		return false;
+
 	swipe_drive.consumed = true;
 	swipe_drive.mon = m;
 	swipe_drive.fingers = fingers;
@@ -457,7 +475,27 @@ static bool swipe_drive_begin(uint32_t fingers) {
 	swipe_drive.arg = exec_arg;
 	swipe_drive.active = false;
 	swipe_drive.pan = false;
+	swipe_drive.drag = false;
 	swipe_drive.start_sel = sel_before;
+
+	if (drag) {
+		Client *target = m->sel;
+
+		if (!pointer_begin_move_resize(target, exec_arg.ui, server.cursor->x,
+									   server.cursor->y)) {
+			swipe_drive.consumed = false;
+			swipe_drive_log_state(m, "drag: no window to move", false,
+								  sel_before);
+			return false;
+		}
+
+		swipe_drive.drag = true;
+		swipe_drive.active = true;
+		swipe_drive.drag_prev_dx = server.swipe_dx;
+		swipe_drive.drag_prev_dy = server.swipe_dy;
+		swipe_drive_log_state(m, "dragging window", false, sel_before);
+		return true;
+	}
 
 	if (exec_func == focus_direction) {
 		swipe_drive.base = axis;
@@ -535,10 +573,33 @@ static bool swipe_drive_fire_opposite(void) {
 	return true;
 }
 
+static void swipe_drive_apply_drag(Monitor *m, uint32_t time) {
+	double distance = config.gesture_swipe_distance;
+	double scale_x, scale_y;
+	double dx, dy;
+
+	if (!server.grab_client || !m || distance <= 0)
+		return;
+
+	scale_x = (double)m->w.width / distance;
+	scale_y = (double)m->w.height / distance;
+
+	dx = (server.swipe_dx - swipe_drive.drag_prev_dx) * scale_x;
+	dy = (server.swipe_dy - swipe_drive.drag_prev_dy) * scale_y;
+	swipe_drive.drag_prev_dx = server.swipe_dx;
+	swipe_drive.drag_prev_dy = server.swipe_dy;
+
+	if (dx == 0.0 && dy == 0.0)
+		return;
+
+	pointer_process_motion(time, NULL, dx, dy, dx, dy);
+	request_fresh_all_monitors();
+}
+
 /* Advance the driven transition on every swipe update.  Returns true when the
  * compositor took over the gesture. */
-static bool swipe_drive_update(uint32_t fingers) {
-	if (!swipe_active || !config.gesture_live)
+static bool swipe_drive_update(uint32_t fingers, uint32_t time) {
+	if (!swipe_active)
 		return false;
 
 	double adx = fabs(server.swipe_dx);
@@ -568,6 +629,12 @@ static bool swipe_drive_update(uint32_t fingers) {
 	}
 
 	Monitor *m = swipe_drive.mon;
+
+	if (swipe_drive.drag) {
+		swipe_drive_apply_drag(m, time);
+		return true;
+	}
+
 	double distance = config.gesture_swipe_distance;
 	double delta = (axis - swipe_drive.base) * swipe_drive.dir;
 	double p = delta / distance;
@@ -609,6 +676,16 @@ static bool swipe_drive_update(uint32_t fingers) {
 
 static void swipe_drive_end(void) {
 	Monitor *m = swipe_drive.mon;
+
+	if (swipe_drive.drag) {
+		pointer_end_grab_client(false);
+		swipe_drive.drag = false;
+		swipe_drive.active = false;
+		swipe_drive.consumed = false;
+		swipe_drive.speed_points = 0;
+		swipe_drive.avg_speed = 0;
+		return;
+	}
 
 	if (swipe_drive.active && m) {
 		if (swipe_drive.pan) {
@@ -777,7 +854,7 @@ void handle_cursor_swipe_update(struct wl_listener *listener, void *data) {
 	server.swipe_dx += event->dx;
 	server.swipe_dy += event->dy;
 
-	swipe_drive_update(event->fingers);
+	swipe_drive_update(event->fingers, event->time_msec);
 
 	// Forward swipe update event to client
 	wlr_pointer_gestures_v1_send_swipe_update(server.pointer_gestures,

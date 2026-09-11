@@ -149,7 +149,7 @@ handle_cursor_axis(struct wl_listener *listener, void *data) {
 			 (a->isdefaultmode && server.key_mode.isdefault) ||
 			 (strcmp(server.key_mode.mode, a->mode) == 0)) &&
 			CLEANMASK(mods) == CLEANMASK(a->mod) && // Same modifier set
-			adir == a->dir &&
+			(a->dir == ALLDIR || adir == a->dir) &&
 			a->func) { // Wheel direction matches and a handler exists
 
 			keyboard_cancel_pending_release_bind();
@@ -473,9 +473,9 @@ void handle_cursor_motion_absolute(struct wl_listener *listener, void *data) {
 						   dy);
 }
 
-void pointer_resize_floating_window(Client *gc) {
-	int cdx = (int)round(server.cursor->x) - server.grab_offset_x;
-	int cdy = (int)round(server.cursor->y) - server.grab_offset_y;
+void pointer_resize_floating_window(Client *gc, double x, double y) {
+	int cdx = (int)round(x) - server.grab_offset_x;
+	int cdy = (int)round(y) - server.grab_offset_y;
 
 	cdx = !(server.resize_corner & 1) &&
 				  gc->geom.width - 2 * (int)gc->bw - cdx < 1
@@ -498,6 +498,140 @@ void pointer_resize_floating_window(Client *gc) {
 	server.grab_offset_x += cdx;
 	server.grab_offset_y += cdy;
 }
+
+bool pointer_begin_move_resize(Client *gc, uint32_t mode, double x, double y) {
+	const char *cursors[] = {"nw-resize", "ne-resize", "sw-resize",
+							 "se-resize"};
+
+	if (server.cursor_mode != CurNormal && server.cursor_mode != CurPressed)
+		return false;
+
+	if (!gc || (mode != CurMove && mode != CurResize) ||
+		client_is_unmanaged(gc) || gc->isfullscreen || gc->ismaximizescreen) {
+		server.grab_client = NULL;
+		return false;
+	}
+
+	server.grab_client = gc;
+
+	if (gc->isfloating == 0 && mode == CurMove) {
+		gc->drag_to_tile = true;
+		exit_scroller_stack(gc);
+		client_set_floating(gc, 1);
+		gc->drag_tile_float_backup_geom = gc->float_geom;
+		gc->old_stack_inner_per = 0.0f;
+		gc->old_master_inner_per = 0.0f;
+		set_size_per(gc->mon, gc);
+	}
+
+	if (gc->drag_to_tile && config.drag_tile_to_tile &&
+		config.drag_tile_small) {
+		gc->geom.x = (int32_t)round(x) - 150;
+		gc->geom.y = (int32_t)round(y) - 150;
+		gc->geom.width = 300;
+		gc->geom.height = 300;
+		resize(gc, gc->geom, 1);
+	}
+
+	switch (server.cursor_mode = mode) {
+	case CurMove:
+		server.grab_offset_x = (int32_t)(x - gc->geom.x);
+		server.grab_offset_y = (int32_t)(y - gc->geom.y);
+		wlr_cursor_set_xcursor(server.cursor, server.cursor_manager, "grab");
+		break;
+	case CurResize:
+		if (gc->isfloating) {
+			server.resize_corner = config.drag_corner;
+			server.grab_offset_x = (int32_t)round(x);
+			server.grab_offset_y = (int32_t)round(y);
+			if (server.resize_corner == 4)
+				server.resize_corner =
+					(server.grab_offset_x - gc->geom.x <
+							 gc->geom.x + gc->geom.width - server.grab_offset_x
+						 ? 0
+						 : 1) +
+					(server.grab_offset_y - gc->geom.y <
+							 gc->geom.y + gc->geom.height - server.grab_offset_y
+						 ? 0
+						 : 2);
+
+			if (config.drag_warp_cursor) {
+				server.grab_offset_x = server.resize_corner & 1
+										   ? gc->geom.x + gc->geom.width
+										   : gc->geom.x;
+				server.grab_offset_y = server.resize_corner & 2
+										   ? gc->geom.y + gc->geom.height
+										   : gc->geom.y;
+				wlr_cursor_warp_closest(server.cursor, NULL,
+										server.grab_offset_x,
+										server.grab_offset_y);
+			}
+
+			wlr_cursor_set_xcursor(server.cursor, server.cursor_manager,
+								   cursors[server.resize_corner]);
+		} else {
+			wlr_cursor_set_xcursor(server.cursor, server.cursor_manager,
+								   "grab");
+		}
+		break;
+	}
+
+	return true;
+}
+
+void pointer_end_grab_client(bool follow_pointer) {
+	Client *gc = server.grab_client;
+	Monitor *target_mon = NULL;
+
+	if (!gc || server.session_locked || server.cursor_mode == CurNormal ||
+		server.cursor_mode == CurPressed)
+		return;
+
+	server.cursor_mode = CurNormal;
+	/* Clear the pointer focus, this way if the cursor is over a surface
+	 * we will send an enter event after which the client will provide
+	 * us a cursor surface */
+	wlr_seat_pointer_clear_focus(server.seat);
+	pointer_process_motion(0, NULL, 0, 0, 0, 0);
+	/* Drop the window off on its new monitor */
+	if (gc == server.selected_monitor->sel) {
+		server.selected_monitor->sel = NULL;
+	}
+	target_mon = follow_pointer
+					 ? monitor_at_point(server.cursor->x, server.cursor->y)
+					 : monitor_at_point(gc->geom.x + gc->geom.width / 2,
+										gc->geom.y + gc->geom.height / 2);
+	if (!target_mon)
+		target_mon = gc->mon;
+	server.selected_monitor = target_mon;
+	client_update_oldmonname_record(gc, server.selected_monitor);
+	client_set_monitor(gc, server.selected_monitor, 0, true);
+	/* if the view changed mid-drag, drop onto the current tag
+	 * instead of silently returning to the original one */
+	if (!VISIBLEON(gc, server.selected_monitor))
+		gc->tags =
+			server.selected_monitor->tagset[server.selected_monitor->seltags];
+	server.selected_monitor->prevsel = ISTILED(server.selected_monitor->sel)
+										   ? server.selected_monitor->sel
+										   : NULL;
+	server.selected_monitor->sel = gc;
+	server.grab_client = NULL;
+	server.start_drag_window = false;
+	server.last_apply_drag_time = 0;
+	if (gc->drag_to_tile && config.drag_tile_to_tile) {
+		pointer_place_drag_tile(gc);
+		gc->float_geom = gc->drag_tile_float_backup_geom;
+	} else {
+		apply_window_snap(gc);
+	}
+	gc->drag_to_tile = false;
+	if (server.drop_client) {
+		server.drop_client->enable_drop_area_draw = false;
+		client_set_drop_area(server.drop_client);
+		server.drop_client = NULL;
+	}
+}
+
 void pointer_process_motion(uint32_t time, struct wlr_input_device *device,
 							double dx, double dy, double dx_unaccel,
 							double dy_unaccel) {
@@ -607,7 +741,8 @@ void pointer_process_motion(uint32_t time, struct wlr_input_device *device,
 			if (server.last_apply_drag_time == 0 ||
 				time - server.last_apply_drag_time >
 					config.drag_floating_refresh_interval) {
-				pointer_resize_floating_window(server.grab_client);
+				pointer_resize_floating_window(
+					server.grab_client, server.cursor->x, server.cursor->y);
 				server.last_apply_drag_time = time;
 			}
 			return;
@@ -950,7 +1085,6 @@ bool pointer_process_button_press(struct wlr_pointer_button_event *event) {
 	LayerSurface *l = NULL;
 	MangoGroupBar *gb = NULL;
 	struct wlr_surface *surface;
-	Client *tmpc = NULL;
 	int32_t ji;
 	const MouseBinding *m;
 	struct wlr_surface *old_pointer_focus_surface =
@@ -960,6 +1094,10 @@ bool pointer_process_button_press(struct wlr_pointer_button_event *event) {
 	wlr_idle_notifier_v1_notify_activity(server.idle_notifier, server.seat);
 
 	if (event->pointer && check_trackpad_disabled(event->pointer)) {
+		return true;
+	}
+
+	if (trackpad_gesture_drag_active()) {
 		return true;
 	}
 
@@ -1034,9 +1172,7 @@ bool pointer_process_button_press(struct wlr_pointer_button_event *event) {
 				 (m->isdefaultmode && server.key_mode.isdefault) ||
 				 (strcmp(server.key_mode.mode, m->mode) == 0)) &&
 				CLEANMASK(mods) == CLEANMASK(m->mod) &&
-				event->button == m->button && m->func &&
-				(CLEANMASK(m->mod) != 0 ||
-				 (event->button != BTN_LEFT && event->button != BTN_RIGHT))) {
+				event->button == m->button && m->func) {
 				m->func(&m->arg);
 				return true;
 			}
@@ -1046,49 +1182,7 @@ bool pointer_process_button_press(struct wlr_pointer_button_event *event) {
 		/* If you released any buttons, we exit interactive move/resize mode. */
 		if (!server.session_locked && server.cursor_mode != CurNormal &&
 			server.cursor_mode != CurPressed) {
-			server.cursor_mode = CurNormal;
-			/* Clear the pointer focus, this way if the cursor is over a surface
-			 * we will send an enter event after which the client will provide
-			 * us a cursor surface */
-			wlr_seat_pointer_clear_focus(server.seat);
-			pointer_process_motion(0, NULL, 0, 0, 0, 0);
-			/* Drop the window off on its new monitor */
-			if (server.grab_client == server.selected_monitor->sel) {
-				server.selected_monitor->sel = NULL;
-			}
-			server.selected_monitor =
-				monitor_at_point(server.cursor->x, server.cursor->y);
-			client_update_oldmonname_record(server.grab_client,
-											server.selected_monitor);
-			client_set_monitor(server.grab_client, server.selected_monitor, 0,
-							   true);
-			/* if the view changed mid-drag, drop onto the current tag
-			 * instead of silently returning to the original one */
-			if (!VISIBLEON(server.grab_client, server.selected_monitor))
-				server.grab_client->tags =
-					server.selected_monitor
-						->tagset[server.selected_monitor->seltags];
-			server.selected_monitor->prevsel =
-				ISTILED(server.selected_monitor->sel)
-					? server.selected_monitor->sel
-					: NULL;
-			server.selected_monitor->sel = server.grab_client;
-			tmpc = server.grab_client;
-			server.grab_client = NULL;
-			server.start_drag_window = false;
-			server.last_apply_drag_time = 0;
-			if (tmpc->drag_to_tile && config.drag_tile_to_tile) {
-				pointer_place_drag_tile(tmpc);
-				tmpc->float_geom = tmpc->drag_tile_float_backup_geom;
-			} else {
-				apply_window_snap(tmpc);
-			}
-			tmpc->drag_to_tile = false;
-			if (server.drop_client) {
-				server.drop_client->enable_drop_area_draw = false;
-				client_set_drop_area(server.drop_client);
-				server.drop_client = NULL;
-			}
+			pointer_end_grab_client(true);
 			return true;
 		} else {
 			server.cursor_mode = CurNormal;

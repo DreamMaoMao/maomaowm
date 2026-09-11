@@ -638,88 +638,14 @@ void kill_client(const Arg *arg) {
 }
 
 void move_resize(const Arg *arg) {
-	const char *cursors[] = {"nw-resize", "ne-resize", "sw-resize",
-							 "se-resize"};
+	Client *c = NULL;
 
 	if (server.cursor_mode != CurNormal && server.cursor_mode != CurPressed)
 		return;
-	node_at_point(server.cursor->x, server.cursor->y, NULL, &server.grab_client,
-				  NULL, NULL, NULL, NULL);
-	if (!server.grab_client || client_is_unmanaged(server.grab_client) ||
-		server.grab_client->isfullscreen ||
-		server.grab_client->ismaximizescreen) {
-		server.grab_client = NULL;
-		return;
-	}
-	if (server.grab_client->isfloating == 0 && arg->ui == CurMove) {
-		server.grab_client->drag_to_tile = true;
-		exit_scroller_stack(server.grab_client);
-		client_set_floating(server.grab_client, 1);
-		server.grab_client->drag_tile_float_backup_geom =
-			server.grab_client->float_geom;
-		server.grab_client->old_stack_inner_per = 0.0f;
-		server.grab_client->old_master_inner_per = 0.0f;
-		set_size_per(server.grab_client->mon, server.grab_client);
-	}
 
-	if (server.grab_client && server.grab_client->drag_to_tile &&
-		config.drag_tile_to_tile && config.drag_tile_small) {
-		server.grab_client->geom.x = server.cursor->x - 150;
-		server.grab_client->geom.y = server.cursor->y - 150;
-		server.grab_client->geom.width = 300;
-		server.grab_client->geom.height = 300;
-		resize(server.grab_client, server.grab_client->geom, 1);
-	}
-
-	switch (server.cursor_mode = arg->ui) {
-	case CurMove:
-		server.grab_offset_x = server.cursor->x - server.grab_client->geom.x;
-		server.grab_offset_y = server.cursor->y - server.grab_client->geom.y;
-		wlr_cursor_set_xcursor(server.cursor, server.cursor_manager, "grab");
-		break;
-	case CurResize:
-		if (server.grab_client->isfloating) {
-			server.resize_corner = config.drag_corner;
-			server.grab_offset_x = (int)round(server.cursor->x);
-			server.grab_offset_y = (int)round(server.cursor->y);
-			if (server.resize_corner == 4)
-				server.resize_corner =
-					(server.grab_offset_x - server.grab_client->geom.x <
-							 server.grab_client->geom.x +
-								 server.grab_client->geom.width -
-								 server.grab_offset_x
-						 ? 0
-						 : 1) +
-					(server.grab_offset_y - server.grab_client->geom.y <
-							 server.grab_client->geom.y +
-								 server.grab_client->geom.height -
-								 server.grab_offset_y
-						 ? 0
-						 : 2);
-
-			if (config.drag_warp_cursor) {
-				server.grab_offset_x = server.resize_corner & 1
-										   ? server.grab_client->geom.x +
-												 server.grab_client->geom.width
-										   : server.grab_client->geom.x;
-				server.grab_offset_y = server.resize_corner & 2
-										   ? server.grab_client->geom.y +
-												 server.grab_client->geom.height
-										   : server.grab_client->geom.y;
-				wlr_cursor_warp_closest(server.cursor, NULL,
-										server.grab_offset_x,
-										server.grab_offset_y);
-			}
-
-			wlr_cursor_set_xcursor(server.cursor, server.cursor_manager,
-								   cursors[server.resize_corner]);
-		} else {
-			wlr_cursor_set_xcursor(server.cursor, server.cursor_manager,
-								   "grab");
-		}
-		break;
-	}
-	return;
+	node_at_point(server.cursor->x, server.cursor->y, NULL, &c, NULL, NULL,
+				  NULL, NULL);
+	pointer_begin_move_resize(c, arg->ui, server.cursor->x, server.cursor->y);
 }
 
 void move_window(const Arg *arg) {
