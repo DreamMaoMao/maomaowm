@@ -87,6 +87,7 @@ static uint32_t swipe_opposite_motion(uint32_t motion) {
 }
 
 #define SWIPE_LOCK_DISTANCE 16
+#define SWIPE_FLICK_MAX_MS 200
 
 struct SwipeDrive {
 	bool active;
@@ -102,6 +103,8 @@ struct SwipeDrive {
 	double prev_axis;
 	double avg_speed;
 	uint32_t speed_points;
+	uint32_t first_time;
+	uint32_t last_time;
 	double drag_prev_dx;
 	double drag_prev_dy;
 	uint32_t motion;
@@ -442,6 +445,50 @@ static double swipe_drive_pan_offset(Monitor *m, double raw) {
 	return raw;
 }
 
+static bool swipe_drive_pan_flick_target(Monitor *m, double dir,
+										 double *out_offset, Client **out) {
+	if (!m || !m->sel)
+		return false;
+
+	bool horizontal = swipe_horizontal;
+	double mon_origin = horizontal ? m->w.x : m->w.y;
+	double mon_center = (horizontal ? m->w.width : m->w.height) / 2.0;
+	double sel_center = horizontal ? m->sel->geom.x + m->sel->geom.width / 2.0
+								   : m->sel->geom.y + m->sel->geom.height / 2.0;
+	double base_offset = mon_center - (sel_center - mon_origin);
+
+	Client *best = NULL;
+	double best_delta = 0;
+	double best_offset = 0;
+	Client *c = NULL;
+	wl_list_for_each(c, &server.clients, link) {
+		if (c->mon != m || !VISIBLEON(c, m) || !ISSCROLLTILED(c) ||
+			c == m->sel)
+			continue;
+
+		double center = horizontal ? c->geom.x + c->geom.width / 2.0
+								   : c->geom.y + c->geom.height / 2.0;
+		double offset = mon_center - (center - mon_origin);
+		double delta = (offset - base_offset) * dir;
+		if (delta <= 0)
+			continue;
+		if (!best || delta < best_delta) {
+			best = c;
+			best_delta = delta;
+			best_offset = offset;
+		}
+	}
+
+	if (!best)
+		return false;
+
+	if (out_offset)
+		*out_offset = best_offset;
+	if (out)
+		*out = best;
+	return true;
+}
+
 static bool swipe_drive_begin(uint32_t fingers) {
 	Monitor *m = server.selected_monitor;
 	if (!m)
@@ -609,7 +656,6 @@ static bool swipe_drive_update(uint32_t fingers, uint32_t time) {
 			return false;
 		swipe_locked = true;
 		swipe_horizontal = adx >= ady;
-		swipe_drive.prev_axis = swipe_drive_axis();
 	}
 
 	double axis = swipe_drive_axis();
@@ -619,7 +665,10 @@ static bool swipe_drive_update(uint32_t fingers, uint32_t time) {
 		swipe_drive.avg_speed =
 			(swipe_drive.avg_speed * swipe_drive.speed_points + step) /
 			(swipe_drive.speed_points + 1);
+		if (swipe_drive.speed_points == 0)
+			swipe_drive.first_time = time;
 		swipe_drive.speed_points++;
+		swipe_drive.last_time = time;
 	}
 
 	if (!swipe_drive.active) {
@@ -699,6 +748,24 @@ static void swipe_drive_end(void) {
 
 			Client *target = NULL;
 			swipe_drive_pan_target(m, offset, &target);
+
+			uint32_t dur = swipe_drive.last_time - swipe_drive.first_time;
+			bool speed_hit = swipe_drive.speed_points > 0 &&
+							 swipe_drive.avg_speed >=
+								 config.gesture_swipe_min_speed_to_force;
+			bool quick_hit =
+				swipe_drive.speed_points > 0 && dur <= SWIPE_FLICK_MAX_MS;
+
+			if (target == swipe_drive.start_sel &&
+				(speed_hit || quick_hit)) {
+				double dir = raw < 0 ? -1.0 : 1.0;
+				double flick_offset = offset;
+
+				if (swipe_drive_pan_flick_target(m, dir, &flick_offset,
+												 &target))
+					offset = flick_offset;
+			}
+
 			if (target && target != swipe_drive.start_sel) {
 				mango_error(true, WLR_DEBUG,
 							"swipe drive: pan commit, offset=%.0f target=%p\n",
@@ -742,11 +809,14 @@ static void swipe_drive_end(void) {
 		if (p > 1.0)
 			p = 1.0;
 
+		uint32_t dur = swipe_drive.last_time - swipe_drive.first_time;
 		bool commit =
 			swipe_func_is_overview(swipe_drive.func) ||
 			delta >= distance * config.gesture_swipe_cancel_ratio ||
 			(swipe_drive.speed_points > 0 &&
-			 swipe_drive.avg_speed >= config.gesture_swipe_min_speed_to_force);
+			 (swipe_drive.avg_speed >=
+				  config.gesture_swipe_min_speed_to_force ||
+			  dur <= SWIPE_FLICK_MAX_MS));
 
 		swipe_drive_unfreeze();
 
