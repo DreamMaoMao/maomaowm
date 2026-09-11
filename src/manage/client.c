@@ -3762,13 +3762,15 @@ uint32_t client_target_layer(Client *c) {
 							c->is_scratchpad_show && !c->isminimized);
 
 	if (special_overlay)
-		return c->isfloating || c->isfullscreen ? LyrSpecialTop
-			   : c->ismaximizescreen			? LyrSpecialMaximize
-												: LyrSpecialTile;
+		return c->isfullscreen		 ? LyrSpecialFullscreen
+			   : c->isfloating		 ? LyrSpecialFloat
+			   : c->ismaximizescreen ? LyrSpecialMaximize
+									 : LyrSpecialTile;
 
-	return c->isfloating || c->isfullscreen ? LyrTop
-		   : c->ismaximizescreen			? LyrMaximize
-											: LyrTile;
+	return c->isfullscreen		 ? LyrFullscreen
+		   : c->isfloating		 ? LyrFloat
+		   : c->ismaximizescreen ? LyrMaximize
+								 : LyrTile;
 }
 
 // sync client scene to its target layer
