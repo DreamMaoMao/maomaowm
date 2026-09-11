@@ -241,11 +241,11 @@ void pointer_set_accel(struct libinput_device *device, bool natural_scrolling,
 void configure_pointer(struct wlr_input_device *wlr_device,
 					   struct libinput_device *device) {
 	ConfigDeviceRule *rule = find_device_rule(wlr_device);
-	bool is_touchpad = libinput_device_config_tap_get_finger_count(device) > 0;
+	bool is_trackpad = libinput_device_config_tap_get_finger_count(device) > 0;
 
 	/*
 	 * devicerule takes priority; falls back to the global config when unset
-	 * (trackpad_* for touchpads, mouse_* for mice).
+	 * (trackpad_* for trackpads, mouse_* for mice).
 	 */
 	int32_t tap_to_click = rule && rule->tap_to_click != -1
 							   ? rule->tap_to_click
@@ -261,42 +261,42 @@ void configure_pointer(struct wlr_input_device *wlr_device,
 	int32_t natural_scrolling =
 		rule && rule->natural_scrolling != -1
 			? rule->natural_scrolling
-			: (is_touchpad ? config.trackpad_natural_scrolling
+			: (is_trackpad ? config.trackpad_natural_scrolling
 						   : config.mouse_natural_scrolling);
 	uint32_t accel_profile = rule && rule->accel_profile != -1
 								 ? (uint32_t)rule->accel_profile
-								 : (is_touchpad ? config.trackpad_accel_profile
+								 : (is_trackpad ? config.trackpad_accel_profile
 												: config.mouse_accel_profile);
 	double accel_speed = rule && !isnan(rule->accel_speed)
 							 ? rule->accel_speed
-							 : (is_touchpad ? config.trackpad_accel_speed
+							 : (is_trackpad ? config.trackpad_accel_speed
 											: config.mouse_accel_speed);
 	int32_t disable_while_typing = rule && rule->disable_while_typing != -1
 									   ? rule->disable_while_typing
 									   : config.trackpad_disable_while_typing;
 	int32_t left_handed = rule && rule->left_handed != -1 ? rule->left_handed
-						  : is_touchpad ? config.trackpad_left_handed
+						  : is_trackpad ? config.trackpad_left_handed
 										: config.mouse_left_handed;
 	int32_t middle_button_emulation =
 		rule && rule->middle_button_emulation != -1
 			? rule->middle_button_emulation
-		: is_touchpad ? config.trackpad_middle_button_emulation
+		: is_trackpad ? config.trackpad_middle_button_emulation
 					  : config.mouse_middle_button_emulation;
 	uint32_t scroll_method = rule && rule->scroll_method != UINT32_MAX
 								 ? rule->scroll_method
-							 : is_touchpad ? config.trackpad_scroll_method
+							 : is_trackpad ? config.trackpad_scroll_method
 										   : config.mouse_scroll_method;
 	uint32_t scroll_button = rule && rule->scroll_button != UINT32_MAX
 								 ? rule->scroll_button
-							 : is_touchpad ? config.trackpad_scroll_button
+							 : is_trackpad ? config.trackpad_scroll_button
 										   : config.mouse_scroll_button;
 	uint32_t click_method = rule && rule->click_method != UINT32_MAX
 								? rule->click_method
-							: is_touchpad ? config.trackpad_click_method
+							: is_trackpad ? config.trackpad_click_method
 										  : config.mouse_click_method;
 	uint32_t send_events_mode = rule && rule->send_events_mode != UINT32_MAX
 									? rule->send_events_mode
-								: is_touchpad ? config.trackpad_send_events_mode
+								: is_trackpad ? config.trackpad_send_events_mode
 											  : config.mouse_send_events_mode;
 
 	if (libinput_device_config_tap_get_finger_count(device)) {

@@ -59,7 +59,7 @@ axisbind=SUPER,DOWN,viewtoright_have_client
 
 ## Gesture Bindings
 
-Enable touchpad swipe gestures for navigation and window management.
+Enable trackpad swipe gestures for navigation and window management.
 
 ### Syntax
 
@@ -70,7 +70,7 @@ gesturebind=MODIFIERS,DIRECTION,FINGERS,COMMAND,PARAMETERS
 - **Direction**: `up`, `down`, `left`, `right`
 - **Fingers**: `3` or `4`
 
-> **Info:** Gestures require proper touchpad configuration. See [Input Devices](/docs/configuration/input) for touchpad settings like `tap_to_click` and `trackpad_disable_while_typing`.
+> **Info:** Gestures require proper trackpad configuration. See [Input Devices](/docs/configuration/input) for trackpad settings like `tap_to_click` and `trackpad_disable_while_typing`.
 
 ### Drag previews for bound gestures
 
