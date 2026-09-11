@@ -234,6 +234,7 @@ typedef struct {
 	int32_t drag_lock;
 	uint32_t button_map;
 	int32_t disable_while_typing;
+	char monitor[128];
 } ConfigDeviceRule;
 
 typedef struct {
@@ -427,7 +428,6 @@ typedef struct {
 	/* touch */
 	int32_t touch_enable;
 	int32_t touch_enable_mouse_emulation;
-	char *touch_map_to_mon;
 
 	/* appearance */
 	int32_t smartgaps;

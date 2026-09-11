@@ -94,7 +94,10 @@ emulation so the touchscreen keeps working with non-touch clients.
 | :--- | :--- | :--- |
 | `touch_enable` | `1` | Set to `0` to completely disable touchscreen support. |
 | `touch_enable_mouse_emulation` | `0` | When `1`, touch events landing on surfaces that do not accept touch are emulated as left mouse button clicks/moves. Set to `0` to disable emulation (such touches are ignored). |
-| `touch_map_to_mon` | *(unset)* | Restrict a touchscreen to one output. Accepts a [monitor spec](/docs/configuration/monitors#monitor-spec-format). Leave unset to map the touchscreen to the whole output layout. Useful on multi-monitor setups where the touchscreen would otherwise be stretched across all outputs. |
+
+By default a touchscreen is restricted to the current screen (the monitor that
+currently has focus). To pin a specific touch device to a fixed output, use the
+`monitor` [device rule](#device-rules-advanced) option.
 
 ---
 
@@ -227,6 +230,7 @@ unmatched devices stay in the shared, synchronized keyboard group.
 devicerule=name:AT Translated Set 2 keyboard,kb_layout:ru
 devicerule=name:A4Tech USB Mouse,natural_scrolling:1,accel_speed:0.1
 devicerule=type:touchpad,tap_to_click:1
+devicerule=name:ELAN Touchscreen,monitor:HDMI-A-1
 ```
 
 Apply changes with `mmsg dispatch reload_config` or restart mango.
@@ -257,6 +261,7 @@ the XKB defaults), so a rule like `kb_layout:pt` is not affected by a global
 | Common | `middle_button_emulation` | `1` emulates the middle button |
 | Common | `send_events_mode` | `0` enabled, `1` disabled, `2` disabled with external mouse |
 | Common | `scroll_button` / `click_method` / `drag_lock` / `button_map` | libinput settings, see descriptions below |
+| Touch | `monitor` | Pin the touch device to one output. Accepts a [monitor spec](/docs/configuration/monitors#monitor-spec-format); unset follows the current screen |
 
 > **Info:** If a rule's keyboard layout fails to compile (e.g. `kb_layout:ru`
 > with `kb_variant:dvorak`), mango logs an error and falls back to the global
