@@ -1,0 +1,71 @@
+name: Update Top-Ranking Issues
+
+# Keeps the "Top-Ranking Issues 📊" tracking issue up to date. Issues are
+# ranked by the sum of their 👍 and ❤️ reactions and grouped by label (see
+# .github/scripts/update-top-ranking-issues.py for the section config).
+#
+# One-time setup:
+#   1. Create an issue titled e.g. "Top-Ranking Issues 📊" (its body will be
+#      overwritten on every run).
+#   2. Add a repository variable named TOP_RANKING_ISSUE_NUMBER set to that
+#      issue's number (Settings -> Secrets and variables -> Actions ->
+#      Variables). You can also pass the number when running this workflow
+#      manually via "Run workflow".
+
+on:
+  schedule:
+    # Every 6 hours.
+    - cron: "0 */6 * * *"
+  workflow_dispatch:
+    inputs:
+      issue_number:
+        description: "Tracking issue number to update (overrides the repo variable)"
+        required: false
+        type: string
+      days:
+        description: "Only rank issues created in the last N days (empty = all time)"
+        required: false
+        type: string
+
+concurrency:
+  group: update-top-ranking-issues
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    if: github.repository == 'mangowm/mango'
+    permissions:
+      contents: read
+      issues: write
+    env:
+      TRACKING_ISSUE: ${{ inputs.issue_number || vars.TOP_RANKING_ISSUE_NUMBER }}
+      WINDOW_DAYS: ${{ inputs.days }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Validate configuration
+        run: |
+          if [ -z "$TRACKING_ISSUE" ]; then
+            echo "::error::No tracking issue configured. Set the TOP_RANKING_ISSUE_NUMBER repository variable or pass issue_number on a manual run."
+            exit 1
+          fi
+
+      - name: Update top-ranking issue
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          args=(--repo "${{ github.repository }}" --issue-number "$TRACKING_ISSUE")
+          if [ -n "$WINDOW_DAYS" ]; then
+            args+=(--days "$WINDOW_DAYS")
+          fi
+          python3 .github/scripts/update-top-ranking-issues.py "${args[@]}"
