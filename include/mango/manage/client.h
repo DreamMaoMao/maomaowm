@@ -33,7 +33,7 @@ enum {
 
 /* Movement / drop directions used by smartmove, drag-to-tile and tag
  * animations. */
-enum { UP, DOWN, LEFT, RIGHT, UNDIR }; /* smartmovewin */
+enum { UP, DOWN, LEFT, RIGHT, UNDIR, ALLDIR }; /* smartmovewin */
 
 #define ISTILED(A)                                                             \
 	(A && !(A)->isfloating && !(A)->isminimized && !(A)->iskilling &&          \

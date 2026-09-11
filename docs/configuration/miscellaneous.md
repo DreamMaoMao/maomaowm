@@ -33,7 +33,7 @@ description: Advanced settings for XWayland, focus behavior, and system integrat
 | Setting | Default | Description |
 | :--- | :--- | :--- |
 | `focus_cross_monitor` | `0` | Allow directional focus to cross monitor boundaries. |
-| `focusdir_only_zone_overlap` | `0` | When enabled, directional focus only selects windows that overlap the current window on the perpendicular axis (y for left/right, x for up/down); returns nothing if none qualify. |
+| `focusdir_only_zone_overlap` | `1` | When enabled, directional focus only selects windows that overlap the current window on the perpendicular axis (y for left/right, x for up/down); returns nothing if none qualify. |
 | `exchange_cross_monitor` | `0` | Allow the `exchange_client` and `move_client` dispatchers to reach across monitor boundaries. With `exchange_client` the two windows swap monitors; with `move_client` a window that has no neighbor in the move direction moves onto the monitor lying in that direction. While disabled, both dispatchers keep the windows on the current monitor. |
 | `focus_cross_tag` | `0` | Allow directional focus to cross into other tags. |
 | `view_current_to_back` | `0` | Toggling the current tag switches back to the previously viewed tag. |

@@ -238,6 +238,24 @@ int32_t parse_circle_direction(const char *str) {
 	}
 }
 
+static int32_t parse_overcircle_direction(const char *str) {
+	char lowerStr[16];
+	int32_t i = 0;
+	while (str[i] && i < 15) {
+		lowerStr[i] = tolower(str[i]);
+		i++;
+	}
+	lowerStr[i] = '\0';
+
+	if (strcmp(lowerStr, "next") == 0)
+		return OVERCIRCLE_NEXT;
+	if (strcmp(lowerStr, "current_next") == 0)
+		return OVERCIRCLE_CURRENT_NEXT;
+	if (strcmp(lowerStr, "current_prev") == 0)
+		return OVERCIRCLE_CURRENT_PREV;
+	return OVERCIRCLE_PREV;
+}
+
 int32_t parse_direction(const char *str) {
 	// Converts the input string to lowercase.
 	char lowerStr[10];
@@ -257,6 +275,8 @@ int32_t parse_direction(const char *str) {
 		return LEFT;
 	} else if (strcmp(lowerStr, "right") == 0) {
 		return RIGHT;
+	} else if (strcmp(lowerStr, "alldir") == 0) {
+		return ALLDIR;
 	} else {
 		return UNDIR;
 	}
@@ -840,10 +860,6 @@ bool parse_option(Config *config, char *key, char *value, int line_number) {
 		config->touch_enable = atoi(value);
 	} else if (strcmp(key, "touch_enable_mouse_emulation") == 0) {
 		config->touch_enable_mouse_emulation = atoi(value);
-	} else if (strcmp(key, "touch_map_to_mon") == 0) {
-		if (config->touch_map_to_mon)
-			free(config->touch_map_to_mon);
-		config->touch_map_to_mon = value[0] ? strdup(value) : NULL;
 	} else if (strcmp(key, "tap_to_click") == 0) {
 		config->tap_to_click = atoi(value);
 	} else if (strcmp(key, "tap_and_drag") == 0) {
@@ -1044,10 +1060,6 @@ bool parse_option(Config *config, char *key, char *value, int line_number) {
 		config->button_map = atoi(value);
 	} else if (strcmp(key, "axis_scroll_factor") == 0) {
 		config->axis_scroll_factor = atof(value);
-	} else if (strcmp(key, "tablet_map_to_mon") == 0) {
-		if (config->tablet_map_to_mon)
-			free(config->tablet_map_to_mon);
-		config->tablet_map_to_mon = strdup(value);
 	} else if (strcmp(key, "trackpad_scroll_factor") == 0) {
 		config->trackpad_scroll_factor = atof(value);
 	} else if (strcmp(key, "gappih") == 0) {
@@ -1480,7 +1492,8 @@ bool parse_option(Config *config, char *key, char *value, int line_number) {
 
 		config->layer_rules_count++;
 		return !parse_error;
-	} else if (strcmp(key, "windowrule") == 0) {
+	} else if (strcmp(key, "windowrule") == 0 ||
+			   strcmp(key, "windowrule-once") == 0) {
 		config->window_rules =
 			realloc(config->window_rules,
 					(config->window_rules_count + 1) * sizeof(ConfigWinRule));
@@ -1495,6 +1508,15 @@ bool parse_option(Config *config, char *key, char *value, int line_number) {
 		memset(rule, 0, sizeof(ConfigWinRule));
 
 		// int32_t rule value, relay to a client property
+
+		if (strcmp(key, "windowrule-once") == 0) {
+			rule->is_once = 1;
+			rule->is_once_applied = 0;
+		} else {
+			rule->is_once = 0;
+			rule->is_once_applied = 0;
+		}
+
 		rule->isfloating = -1;
 		rule->isfullscreen = -1;
 		rule->isfakefullscreen = -1;
@@ -1736,7 +1758,20 @@ bool parse_option(Config *config, char *key, char *value, int line_number) {
 				if (strcmp(key, "name") == 0) {
 					rule->name = strdup(val);
 				} else if (strcmp(key, "type") == 0) {
-					snprintf(rule->type, sizeof(rule->type), "%s", val);
+					/* "touchpad" was the historical name of this device
+					 * type; keep it as a deprecated alias so existing
+					 * rules are not silently dropped. */
+					if (strcmp(val, "touchpad") == 0) {
+						mango_error(false, WLR_INFO,
+									"\033[1;33m[WARN]\033[0m device rule "
+									"type \033[1;36mtouchpad\033[0m is "
+									"deprecated, use \033[1;36mtrackpad\033[0m "
+									"instead\n");
+						snprintf(rule->type, sizeof(rule->type), "%s",
+								 "trackpad");
+					} else {
+						snprintf(rule->type, sizeof(rule->type), "%s", val);
+					}
 				} else if (strcmp(key, "repeat_rate") == 0) {
 					rule->repeat_rate = CLAMP_INT(atoi(val), 0, 1000);
 				} else if (strcmp(key, "repeat_delay") == 0) {
@@ -1782,6 +1817,8 @@ bool parse_option(Config *config, char *key, char *value, int line_number) {
 					rule->button_map = (uint32_t)atoi(val);
 				} else if (strcmp(key, "disable_while_typing") == 0) {
 					rule->disable_while_typing = CLAMP_INT(atoi(val), 0, 1);
+				} else if (strcmp(key, "monitor") == 0) {
+					snprintf(rule->monitor, sizeof(rule->monitor), "%s", val);
 				} else {
 					mango_error(false, WLR_ERROR,
 								"Unknown device rule option: %s\n", key);
@@ -2072,16 +2109,6 @@ bool parse_option(Config *config, char *key, char *value, int line_number) {
 		binding->arg.v2 = NULL;
 		binding->arg.v3 = NULL;
 		binding->arg.tc = NULL;
-
-		// TODO: remove this in next version
-		if (binding->mod == 0 &&
-			(binding->button == BTN_LEFT || binding->button == BTN_RIGHT)) {
-			mango_error(false, WLR_ERROR,
-						"\033[31m%s\033[33m can't "
-						"bind to \033[31m%s\033[33m mod key\033[0m\n",
-						button_str, mod_str);
-			return false;
-		}
 
 		binding->func =
 			parse_func_name(func_name, &binding->arg, arg_value, arg_value2,
@@ -2418,7 +2445,8 @@ bool same_mousebind_key(const void *a, const void *b) {
 bool same_axisbind_key(const void *a, const void *b) {
 	const AxisBinding *aa = (const AxisBinding *)a;
 	const AxisBinding *ab = (const AxisBinding *)b;
-	return aa->mod == ab->mod && aa->dir == ab->dir;
+	return aa->mod == ab->mod &&
+		   (aa->dir == ALLDIR || ab->dir == ALLDIR || aa->dir == ab->dir);
 }
 
 bool same_switchbind_key(const void *a, const void *b) {
@@ -2430,8 +2458,9 @@ bool same_switchbind_key(const void *a, const void *b) {
 bool same_gesturebind_key(const void *a, const void *b) {
 	const GestureBinding *ga = (const GestureBinding *)a;
 	const GestureBinding *gb = (const GestureBinding *)b;
-	return ga->mod == gb->mod && ga->motion == gb->motion &&
-		   ga->fingers_count == gb->fingers_count;
+	return ga->mod == gb->mod && ga->fingers_count == gb->fingers_count &&
+		   (ga->motion == ALLDIR || gb->motion == ALLDIR ||
+			ga->motion == gb->motion);
 }
 
 void get_mousebind_meta(const void *elem, BindingConflictMeta *meta) {
@@ -2722,18 +2751,22 @@ uint32_t parse_mod(const char *mod_str) {
 				case 133:
 				case 134:
 					mod |= WLR_MODIFIER_LOGO;
+					match_success = true;
 					break;
 				case 37:
 				case 105:
 					mod |= WLR_MODIFIER_CTRL;
+					match_success = true;
 					break;
 				case 50:
 				case 62:
 					mod |= WLR_MODIFIER_SHIFT;
+					match_success = true;
 					break;
 				case 64:
 				case 108:
 					mod |= WLR_MODIFIER_ALT;
+					match_success = true;
 					break;
 				default:
 					mango_error(false, WLR_ERROR,
@@ -3211,7 +3244,7 @@ bool check_simple_binding_conflicts(void *arr, size_t count, size_t elem_size,
 
 				conflict_found = true;
 				fprintf(stderr,
-						"\033[1;33m[WARNING]\033[0m %s conflict "
+						"\033[1;33m[WARN]\033[0m %s conflict "
 						"in keymode \033[1;36m%s\033[0m:\n"
 						"  File \033[1;32m\"%s\"\033[0m, line "
 						"\033[1;35m%d\033[0m\n"
@@ -3521,16 +3554,6 @@ void free_config(void) {
 	if (config.groupbardata.font_desc) {
 		free((void *)config.groupbardata.font_desc);
 		config.groupbardata.font_desc = NULL;
-	}
-
-	if (config.tablet_map_to_mon) {
-		free(config.tablet_map_to_mon);
-		config.tablet_map_to_mon = NULL;
-	}
-
-	if (config.touch_map_to_mon) {
-		free(config.touch_map_to_mon);
-		config.touch_map_to_mon = NULL;
 	}
 
 	if (config.jump_labels) {
@@ -3854,7 +3877,7 @@ void set_value_default() {
 	config.edge_scroller_pointer_focus = 1;
 	config.edge_scroller_focus_allow_speed = 0.0f;
 	config.focus_cross_monitor = 0;
-	config.focusdir_only_zone_overlap = 0;
+	config.focusdir_only_zone_overlap = 1;
 	config.exchange_cross_monitor = 0;
 	config.scratchpad_cross_monitor = 0;
 	config.focus_cross_tag = 0;
@@ -4153,8 +4176,6 @@ bool parse_config(void) {
 	config.cursor_theme = NULL;
 	config.jumplabeldata.font_desc = NULL;
 	config.groupbardata.font_desc = NULL;
-	config.tablet_map_to_mon = NULL;
-	config.touch_map_to_mon = NULL;
 	config.jump_labels = NULL;
 	strcpy(config.keymode, "default");
 
@@ -4559,7 +4580,7 @@ FuncType parse_func_name(char *func_name, Arg *arg, char *arg_value,
 		(*arg).i = parse_circle_direction(arg_value);
 	} else if (strcmp(func_name, "overcircle") == 0) {
 		func = over_circle;
-		(*arg).i = parse_circle_direction(arg_value);
+		(*arg).i = parse_overcircle_direction(arg_value);
 	} else if (strcmp(func_name, "groupfocus") == 0) {
 		func = group_focus;
 		(*arg).i = parse_circle_direction(arg_value);
@@ -4611,6 +4632,7 @@ FuncType parse_func_name(char *func_name, Arg *arg, char *arg_value,
 		(*arg).v = has_name ? strdup(arg_value2) : NULL;
 	} else if (strcmp(func_name, "toggleoverview") == 0) {
 		func = toggle_overview;
+		(*arg).i = atoi(arg_value) == 1;
 	} else if (strcmp(func_name, "enteroverview") == 0) {
 		func = enter_overview;
 	} else if (strcmp(func_name, "leaveoverview") == 0) {

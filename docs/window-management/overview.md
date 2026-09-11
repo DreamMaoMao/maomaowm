@@ -26,6 +26,10 @@ description: Configure the overview mode for window navigation.
 overview is open, each trigger cycles focus to the next window on the current
 monitor. Release a modifier key or run `toggleoverview` to close it.
 
+By default overview temporarily views every tag on the monitor. Use
+`overcircle` with `current_next`/`current_prev`, or run `toggleoverview,1`, to
+keep the overview restricted to the current tagset's windows.
+
 ### Mouse Interaction in Overview
 
 When in overview mode:

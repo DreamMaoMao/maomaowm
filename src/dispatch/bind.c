@@ -493,26 +493,27 @@ void over_circle(const Arg *arg) {
 
 	Client *sel = arg->tc ? arg->tc : server.selected_monitor->sel;
 
+	bool next = arg->i == OVERCIRCLE_NEXT || arg->i == OVERCIRCLE_CURRENT_NEXT;
+	bool current =
+		arg->i == OVERCIRCLE_CURRENT_NEXT || arg->i == OVERCIRCLE_CURRENT_PREV;
+
 	if (server.selected_monitor->isoverview &&
 		!server.selected_monitor->is_jump_mode &&
 		!server.selected_monitor->ov_normal_mode && sel) {
 		server.selected_monitor->ov_tab_layout = 1;
-		Client *tc = arg->i == NEXT ? get_next_stack_client(sel, false)
-									: get_next_stack_client(sel, true);
+		Client *tc = next ? get_next_stack_client(sel, false)
+						  : get_next_stack_client(sel, true);
 		if (!tc)
 			return;
 
 		client_focus(tc, 1);
 
-		/* Rearranges after focus change so the tab layout follows focus. */
 		arrange(server.selected_monitor, true, false);
 		return;
 	}
 
-	/* Entering overview: enables the centered tab layout; the rest is handled
-	 * by toggle_overview. */
 	server.selected_monitor->ov_tab_layout = 1;
-	toggle_overview(arg);
+	toggle_overview(&(Arg){.tc = arg->tc, .i = current});
 	if (!server.selected_monitor->isoverview)
 		server.selected_monitor->ov_tab_layout = 0;
 }
@@ -662,88 +663,14 @@ void kill_client(const Arg *arg) {
 }
 
 void move_resize(const Arg *arg) {
-	const char *cursors[] = {"nw-resize", "ne-resize", "sw-resize",
-							 "se-resize"};
+	Client *c = NULL;
 
 	if (server.cursor_mode != CurNormal && server.cursor_mode != CurPressed)
 		return;
-	node_at_point(server.cursor->x, server.cursor->y, NULL, &server.grab_client,
-				  NULL, NULL, NULL, NULL);
-	if (!server.grab_client || client_is_unmanaged(server.grab_client) ||
-		server.grab_client->isfullscreen ||
-		server.grab_client->ismaximizescreen) {
-		server.grab_client = NULL;
-		return;
-	}
-	if (server.grab_client->isfloating == 0 && arg->ui == CurMove) {
-		server.grab_client->drag_to_tile = true;
-		exit_scroller_stack(server.grab_client);
-		client_set_floating(server.grab_client, 1);
-		server.grab_client->drag_tile_float_backup_geom =
-			server.grab_client->float_geom;
-		server.grab_client->old_stack_inner_per = 0.0f;
-		server.grab_client->old_master_inner_per = 0.0f;
-		set_size_per(server.grab_client->mon, server.grab_client);
-	}
 
-	if (server.grab_client && server.grab_client->drag_to_tile &&
-		config.drag_tile_to_tile && config.drag_tile_small) {
-		server.grab_client->geom.x = server.cursor->x - 150;
-		server.grab_client->geom.y = server.cursor->y - 150;
-		server.grab_client->geom.width = 300;
-		server.grab_client->geom.height = 300;
-		resize(server.grab_client, server.grab_client->geom, 1);
-	}
-
-	switch (server.cursor_mode = arg->ui) {
-	case CurMove:
-		server.grab_offset_x = server.cursor->x - server.grab_client->geom.x;
-		server.grab_offset_y = server.cursor->y - server.grab_client->geom.y;
-		wlr_cursor_set_xcursor(server.cursor, server.cursor_manager, "grab");
-		break;
-	case CurResize:
-		if (server.grab_client->isfloating) {
-			server.resize_corner = config.drag_corner;
-			server.grab_offset_x = (int)round(server.cursor->x);
-			server.grab_offset_y = (int)round(server.cursor->y);
-			if (server.resize_corner == 4)
-				server.resize_corner =
-					(server.grab_offset_x - server.grab_client->geom.x <
-							 server.grab_client->geom.x +
-								 server.grab_client->geom.width -
-								 server.grab_offset_x
-						 ? 0
-						 : 1) +
-					(server.grab_offset_y - server.grab_client->geom.y <
-							 server.grab_client->geom.y +
-								 server.grab_client->geom.height -
-								 server.grab_offset_y
-						 ? 0
-						 : 2);
-
-			if (config.drag_warp_cursor) {
-				server.grab_offset_x = server.resize_corner & 1
-										   ? server.grab_client->geom.x +
-												 server.grab_client->geom.width
-										   : server.grab_client->geom.x;
-				server.grab_offset_y = server.resize_corner & 2
-										   ? server.grab_client->geom.y +
-												 server.grab_client->geom.height
-										   : server.grab_client->geom.y;
-				wlr_cursor_warp_closest(server.cursor, NULL,
-										server.grab_offset_x,
-										server.grab_offset_y);
-			}
-
-			wlr_cursor_set_xcursor(server.cursor, server.cursor_manager,
-								   cursors[server.resize_corner]);
-		} else {
-			wlr_cursor_set_xcursor(server.cursor, server.cursor_manager,
-								   "grab");
-		}
-		break;
-	}
-	return;
+	node_at_point(server.cursor->x, server.cursor->y, NULL, &c, NULL, NULL,
+				  NULL, NULL);
+	pointer_begin_move_resize(c, arg->ui, server.cursor->x, server.cursor->y);
 }
 
 void move_window(const Arg *arg) {
@@ -2242,12 +2169,19 @@ void fix_mon_tagset_from_overview(Monitor *m) {
 	}
 }
 
+static bool overview_client_on_current_tags(Client *c, bool only_current,
+											uint32_t current_tags) {
+	return !only_current || c->isglobal || (c->tags & current_tags);
+}
+
 /* Enter or leave overview mode on the selected monitor. */
 static void set_overview(const Arg *arg, bool enter) {
 	Client *c = NULL;
 	Client *sel = arg->tc ? arg->tc : server.selected_monitor->sel;
 	uint32_t target = 0;
 	uint32_t visible_client_number = 0;
+	bool only_current = arg->i == 1;
+	uint32_t current_tags = 0;
 
 	server.selected_monitor->isoverview = enter;
 
@@ -2258,12 +2192,16 @@ static void set_overview(const Arg *arg, bool enter) {
 	}
 
 	if (enter) {
-		wl_list_for_each(c, &server.clients,
-						 link) if (c && c->mon == server.selected_monitor &&
-								   !client_is_unmanaged(c) &&
-								   !client_is_x11_popup(c) && !c->isminimized &&
-								   !c->isunglobal && !(c->tags & TAG0_MASK)) {
-			visible_client_number++;
+		current_tags =
+			server.selected_monitor->tagset[server.selected_monitor->seltags] &
+			TAGMASK;
+		wl_list_for_each(c, &server.clients, link) {
+			if (!c || c->mon != server.selected_monitor)
+				continue;
+			if (!client_is_unmanaged(c) && !client_is_x11_popup(c) &&
+				!c->isminimized && !c->isunglobal && !(c->tags & TAG0_MASK) &&
+				overview_client_on_current_tags(c, only_current, current_tags))
+				visible_client_number++;
 		}
 		if (visible_client_number > 0) {
 			server.selected_monitor->ovbk_current_tagset =
@@ -2272,7 +2210,7 @@ static void set_overview(const Arg *arg, bool enter) {
 			server.selected_monitor->ovbk_prev_tagset =
 				server.selected_monitor
 					->tagset[server.selected_monitor->seltags ^ 1];
-			target = ~0 & TAGMASK;
+			target = only_current ? current_tags : (~0 & TAGMASK);
 		} else {
 			server.selected_monitor->isoverview = false;
 			server.selected_monitor->ov_tab_layout = 0;
@@ -2302,21 +2240,23 @@ static void set_overview(const Arg *arg, bool enter) {
 		}
 
 		wl_list_for_each(c, &server.clients, link) {
-			if (c && c->mon == server.selected_monitor &&
-				!client_is_unmanaged(c) && !client_is_x11_popup(c) &&
-				!c->isunglobal && !c->isminimized && !(c->tags & TAG0_MASK) &&
-				client_surface(c)->mapped) {
-				c->animation.overining = true;
-				if (!server.selected_monitor->is_jump_mode &&
-					!server.selected_monitor->ov_normal_mode)
-					/* Tab layout: skip view arrangement first; set it when the
-					 * unified rearrange runs after entering. */
-					c->animation.overview_enter_anim_set = true;
-				else
-					/* Other modes: set zoom during view arrangement. */
-					c->animation.overview_enter_anim_set = false;
-				overview_backup(c);
-			}
+			if (!c || c->mon != server.selected_monitor)
+				continue;
+			if (client_is_unmanaged(c) || client_is_x11_popup(c) ||
+				c->isunglobal || c->isminimized || (c->tags & TAG0_MASK) ||
+				!client_surface(c)->mapped ||
+				!overview_client_on_current_tags(c, only_current, current_tags))
+				continue;
+			c->animation.overining = true;
+			if (!server.selected_monitor->is_jump_mode &&
+				!server.selected_monitor->ov_normal_mode)
+				/* Tab layout: skip view arrangement first; set it when the
+				 * unified rearrange runs after entering. */
+				c->animation.overview_enter_anim_set = true;
+			else
+				/* Other modes: set zoom during view arrangement. */
+				c->animation.overview_enter_anim_set = false;
+			overview_backup(c);
 		}
 	} else {
 		server.selected_monitor->ov_normal_mode =

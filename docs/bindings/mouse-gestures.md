@@ -20,9 +20,6 @@ mousebind=MODIFIERS,BUTTON,COMMAND,PARAMETERS
   - **Standard Names**: `btn_left`, `btn_right`, `btn_middle`, `btn_side`, `btn_extra`, `btn_forward`, `btn_back`, `btn_task`
   - **Hardware Codes**: `code:NUMBER` (e.g., `code:272`, `code:273`, useful for binding non-standard or extra mouse buttons)
 
-> **Warning:** When modifiers are set to `NONE`, only `btn_middle` works in normal mode. `btn_left` and `btn_right` only work in overview mode.
-
-
 ### Examples
 
 ```ini
@@ -59,7 +56,7 @@ axisbind=SUPER,DOWN,viewtoright_have_client
 
 ## Gesture Bindings
 
-Enable touchpad swipe gestures for navigation and window management.
+Enable trackpad swipe gestures for navigation and window management.
 
 ### Syntax
 
@@ -70,7 +67,7 @@ gesturebind=MODIFIERS,DIRECTION,FINGERS,COMMAND,PARAMETERS
 - **Direction**: `up`, `down`, `left`, `right`
 - **Fingers**: `3` or `4`
 
-> **Info:** Gestures require proper touchpad configuration. See [Input Devices](/docs/configuration/input) for touchpad settings like `tap_to_click` and `trackpad_disable_while_typing`.
+> **Info:** Gestures require proper trackpad configuration. See [Input Devices](/docs/configuration/input) for trackpad settings like `tap_to_click` and `trackpad_disable_while_typing`.
 
 ### Drag previews for bound gestures
 

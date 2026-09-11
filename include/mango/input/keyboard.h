@@ -66,6 +66,8 @@ bool is_keyboard_shortcut_inhibitor(struct wlr_surface *surface);
 int32_t keyboard_check_keybinding(uint32_t state, bool locked, uint32_t mods,
 								  xkb_keysym_t sym, uint32_t keycode);
 
+void keyboard_cancel_pending_release_bind(void);
+
 bool keyboard_process_global_keypress(struct wlr_surface *last_surface,
 									  struct wlr_keyboard *keyboard,
 									  struct wlr_keyboard_key_event *event,

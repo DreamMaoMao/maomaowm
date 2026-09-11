@@ -10,8 +10,13 @@ Window rules allow you to set specific properties (floating, opacity, size, anim
 **Format:**
 
 ```ini
+# Set window rules that apply to every times when the window is opened
 windowrule=Parameter:Values,title:Values
 windowrule=Parameter:Values,Parameter:Values,appid:Values,title:Values
+
+# Set window rules that only apply once when the window is opened
+windowrule-once=Parameter:Values,title:Values
+windowrule-once=Parameter:Values,Parameter:Values,appid:Values,title:Values
 ```
 
 ### State & Behavior Parameters

@@ -42,23 +42,19 @@ struct touch_point {
 static bool simulating_pointer_from_touch = false;
 static int32_t pointer_touch_id = -1;
 
-// Maps the touch device to the monitor specified by touch_map_to_mon.
-// Supports hot-plugging outputs and config reload; reapplied on every touch
-// down.
+// Reapplied on every touch down.
 void touch_apply_monitor_mapping(struct wlr_touch *touch) {
-	if (!config.touch_map_to_mon)
+	if (!touch)
 		return;
 
-	Monitor *m = NULL;
-	wl_list_for_each(m, &server.monitors, link) {
-		if (match_monitor_spec(config.touch_map_to_mon, m)) {
-			wlr_cursor_map_input_to_output(server.cursor, &touch->base,
-										   m->wlr_output);
-			mango_error(true, WLR_DEBUG, "Mapping touch %s to output %s",
-						touch->base.name, config.touch_map_to_mon);
-			return;
-		}
-	}
+	Monitor *target = device_target_monitor(&touch->base);
+	if (!target)
+		return;
+
+	wlr_cursor_map_input_to_output(server.cursor, &touch->base,
+								   target->wlr_output);
+	mango_error(true, WLR_DEBUG, "Mapping touch %s to output %s",
+				touch->base.name, target->wlr_output->name);
 }
 
 void touch_create(struct wlr_touch *touch) {

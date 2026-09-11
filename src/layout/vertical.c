@@ -182,8 +182,6 @@ void vertical_deck(Monitor *m) {
 								 .height = m->w.height - mh - 2 * cur_gappov -
 										   cur_gappiv},
 				0);
-			if (c == client_focus_top(m))
-				wlr_scene_node_raise_to_top(&c->scene->node);
 		}
 		i++;
 	}

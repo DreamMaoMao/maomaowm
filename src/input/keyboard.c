@@ -70,7 +70,7 @@ ConfigDeviceRule *find_device_rule(struct wlr_input_device *device) {
 				wlr_libinput_get_device_handle(device);
 			if (libinput_dev &&
 				libinput_device_config_tap_get_finger_count(libinput_dev) > 0)
-				type = "touchpad";
+				type = "trackpad";
 			else
 				type = "pointer";
 		} else {
@@ -612,6 +612,14 @@ keyboard_check_keybinding(uint32_t state, bool is_locked, uint32_t mods,
 	}
 	return handled;
 }
+
+void keyboard_cancel_pending_release_bind(void) {
+	/* Keycodes are always >= 8, so 0 means "no key is eligible for a release
+	 * binding". A held modifier that was already used for something else must
+	 * not act as a modifier-only (tap) release bind. */
+	server.last_hold_keycode = 0;
+}
+
 void handle_keyboard_key(struct wl_listener *listener, void *data) {
 	int32_t i;
 	/* This event is raised when a key is pressed or released. */

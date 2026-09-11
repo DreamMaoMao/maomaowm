@@ -57,7 +57,9 @@ void handle_drag_icon_destroy(struct wl_listener *listener, void *data);
 void handle_pointer_constraint_destroy(struct wl_listener *listener,
 									   void *data);
 void handle_cursor_motion_absolute(struct wl_listener *listener, void *data);
-void pointer_resize_floating_window(Client *gc);
+void pointer_resize_floating_window(Client *gc, double x, double y);
+bool pointer_begin_move_resize(Client *gc, uint32_t mode, double x, double y);
+void pointer_end_grab_client(bool follow_pointer);
 void pointer_process_motion(uint32_t time, struct wlr_input_device *device,
 							double dx, double dy, double dx_unaccel,
 							double dy_unaccel);

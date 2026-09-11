@@ -7,6 +7,7 @@
 #include "mango/input/keyboard.h"
 #include "mango/layout/layout.h"
 #include "mango/manage/client.h"
+#include "mango/manage/layer.h"
 #include "mango/manage/monitor.h"
 #include <errno.h>
 #include <fcntl.h>
@@ -25,6 +26,7 @@
 #include <wlr/types/wlr_ext_foreign_toplevel_list_v1.h>
 #include <wlr/types/wlr_input_device.h>
 #include <wlr/types/wlr_keyboard.h>
+#include <wlr/types/wlr_layer_shell_v1.h>
 
 static struct wl_list ipc_watch_clients;
 static int ipc_device_watch_count;
@@ -42,7 +44,7 @@ const char *ipc_device_type_str(struct wlr_input_device *dev) {
 		return "keyboard";
 	case WLR_INPUT_DEVICE_POINTER:
 		return ld && libinput_device_config_tap_get_finger_count(ld) > 0
-				   ? "touchpad"
+				   ? "trackpad"
 				   : "pointer";
 	case WLR_INPUT_DEVICE_TOUCH:
 		return "touch";
@@ -85,7 +87,7 @@ const char *ipc_get_layout_str(void) {
 		return "";
 	xkb_layout_index_t current = xkb_state_serialize_layout(
 		keyboard->xkb_state, XKB_STATE_LAYOUT_EFFECTIVE);
-	static char layout[32];
+	static char layout[64];
 	const char *name = xkb_keymap_layout_get_name(keyboard->keymap, current);
 	snprintf(layout, sizeof(layout), "%s", name ? name : "");
 	return layout;
@@ -172,6 +174,46 @@ cJSON *build_layouts_response(void) {
 	}
 	cJSON *resp = cJSON_CreateObject();
 	cJSON_AddItemToObject(resp, "layouts", arr);
+	return resp;
+}
+
+static const char *layer_enum_str(uint32_t layer) {
+	switch (layer) {
+	case ZWLR_LAYER_SHELL_V1_LAYER_BACKGROUND:
+		return "background";
+	case ZWLR_LAYER_SHELL_V1_LAYER_BOTTOM:
+		return "bottom";
+	case ZWLR_LAYER_SHELL_V1_LAYER_TOP:
+		return "top";
+	case ZWLR_LAYER_SHELL_V1_LAYER_OVERLAY:
+		return "overlay";
+	default:
+		return "unknown";
+	}
+}
+
+cJSON *build_layers_response(void) {
+	cJSON *arr = cJSON_CreateArray();
+	Monitor *m;
+	wl_list_for_each(m, &server.monitors, link) {
+		for (uint32_t layer = 0; layer < LENGTH(m->layers); layer++) {
+			LayerSurface *l;
+			wl_list_for_each(l, &m->layers[layer], link) {
+				if (!l->mapped || l->being_unmapped)
+					continue;
+				cJSON *entry = cJSON_CreateObject();
+				cJSON_AddStringToObject(entry, "monitor", m->wlr_output->name);
+				cJSON_AddStringToObject(entry, "layer", layer_enum_str(layer));
+				cJSON_AddStringToObject(entry, "name",
+										l->layer_surface->namespace
+											? l->layer_surface->namespace
+											: "");
+				cJSON_AddItemToArray(arr, entry);
+			}
+		}
+	}
+	cJSON *resp = cJSON_CreateObject();
+	cJSON_AddItemToObject(resp, "layers", arr);
 	return resp;
 }
 
@@ -772,6 +814,8 @@ void handle_command(int client_fd, const char *cmd_raw) {
 
 		resp = cJSON_CreateObject();
 		cJSON_AddItemToObject(resp, "devices", arr);
+	} else if (strcmp(cmd, "get all-layers") == 0) {
+		resp = build_layers_response();
 	} else if (strcmp(cmd, "get all-tags") == 0) {
 		resp = build_all_tags_response();
 	} else if (strncmp(cmd, "get tags ", 9) == 0) {
