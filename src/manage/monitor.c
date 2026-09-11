@@ -301,6 +301,19 @@ bool match_monitor_spec(char *spec, Monitor *m) {
 	return match;
 }
 
+Monitor *device_target_monitor(struct wlr_input_device *device) {
+	ConfigDeviceRule *rule = find_device_rule(device);
+	if (rule && rule->monitor[0]) {
+		Monitor *m = NULL;
+		wl_list_for_each(m, &server.monitors, link) {
+			if (match_monitor_spec(rule->monitor, m))
+				return m;
+		}
+	}
+
+	return server.selected_monitor;
+}
+
 bool mango_scene_output_commit(struct wlr_scene_output *scene_output,
 							   struct wlr_output_state *state) {
 	struct wlr_output *wlr_output = scene_output->output;

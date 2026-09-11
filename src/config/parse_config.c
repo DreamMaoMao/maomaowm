@@ -1058,10 +1058,6 @@ bool parse_option(Config *config, char *key, char *value, int line_number) {
 		config->button_map = atoi(value);
 	} else if (strcmp(key, "axis_scroll_factor") == 0) {
 		config->axis_scroll_factor = atof(value);
-	} else if (strcmp(key, "tablet_map_to_mon") == 0) {
-		if (config->tablet_map_to_mon)
-			free(config->tablet_map_to_mon);
-		config->tablet_map_to_mon = strdup(value);
 	} else if (strcmp(key, "trackpad_scroll_factor") == 0) {
 		config->trackpad_scroll_factor = atof(value);
 	} else if (strcmp(key, "gappih") == 0) {
@@ -3549,11 +3545,6 @@ void free_config(void) {
 		config.groupbardata.font_desc = NULL;
 	}
 
-	if (config.tablet_map_to_mon) {
-		free(config.tablet_map_to_mon);
-		config.tablet_map_to_mon = NULL;
-	}
-
 	if (config.jump_labels) {
 		free(config.jump_labels);
 		config.jump_labels = NULL;
@@ -4174,7 +4165,6 @@ bool parse_config(void) {
 	config.cursor_theme = NULL;
 	config.jumplabeldata.font_desc = NULL;
 	config.groupbardata.font_desc = NULL;
-	config.tablet_map_to_mon = NULL;
 	config.jump_labels = NULL;
 	strcpy(config.keymode, "default");
 

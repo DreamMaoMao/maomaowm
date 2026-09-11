@@ -42,27 +42,12 @@ struct touch_point {
 static bool simulating_pointer_from_touch = false;
 static int32_t pointer_touch_id = -1;
 
-// Maps the touch device to the devicerule `monitor` option, or to the current
-// screen when unset. Reapplied on every touch down.
+// Reapplied on every touch down.
 void touch_apply_monitor_mapping(struct wlr_touch *touch) {
 	if (!touch)
 		return;
 
-	Monitor *target = NULL;
-	ConfigDeviceRule *rule = find_device_rule(&touch->base);
-
-	if (rule && rule->monitor[0]) {
-		Monitor *m = NULL;
-		wl_list_for_each(m, &server.monitors, link) {
-			if (match_monitor_spec(rule->monitor, m)) {
-				target = m;
-				break;
-			}
-		}
-	}
-
-	if (!target)
-		target = server.selected_monitor;
+	Monitor *target = device_target_monitor(&touch->base);
 	if (!target)
 		return;
 
