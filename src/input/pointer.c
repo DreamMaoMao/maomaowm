@@ -34,6 +34,62 @@
 
 static struct LastCursor last_cursor;
 
+/* X11 clients run with xwayland_ignore_scale render 1:1 physical pixels, so
+ * their surface-local coordinates (and therefore any pointer constraint
+ * region) are the layout coordinates multiplied by xwayland_scale. Other
+ * surfaces have no such distinction. */
+static double pointer_surface_scale(Client *c) {
+#ifdef XWAYLAND
+	if (c && client_is_x11(c) && config.xwayland_ignore_scale &&
+		c->xwayland_scale > 0.f) {
+		return c->xwayland_scale;
+	}
+#endif
+	return 1.0;
+}
+
+/* Region used to confine the pointer to a client, in surface coordinates.
+ *
+ * wlroots resolves a constraint request without a region to the surface input
+ * region, but only refreshes it when the surface commits again, so an idle
+ * client keeps an empty region and would not be confined at all. Fall back to
+ * the client content box until a real region shows up. */
+static pixman_region32_t *
+pointer_constraint_region(struct wlr_pointer_constraint_v1 *constraint,
+						  Client *c, pixman_region32_t *fallback) {
+	if (!pixman_region32_empty(&constraint->region)) {
+		return &constraint->region;
+	}
+
+	double scale = pointer_surface_scale(c);
+	int32_t w = MANGO_MAX(c->geom.width - 2 * (int32_t)c->bw, 1);
+	int32_t h = MANGO_MAX(c->geom.height - 2 * (int32_t)c->bw, 1);
+	pixman_region32_init_rect(fallback, 0, 0, (unsigned)round(w * scale),
+							  (unsigned)round(h * scale));
+	return fallback;
+}
+
+/* Closest point inside the region, in surface coordinates. */
+static void pointer_region_closest_point(pixman_region32_t *region, double x,
+										 double y, double *cx, double *cy) {
+	int nrects = 0;
+	pixman_box32_t *rects = pixman_region32_rectangles(region, &nrects);
+	double best_dist = 0;
+
+	*cx = x;
+	*cy = y;
+	for (int i = 0; i < nrects; i++) {
+		double px = MANGO_MIN(MANGO_MAX(x, rects[i].x1), rects[i].x2 - 1);
+		double py = MANGO_MIN(MANGO_MAX(y, rects[i].y1), rects[i].y2 - 1);
+		double dist = (px - x) * (px - x) + (py - y) * (py - y);
+		if (i == 0 || dist < best_dist) {
+			best_dist = dist;
+			*cx = px;
+			*cy = py;
+		}
+	}
+}
+
 void toggle_hotarea(int32_t x_root, int32_t y_root) {
 	// Computes the hot-area coordinates in the lower-left corner; supports
 	// multiple monitors.
@@ -417,8 +473,12 @@ void pointer_warp_to_constraint_hint(void) {
 
 	toplevel_from_wlr_surface(server.active_constraint->surface, &c, NULL);
 	if (c && server.active_constraint->current.cursor_hint.enabled) {
-		wlr_cursor_warp(server.cursor, NULL, sx + c->geom.x + c->bw,
-						sy + c->geom.y + c->bw);
+		/* The hint is in surface coordinates; the cursor and the window
+		 * geometry are in layout coordinates. */
+		double scale = pointer_surface_scale(c);
+		wlr_cursor_warp(server.cursor, NULL, sx / scale + c->geom.x + c->bw,
+						sy / scale + c->geom.y + c->bw);
+		/* wlr_seat_pointer_warp() expects surface coordinates. */
 		wlr_seat_pointer_warp(server.active_constraint->seat, sx, sy);
 	}
 }
@@ -660,14 +720,38 @@ void pointer_process_motion(uint32_t time, struct wlr_input_device *device,
 				toplevel_from_wlr_surface(server.active_constraint->surface, &c,
 										  NULL);
 				if (c) {
-					sx = server.cursor->x - c->geom.x - c->bw;
-					sy = server.cursor->y - c->geom.y - c->bw;
-					if (wlr_region_confine(&server.active_constraint->region,
-										   sx, sy, sx + dx, sy + dy,
+					double scale = pointer_surface_scale(c);
+					pixman_region32_t fallback;
+					pixman_region32_t *region =
+						pointer_constraint_region(server.active_constraint, c,
+												  &fallback);
+					/* The confinement region uses surface coordinates while the
+					 * cursor position and the delta are in layout
+					 * coordinates. */
+					sx = (server.cursor->x - c->geom.x - c->bw) * scale;
+					sy = (server.cursor->y - c->geom.y - c->bw) * scale;
+					if (wlr_region_confine(region, sx, sy, sx + dx * scale,
+										   sy + dy * scale,
 										   &sx_confined, &sy_confined)) {
-						dx = sx_confined - sx;
-						dy = sy_confined - sy;
+						dx = (sx_confined - sx) / scale;
+						dy = (sy_confined - sy) / scale;
+					} else {
+						/* The pointer is outside the region (e.g. the client
+						 * warped it away or the region is not known yet). Warp
+						 * it back instead of letting it escape. */
+						pointer_region_closest_point(region, sx, sy,
+													 &sx_confined,
+													 &sy_confined);
+						wlr_cursor_warp(server.cursor, NULL,
+										c->geom.x + c->bw +
+											sx_confined / scale,
+										c->geom.y + c->bw +
+											sy_confined / scale);
+						dx = 0;
+						dy = 0;
 					}
+					if (region != &server.active_constraint->region)
+						pixman_region32_fini(&fallback);
 				}
 			}
 		}
@@ -848,13 +932,9 @@ void pointer_focus(Client *c, struct wlr_surface *surface, double sx, double sy,
 
 	/* X11 windows use physical sizes, so surface-local coordinates are also
 	 * multiplied by xwayland_scale. */
-#ifdef XWAYLAND
-	if (c && client_is_x11(c) && config.xwayland_ignore_scale &&
-		c->xwayland_scale > 0.f) {
-		sx *= c->xwayland_scale;
-		sy *= c->xwayland_scale;
-	}
-#endif
+	double scale = pointer_surface_scale(c);
+	sx *= scale;
+	sy *= scale;
 
 	if (!c || !c->mon || !c->mon->isoverview) {
 		// don't let window get pointer focus,
