@@ -197,6 +197,7 @@ struct Client {
 	bool isleftstack;
 	int32_t tearing_hint;
 	int32_t force_tearing;
+	int32_t confine_pointer;
 	int32_t allow_shortcuts_inhibit;
 	float scroller_proportion_single;
 	bool isfocusing;

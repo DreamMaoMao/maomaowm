@@ -53,6 +53,8 @@ void pointer_create(struct wlr_pointer *pointer);
 void handle_new_pointer_constraint(struct wl_listener *listener, void *data);
 void handle_pointer_constraint_commit(struct wl_listener *listener, void *data);
 void pointer_constrain_cursor(struct wlr_pointer_constraint_v1 *constraint);
+void pointer_check_confine_client(void);
+void pointer_client_destroyed(Client *c);
 void handle_cursor_frame(struct wl_listener *listener, void *data);
 void pointer_warp_to_constraint_hint(void);
 void handle_drag_icon_destroy(struct wl_listener *listener, void *data);

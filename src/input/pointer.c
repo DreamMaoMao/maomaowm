@@ -128,6 +128,36 @@ static bool pointer_client_visible(Client *c) {
 		   VISIBLEON(c, c->mon);
 }
 
+static Client *confine_pointer_last = NULL;
+
+static Client *pointer_confine_rule_client(void) {
+	Client *c = server.selected_monitor ? server.selected_monitor->sel : NULL;
+
+	if (!c || !c->confine_pointer || !client_surface(c)->mapped || !c->mon ||
+		c->mon->isoverview || c->isminimized || !VISIBLEON(c, c->mon) ||
+		!pointer_node_enabled(&c->scene->node)) {
+		return NULL;
+	}
+	return c;
+}
+
+void pointer_check_confine_client(void) {
+	Client *c = pointer_confine_rule_client();
+
+	if (c && c != confine_pointer_last && pointer_cursor_outside_client(c)) {
+		struct wlr_box box = pointer_client_warp_box(c);
+		wlr_cursor_warp(server.cursor, NULL, box.x + box.width / 2.0,
+						box.y + box.height / 2.0);
+	}
+	confine_pointer_last = c;
+}
+
+void pointer_client_destroyed(Client *c) {
+	if (confine_pointer_last == c) {
+		confine_pointer_last = NULL;
+	}
+}
+
 static bool pointer_constraint_surface_visible(
 	struct wlr_pointer_constraint_v1 *constraint) {
 	Client *c = NULL;
@@ -915,6 +945,26 @@ void pointer_process_motion(uint32_t time, struct wlr_input_device *device,
 					dy = 0;
 				}
 			}
+		}
+
+		Client *rule_client = pointer_confine_rule_client();
+		if (!server.active_constraint && rule_client) {
+			struct wlr_box box = pointer_client_warp_box(rule_client);
+			double min_x = box.x + rule_client->bw;
+			double min_y = box.y + rule_client->bw;
+			double max_x = box.x + box.width - rule_client->bw;
+			double max_y = box.y + box.height - rule_client->bw;
+
+			if (max_x < min_x) {
+				max_x = min_x;
+			}
+			if (max_y < min_y) {
+				max_y = min_y;
+			}
+			dx = MANGO_MIN(MANGO_MAX(server.cursor->x + dx, min_x), max_x) -
+				 server.cursor->x;
+			dy = MANGO_MIN(MANGO_MAX(server.cursor->y + dy, min_y), max_y) -
+				 server.cursor->y;
 		}
 
 		wlr_cursor_move(server.cursor, device, dx, dy);
