@@ -263,6 +263,15 @@ void toggle_hotarea(int32_t x_root, int32_t y_root) {
 	if (server.grab_client)
 		return;
 
+	if (config.hotarea_disable_on_fullscreen == 1) {
+		Client *focused = server.selected_monitor->sel;
+		if (focused && focused->isfullscreen &&
+			VISIBLEON(focused, server.selected_monitor)) {
+			server.selected_monitor->is_in_hotarea = 0;
+			return;
+		}
+	}
+
 	// Computes different hot-area coordinates for each hot corner.
 	unsigned hx, hy;
 

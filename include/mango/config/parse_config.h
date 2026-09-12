@@ -367,6 +367,7 @@ typedef struct {
 	int32_t hotarea_size;
 	int32_t hotarea_corner;
 	int32_t enable_hotarea;
+	int32_t hotarea_disable_on_fullscreen;
 
 	int32_t overviewgappi;
 	int32_t overviewgappo;
