@@ -3198,17 +3198,36 @@ bool check_key_binding_conflicts(Config *config) {
 					const char *file_b = (binds[b].file_index >= 0)
 											 ? file_paths[binds[b].file_index]
 											 : "(built-in)";
+					char key_name[64];
+					if (binds[a].keysymcode.keysym != XKB_KEY_NoSymbol) {
+						xkb_keysym_get_name(binds[a].keysymcode.keysym,
+											key_name, sizeof(key_name));
+					} else {
+						snprintf(key_name, sizeof(key_name), "code%u",
+								 binds[a].keysymcode.keycode.keycode1);
+					}
+
+					const char *mod_str = mod_to_string(binds[a].mod);
+					char key_combo[128];
+					if (strcmp(mod_str, "None") == 0) {
+						snprintf(key_combo, sizeof(key_combo), "%s", key_name);
+					} else {
+						snprintf(key_combo, sizeof(key_combo), "%s + %s",
+								 mod_str, key_name);
+					}
 
 					conflict_found = true;
 					fprintf(stderr,
 							"\033[1;33m[WARNING]\033[0m Key binding conflict "
+							"for \033[1;31m%s\033[0m "
 							"in keymode \033[1;36m%s\033[0m:\n"
 							"  File \033[1;32m\"%s\"\033[0m, line "
 							"\033[1;35m%d\033[0m\n"
 							"  File \033[1;32m\"%s\"\033[0m, line "
 							"\033[1;35m%d\033[0m\n\n",
-							(any_common ? "common" : binds[a].mode), file_a,
-							binds[a].line_number, file_b, binds[b].line_number);
+							key_combo, (any_common ? "common" : binds[a].mode),
+							file_a, binds[a].line_number, file_b,
+							binds[b].line_number);
 				}
 			}
 		}
