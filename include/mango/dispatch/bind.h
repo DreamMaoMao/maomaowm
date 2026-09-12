@@ -61,6 +61,7 @@ void toggle_maximize_screen(const Arg *arg);
 void toggle_gaps(const Arg *arg);
 void tag_monitor(const Arg *arg);
 void spawn(const Arg *arg);
+void spawn_tag(const Arg *arg);
 void spawn_shell(const Arg *arg);
 void spawn_on_empty(const Arg *arg);
 void set_key_mode(const Arg *arg);
