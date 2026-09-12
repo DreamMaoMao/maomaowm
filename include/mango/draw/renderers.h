@@ -47,6 +47,8 @@ struct wlr_buffer *texture_render_color_segments(const BorderTextureKey *key,
 						 Client *target);
 struct wlr_buffer *texture_render_store_image(const BorderTextureKey *key,
 					      Client *target);
+struct wlr_buffer *texture_render_store_image_scaled(const BorderTextureKey *key,
+					             Client *target);
 
 struct wlr_buffer *texture_render_segment_top(const BorderTextureKey *key,
                                               Client *target);

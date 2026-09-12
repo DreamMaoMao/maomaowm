@@ -531,6 +531,7 @@ cJSON *build_client_json(Client *c) {
 	cJSON_AddNumberToObject(obj, "height", c->geom.height);
 	cJSON_AddNumberToObject(obj, "scroller_proportion",
 							(double)c->scroller_proportion);
+	cJSON_AddNumberToObject(obj, "texture_render_ms", c->texture_render_time);
 	return obj;
 }
 cJSON *build_monitor_json(Monitor *m) {

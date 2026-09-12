@@ -70,6 +70,7 @@ struct Client {
 	BorderTextureKey active_textures[MANGO_TEXTURE_SLOTS];
 	BorderTextureKey inactive_textures[MANGO_TEXTURE_SLOTS];
 	struct wlr_box texture_size;
+	double texture_render_time;
 	struct wlr_buffer *active_buf;
 	struct wlr_scene_buffer *active_texture;
 	struct wlr_buffer *inactive_buf;

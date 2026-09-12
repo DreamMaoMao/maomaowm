@@ -32,14 +32,14 @@ typedef struct {
 static const TextureStyleName texture_style_names[] = {
 	{"linear_gradient", TEXTURE_LINEAR_GRADIENT},
 	{"radial_gradient", TEXTURE_RADIAL_GRADIENT},
-	{"tiled_image", TEXTURE_TILED_IMAGE},
+	{"tile_image", TEXTURE_TILED_IMAGE},
 	{"fit_image", TEXTURE_FIT_IMAGE},
 	{"fit_overlay", TEXTURE_FIT_OPACITY},
 	{"tile_overlay", TEXTURE_TILE_OPACITY},
 	{"segment_image", TEXTURE_SEGMENT_IMAGE},
 	{"conic_gradient", TEXTURE_CONIC_GRADIENT},
 	{"solid_color", TEXTURE_SOLID},
-	{"solid_color_noclip", TEXTURE_COLOR_NOCLIP},
+	{"solid_color_overlay", TEXTURE_COLOR_NOCLIP},
 	{"static_image", TEXTURE_STATIC_IMAGE},
 	{"segment_color", TEXTURE_COLOR_SEGMENT},
 };
@@ -559,6 +559,7 @@ static void texture_use_count(void) {
 static bool texture_style_persists(TextureStyle style) {
     switch (style) {
     case TEXTURE_STORE_IMAGE:
+	case TEXTURE_STORE_IMAGE_SCALED:
     case TEXTURE_SEGMENT_TILE_TOP:
     case TEXTURE_SEGMENT_TILE_BOTTOM:
     case TEXTURE_SEGMENT_TILE_LEFT:
@@ -785,6 +786,14 @@ void init_texture_system(void) {
 		.bypass_cache = false,
 		.render = texture_render_store_image,
 	};
+	struct TextureOps store_image_scaled_ops = {
+		.key_empty = string_key_empty,
+		.key_equal = string_key_equal,
+		.key_copy = string_key_copy,
+		.key_destroy = string_key_destroy,
+		.bypass_cache = false,
+		.render = texture_render_store_image_scaled,
+	};
 
 	texture_style_register(TEXTURE_LINEAR_GRADIENT, linear_gradient_ops);
 	texture_style_register(TEXTURE_RADIAL_GRADIENT, radial_gradient_ops);
@@ -799,6 +808,7 @@ void init_texture_system(void) {
 	texture_style_register(TEXTURE_COLOR_NOCLIP, solid_noclip_ops);
 	texture_style_register(TEXTURE_COLOR_SEGMENT, segment_color_ops);
 	texture_style_register(TEXTURE_STORE_IMAGE, store_image_ops);
+	texture_style_register(TEXTURE_STORE_IMAGE_SCALED, store_image_scaled_ops);
 
 	 const struct {
         TextureStyle style;

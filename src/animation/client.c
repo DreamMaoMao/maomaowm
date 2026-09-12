@@ -8,6 +8,7 @@
 #include "mango/manage/misc.h"
 #include "mango/manage/monitor.h"
 #include "mango/overview/overview.h"
+#include <bits/time.h>
 #include <scenefx/types/wlr_scene.h>
 #include <stdint.h>
 #include <wlr/types/wlr_compositor.h>
@@ -691,8 +692,12 @@ void client_draw_border(Client *c, struct ivec2 offsets) {
 }
 
 struct wlr_buffer *texture_rerender(Client *target) {
+	struct timespec render_start;
+	clock_gettime(CLOCK_MONOTONIC, &render_start);
+	struct wlr_buffer *result = NULL;
+
 	if (!target->active_texture || !target->inactive_texture)
-		return NULL;
+		goto done;
 
 	struct ivec2 offsets = compute_edge_offsets(target);
 	int32_t new_ring_width =
@@ -710,7 +715,8 @@ struct wlr_buffer *texture_rerender(Client *target) {
 		wlr_scene_node_set_enabled(&target->active_texture->node, focused);
 		wlr_scene_node_set_enabled(&target->inactive_texture->node, !focused);
 		}
-		return focused ? target->active_buf : target->inactive_buf;
+		result = focused ? target->active_buf : target->inactive_buf;
+		goto done;
 	}
 
 	struct wlr_buffer *new_active = NULL;
@@ -768,7 +774,13 @@ struct wlr_buffer *texture_rerender(Client *target) {
 		else
 			wlr_scene_node_raise_to_top(&target->inactive_texture->node);
 	}
-	return focused ? target->active_buf : target->inactive_buf;
+	result = focused ? target->active_buf : target->inactive_buf;
+	
+	done: ;
+		struct timespec render_end;
+		clock_gettime(CLOCK_MONOTONIC, &render_end);
+		target->texture_render_time = (double)(render_end.tv_sec - render_start.tv_sec) * 1000.0 + (double)(render_end.tv_nsec - render_start.tv_nsec) / 1000000.0;
+		return result;
 }
 
 struct ivec2 clip_to_hide(Client *c, struct wlr_box *clip_box,

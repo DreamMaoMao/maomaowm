@@ -121,14 +121,14 @@ Multiple types of renderers are available to use:
 | `radial_gradient` | `RRGGBBAA\|RRGGBBAA\|(0.0-2.0)` | `FF0000FF\|0000FFFF\|1` | A radial gradient that starts at the center of the window and expands outward, scaled by the given factor. |
 | `conic_gradient` | `RRGGBBAA:(0.0-360.0)\|...` | `FF0000FF:45\|FF00FFFF:135\|0000FFFF:225\|00FF00FF:315` | A pseudo-conic gradient that cycles through any number of color stops at the given degrees. |
 | `static_image` | `/path/to/image.png` | `/home/MyUser/pictures/sky.png` | Uses the image directly as the border source, centered without resizing. |
-| `tiled_image` | `/path/to/image.png` | `/home/MyUser/pictures/checkerboard.png` | Tiles the image across the border. |
+| `tile_image` | `/path/to/image.png` | `/home/MyUser/pictures/checkerboard.png` | Tiles the image across the border. |
 | `fit_image` | `/path/to/image.png` | `/home/MyUser/pictures/gradient.png` | Stretches and squashes the image to fit the window. |
 | `fit_overlay` | `/path/to/image.png\|(0.0-1.0)` | `/home/MyUser/pictures/overlay.png\|0.5` | fits the image, does not clip to border. allows you to overlay images on your window|
 | `tile_overlay` | `/path/to/image.png\|(0.0-1.0)` | `/home/MyUser/pictures/overlay.png\|0.5` | tiles the image, does not clip to border. allows you to overlay images on your window|
 | `segment_image` | `/path/to/image.png` | `/home/MyUser/pictures/ninepatch.png` | Decorates the border using ninepatch-style images, allowing overlap. |
 | `segment_color` | `RRGGBBAA\|RRGGBBAA\|RRGGBBAA\|RRGGBBAA` | `FF0000FF\|00FF00FF\|0000FFFF\|FF00FFFF` | Sets each side of the border separately (top/right/bottom/left). |
 | `solid_color` | `RRGGBBAA` | `FFAA00FF` | A flat, solid-color border. |
-| `solid_color_noclip` | `RRGGBBAA` | `00000040` | Overlays a colored box over the entire window (use an alpha value to dim or colorize). |
+| `solid_color_overlay` | `RRGGBBAA` | `00000040` | Overlays a colored box over the entire window (use an alpha value to dim or colorize). |
 
 > **Note:** The image-based renderers (`static_image`, `tiled_image`, `fit_image`, `tile_overlay`, `fit_overlay`, `segment_image`) only support **PNG** images.
 
@@ -138,13 +138,36 @@ Multiple types of renderers are available to use:
 - **`radial_gradient`** - Starts at the center of the window and fades outward, so the first color hugs the center and bleeds into the second at the edges.
 - **`conic_gradient`** - Sweeps around the border in a circle, cycling through each color stop as it goes around, letting you build rainbow-style borders from multiple stops.
 - **`static_image`** - Draws the image without scaling, so the portion of the image sitting under the border band is what shows; best large general texture images.
-- **`tiled_image`** - Repeats the image across the border like wallpaper, good for repeating patterns.
+- **`tile_image`** - Repeats the image across the border like wallpaper, good for repeating patterns.
 - **`fit_image`** - Stretches the image to the full width and height of the border, so the tim of the picture is visible but gets squashed on squashed windows.
 - **`fit_overlay`** - Renders exactly like `fit_image` but multiplies the entire canvas's alpha by the second value before drawing, letting you fade a fitted image;
 - **`tile_overlay`** - Renders exactly like `tile_image` but multiplies the entire canvas's alpha by the second value before drawing, letting you fade a fitted image; unlike most renderers it keeps the center of the image instead of cutting out a border ring.
 - **`segment_image`** - Keeps the four corners of the image intact and tiles the middle of each edge, like a nine-patch Android drawable, so texture is not warped.
 - **`segment_color`** - Fills each side of the border individually (top, right, bottom, left) with its own solid color, meeting at the corners.
 - **`solid_color`** - A single flat color across the border; the alpha channel of the hex makes it translucent.
-- **`solid_color_noclip`** - Fills the whole window instead of just the border; with a translucent alpha it dims or tints everything underneath.
+- **`solid_color_overlay`** - Fills the whole window instead of just the border; with a translucent alpha it dims or tints everything underneath.
 
 
+### Performance
+
+the Border Texture engine can have a significant impact on performance depending on how it is used. All renderers either scale in performance with the size of the window or the size of the source image.
+
+Cached renderers only re-trigger on explicit texture changes (via dispatcher, window rule, focus change), uncached renderers also re-trigger on resize (as they are size dependent).
+
+a cached renderer will cost *basically* nothing on resize. 
+
+
+| Renderer Type | Impact | cached? | Scales On |
+| :--- | :--- | :--- | :--- |
+| `linear_gradient` | `high` | no | client window size (bigger = slower) |
+| `radial_gradient` | `high` | no | client window size (bigger = slower) |
+| `conic_gradient` | `low` | no | barely scales at all |
+| `static_image` | `lowest` | yes | source size only affects initial render due to load from disk |
+| `tile_image` | `low` | yes | source image size (bigger = slower) |
+| `fit_image` | `highest` | no | source image size (bigger = significantly slower, do not use an 8K image) |
+| `fit_overlay` | `highest` | no | source image size (bigger = significantly slower, do not use an 8K image) | 
+| `tile_overlay` | `low` | yes | source image size (bigger = slower) |
+| `segment_image` | `medium`/`low` | yes(*) | not truly cached, but the individual sections of the ninepatch are cached after slicing, so only the re-tiling is done every render |
+| `segment_color` | `low` | no | client window size (bigger = slower) |
+| `solid_color` | `low` | yes | client window size (bigger = slower) |
+| `solid_color_overlay` | `low` | yes | client window size (bigger = slower) |

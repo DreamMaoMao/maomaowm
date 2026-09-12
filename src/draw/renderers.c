@@ -3,6 +3,7 @@
 #include "mango/common/server.h"      // for `config` global (conic, solid, segments)
 #include "mango/manage/client.h"      // for `Client` struct
 #include "mango/manage/monitor.h"     // if needed by max_needed_canvas_size usage
+#include "mango/common/util.h"
 
 #include <cairo.h>
 #include <drm_fourcc.h>
@@ -156,6 +157,69 @@ static cairo_surface_t *texture_acquire_store_image(const BorderTextureKey *key,
 	return img->surface;
 }
 
+static cairo_surface_t *texture_acquire_store_image_scaled(const BorderTextureKey *key,
+														   struct wlr_buffer **ref) {
+	if (key == NULL || key->string == NULL)
+		return NULL;
+
+	BorderTextureKey scaled_key = {
+		.style = TEXTURE_STORE_IMAGE_SCALED,
+		.string = key->string,
+	};
+	bool from_cache;
+	*ref = texture_cache_get(&scaled_key, NULL, &from_cache);
+	if (*ref == NULL)
+		return NULL;
+
+	struct texture_image_buffer *img = wl_container_of(*ref, img, base);
+	return img->surface;
+}
+
+struct wlr_buffer *texture_render_store_image_scaled(const BorderTextureKey *key,
+						     Client *target) {
+
+	(void)target;
+	if (key == NULL || key->string == NULL)
+		return NULL;
+
+	int max_width, max_height;
+	max_needed_canvas_size(&max_width, &max_height);
+
+	struct wlr_buffer *ref;
+	cairo_surface_t *image = texture_acquire_store_image(key, &ref);
+	if (image == NULL)
+		return NULL;
+
+	int image_width = cairo_image_surface_get_width(image);
+	int image_height = cairo_image_surface_get_height(image);
+	if (image_width <= max_width && image_height <= max_height)
+		return ref;
+
+	double scale =
+		fmin((double)max_width / image_width, (double)max_height / image_height);
+	int down_width = MANGO_MAX(1, (int)(image_width * scale));
+	int down_height = MANGO_MAX(1, (int)(image_height * scale));
+
+	struct texture_image_buffer *buf = calloc(1, sizeof(*buf));
+	if (buf == NULL) {
+		wlr_buffer_unlock(ref);
+		return NULL;
+	}
+
+	buf->surface =
+		cairo_image_surface_create(CAIRO_FORMAT_ARGB32, down_width, down_height);
+	wlr_buffer_init(&buf->base, &texture_buffer_impl, down_width, down_height);
+
+	cairo_t *render = cairo_create(buf->surface);
+	cairo_scale(render, scale, scale);
+	cairo_set_source_surface(render, image, 0, 0);
+	cairo_paint(render);
+	cairo_destroy(render);
+	wlr_buffer_unlock(ref);
+
+	return &buf->base;
+}
+
 // tile renderer
 struct wlr_buffer *texture_render_tile(const BorderTextureKey *key,
 											  Client *target) {
@@ -208,7 +272,7 @@ struct wlr_buffer *texture_render_fit(const BorderTextureKey *key,
 		return NULL;
 
 	struct wlr_buffer *ref;
-	cairo_surface_t *image = texture_acquire_store_image(key, &ref);
+	cairo_surface_t *image = texture_acquire_store_image_scaled(key, &ref);
 	if (image == NULL)
 		return NULL;
 
