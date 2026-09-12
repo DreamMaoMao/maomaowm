@@ -2122,6 +2122,13 @@ handle_client_map(struct wl_listener *listener, void *data) {
 	printstatus(IPC_WATCH_ARRANGGE);
 }
 
+static bool client_xdg_size_pending(Client *c) {
+	struct wlr_xdg_toplevel_state *state = &c->surface.xdg->toplevel->current;
+
+	return state->width != (int32_t)(c->geom.width - 2 * (int32_t)c->bw) ||
+		   state->height != (int32_t)(c->geom.height - 2 * (int32_t)c->bw);
+}
+
 void handle_client_commit(struct wl_listener *listener, void *data) {
 	Client *c = wl_container_of(listener, c, commit);
 	struct wlr_box *new_geo;
@@ -2179,8 +2186,11 @@ void handle_client_commit(struct wl_listener *listener, void *data) {
 
 	if (!c->dirty) {
 		new_geo = &c->surface.xdg->geometry;
-		c->dirty = new_geo->width != c->geom.width - 2 * c->bw ||
-				   new_geo->height != c->geom.height - 2 * c->bw;
+		/* Only re-run resize() while the client has not adopted the size we
+		 * requested, or when its window geometry origin (what the clip shows)
+		 * moved. */
+		c->dirty = client_xdg_size_pending(c) || new_geo->x != c->xdg_geo_x ||
+				   new_geo->y != c->xdg_geo_y;
 	}
 
 	if (c == server.grab_client || !c->dirty)
@@ -2189,8 +2199,9 @@ void handle_client_commit(struct wl_listener *listener, void *data) {
 	resize(c, c->geom, 0);
 
 	new_geo = &c->surface.xdg->geometry;
-	c->dirty = new_geo->width != c->geom.width - 2 * c->bw ||
-			   new_geo->height != c->geom.height - 2 * c->bw;
+	c->xdg_geo_x = new_geo->x;
+	c->xdg_geo_y = new_geo->y;
+	c->dirty = client_xdg_size_pending(c);
 }
 
 void handle_client_unmap(struct wl_listener *listener, void *data) {
