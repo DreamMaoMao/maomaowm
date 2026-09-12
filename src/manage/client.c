@@ -2180,8 +2180,7 @@ void handle_client_commit(struct wl_listener *listener, void *data) {
 	if (!c->dirty) {
 		new_geo = &c->surface.xdg->geometry;
 		c->dirty = new_geo->width != c->geom.width - 2 * c->bw ||
-				   new_geo->height != c->geom.height - 2 * c->bw ||
-				   new_geo->x != 0 || new_geo->y != 0;
+				   new_geo->height != c->geom.height - 2 * c->bw;
 	}
 
 	if (c == server.grab_client || !c->dirty)
@@ -2191,8 +2190,7 @@ void handle_client_commit(struct wl_listener *listener, void *data) {
 
 	new_geo = &c->surface.xdg->geometry;
 	c->dirty = new_geo->width != c->geom.width - 2 * c->bw ||
-			   new_geo->height != c->geom.height - 2 * c->bw ||
-			   new_geo->x != 0 || new_geo->y != 0;
+			   new_geo->height != c->geom.height - 2 * c->bw;
 }
 
 void handle_client_unmap(struct wl_listener *listener, void *data) {
