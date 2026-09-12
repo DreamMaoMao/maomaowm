@@ -128,6 +128,7 @@ typedef struct {
 	int32_t isnosizehint;
 	int32_t idleinhibit_when_focus;
 	int32_t vrr_only_fullscreen;
+	int32_t confine_pointer;
 	int32_t force_render;
 	int32_t activation_bypass;
 	char *monitor;

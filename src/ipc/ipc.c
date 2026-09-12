@@ -567,6 +567,7 @@ cJSON *build_client_json(Client *c) {
 	cJSON_AddBoolToObject(obj, "is_urgent", c->isurgent);
 	cJSON_AddBoolToObject(obj, "is_scratchpad", c->is_in_scratchpad);
 	cJSON_AddBoolToObject(obj, "is_namedscratchpad", c->isnamedscratchpad);
+	cJSON_AddBoolToObject(obj, "is_confine_pointer", c->confine_pointer);
 	cJSON_AddNumberToObject(obj, "x", c->geom.x);
 	cJSON_AddNumberToObject(obj, "y", c->geom.y);
 	cJSON_AddNumberToObject(obj, "width", c->geom.width);
