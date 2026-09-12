@@ -1971,6 +1971,7 @@ handle_client_map(struct wl_listener *listener, void *data) {
 	Client *c = wl_container_of(listener, c, map);
 	int32_t i = 0;
 
+
 	c->id = generate_client_id();
 
 	/* Create scene tree for this client and its border */
@@ -2504,6 +2505,20 @@ void client_set_opacity(Client *c, double opacity) {
 								   scene_buffer_apply_opacity, &opacity);
 }
 
+void client_ensure_constraint(Client *c) {
+	if (!c || !client_surface(c)) {
+		return;
+	}
+	struct wlr_pointer_constraint_v1 *constraint;
+	wl_list_for_each(constraint, &server.pointer_constraints->constraints,
+					 link) {
+		if (constraint->surface == client_surface(c)) {
+			pointer_constrain_cursor(constraint);
+			break;
+		}
+	}
+}
+
 void client_focus(Client *c, int32_t lift) {
 
 	Client *last_focus_client = NULL;
@@ -2533,8 +2548,10 @@ void client_focus(Client *c, int32_t lift) {
 	}
 
 	if (c && client_surface(c) == old_keyboard_focus_surface &&
-		server.selected_monitor && server.selected_monitor->sel)
+		server.selected_monitor && server.selected_monitor->sel) {
+		client_ensure_constraint(c);
 		return;
+	}
 
 	if (server.selected_monitor && server.selected_monitor->sel &&
 		server.selected_monitor->sel != c &&
@@ -2669,14 +2686,7 @@ void client_focus(Client *c, int32_t lift) {
 		pointer_constrain_cursor(NULL);
 	}
 
-	struct wlr_pointer_constraint_v1 *constraint;
-	wl_list_for_each(constraint, &server.pointer_constraints->constraints,
-					 link) {
-		if (constraint->surface == client_surface(c)) {
-			pointer_constrain_cursor(constraint);
-			break;
-		}
-	}
+	client_ensure_constraint(c);
 }
 
 void client_active(Client *c) {
