@@ -1305,10 +1305,10 @@ void spawn_on_empty(const Arg *arg) {
 		}
 	}
 	if (!is_empty) {
-		client_switch_view(arg, true);
+		bind_to_view(arg);
 		return;
 	} else {
-		client_switch_view(arg, true);
+		bind_to_view(arg);
 		spawn_shell(arg);
 	}
 	return;
