@@ -1714,6 +1714,38 @@ bool parse_option(Config *config, char *key, char *value, int line_number) {
 		}
 		config->window_rules_count++;
 		return !parse_error;
+	} else if (strcmp(key, "var") == 0) {
+
+		char var_name[256], var_value[256];
+		if (sscanf(value, "%255[^,],%255[^\n]", var_name, var_value) < 2) {
+			mango_error(false, WLR_ERROR,
+						"Invalid var format: "
+						"\033[1m\033[31m%s\n",
+						value);
+			return false;
+		}
+		trim_whitespace(var_name);
+		trim_whitespace(var_value);
+
+		ConfigVar *var = calloc(1, sizeof(ConfigVar));
+		var->name = strdup(var_name);
+		var->value = strdup(var_value);
+
+		config->var = realloc(config->var,
+							  (config->var_count + 1) * sizeof(*config->var));
+		if (!config->var) {
+			free(var->name);
+			free(var->value);
+			free(var);
+			mango_error(false, WLR_ERROR,
+						"Failed to "
+						"allocate memory for var\n");
+			return false;
+		}
+
+		config->var[config->var_count] = var;
+		config->var_count++;
+
 	} else if (strcmp(key, "devicerule") == 0) {
 		config->device_rules =
 			realloc(config->device_rules, (config->device_rules_count + 1) *
@@ -2395,6 +2427,83 @@ bool parse_option(Config *config, char *key, char *value, int line_number) {
 
 	return true;
 }
+
+// Expand {name} references to previously defined var values.
+// Undefined references are left untouched.
+char *expand_config_vars(Config *config, const char *value) {
+	size_t cap = strlen(value) + 1;
+	char *out = malloc(cap);
+	if (!out)
+		return strdup(value);
+	size_t olen = 0;
+
+	const char *p = value;
+	while (*p) {
+		if (*p != '{') {
+			if (olen + 2 > cap) {
+				cap = cap * 2 + 16;
+				out = realloc(out, cap);
+			}
+			out[olen++] = *p++;
+			continue;
+		}
+
+		const char *end = strchr(p, '}');
+		if (!end) {
+			while (*p) {
+				if (olen + 2 > cap) {
+					cap = cap * 2 + 16;
+					out = realloc(out, cap);
+				}
+				out[olen++] = *p++;
+			}
+			break;
+		}
+
+		char name[256];
+		size_t nlen = end - (p + 1);
+		if (nlen >= sizeof(name)) {
+			memcpy(out + olen, p, end - p + 1);
+			olen += end - p + 1;
+			p = end + 1;
+			continue;
+		}
+		memcpy(name, p + 1, nlen);
+		name[nlen] = '\0';
+
+		const char *replacement = NULL;
+		for (int32_t i = 0; i < config->var_count; i++) {
+			if (config->var[i]->name &&
+				strcmp(config->var[i]->name, name) == 0) {
+				replacement = config->var[i]->value;
+				break;
+			}
+		}
+
+		if (replacement) {
+			size_t rlen = strlen(replacement);
+			if (olen + rlen + 1 > cap) {
+				while (olen + rlen + 1 > cap)
+					cap = cap * 2 + 16;
+				out = realloc(out, cap);
+			}
+			memcpy(out + olen, replacement, rlen);
+			olen += rlen;
+		} else {
+			// Unresolved: keep the literal {name}
+			if (olen + (end - p) + 2 > cap) {
+				cap = cap * 2 + 16;
+				out = realloc(out, cap);
+			}
+			memcpy(out + olen, p, end - p + 1);
+			olen += end - p + 1;
+		}
+		p = end + 1;
+	}
+	out[olen] = '\0';
+	return out;
+}
+
 bool parse_config_line(Config *config, const char *line, int line_number) {
 	char processed_line[512];
 	strncpy(processed_line, line, sizeof(processed_line) - 1);
@@ -2411,7 +2520,10 @@ bool parse_config_line(Config *config, const char *line, int line_number) {
 	trim_whitespace(key);
 	trim_whitespace(value);
 
-	return parse_option(config, key, value, line_number);
+	char *expanded = expand_config_vars(config, value);
+	bool ok = parse_option(config, key, expanded, line_number);
+	free(expanded);
+	return ok;
 }
 
 int compare_keybind_by_key_only(const void *a, const void *b) {
@@ -3517,6 +3629,22 @@ void free_config(void) {
 		free(config.env);
 		config.env = NULL;
 		config.env_count = 0;
+	}
+
+	// Frees var.
+	if (config.var) {
+		for (int32_t i = 0; i < config.var_count; i++) {
+			if (config.var[i]->name) {
+				free((void *)config.var[i]->name);
+			}
+			if (config.var[i]->value) {
+				free((void *)config.var[i]->value);
+			}
+			free(config.var[i]);
+		}
+		free(config.var);
+		config.var = NULL;
+		config.var_count = 0;
 	}
 
 	// Frees exec.

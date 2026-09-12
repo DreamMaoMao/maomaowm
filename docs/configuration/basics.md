@@ -64,6 +64,27 @@ env=QT_IM_MODULES,wayland;fcitx
 env=XMODIFIERS,@im=fcitx
 ```
 
+## Configuration Variables
+
+Define reusable values once and reference them anywhere in the config with `{name}`. This is handy for terminals, browsers, and other commands you bind more than once.
+
+> **Note:** A variable must be **defined before** you use it, and definitions are **reset** every time you reload the configuration. Undefined `{name}` references are left as-is.
+
+```ini
+var=terminal,ghostty
+var=browser,zen-browser
+
+bind=SUPER,Return,spawn,{terminal}
+bind=SUPER,B,spawn,{browser}
+```
+
+The value may itself contain commas (everything after the first comma is kept), so commands with arguments work too:
+
+```ini
+var=run,foot --alpha 90%
+bind=SUPER,Return,spawn,{run}
+```
+
 ## Autostart
 
 mangowm can automatically run commands or scripts upon startup. There are two modes for execution:
