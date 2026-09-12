@@ -2382,9 +2382,9 @@ bool parse_option(Config *config, char *key, char *value, int line_number) {
 		}
 
 	} else if (strncmp(key, "source-optional", 15) == 0) {
-		parse_config_file(config, value, false);
+		return parse_config_file(config, value, false);
 	} else if (strncmp(key, "source", 6) == 0) {
-		parse_config_file(config, value, true);
+		return parse_config_file(config, value, true);
 	} else {
 		mango_error(false, WLR_ERROR,
 					"Unknown keyword: "
@@ -2397,19 +2397,31 @@ bool parse_option(Config *config, char *key, char *value, int line_number) {
 }
 bool parse_config_line(Config *config, const char *line, int line_number) {
 	char processed_line[512];
-	strncpy(processed_line, line, sizeof(processed_line) - 1);
-	processed_line[sizeof(processed_line) - 1] = '\0';
+	size_t line_length = strnlen(line, sizeof(processed_line));
+	if (line_length == sizeof(processed_line)) {
+		mango_error(false, WLR_ERROR, "Configuration line exceeds %zu bytes\n",
+					sizeof(processed_line) - 1);
+		return false;
+	}
+	memcpy(processed_line, line, line_length + 1);
 
 	remove_comment(processed_line);
 
-	char key[256], value[256];
-	if (sscanf(processed_line, "%255[^=]=%255[^\n]", key, value) != 2) {
+	char *key = processed_line;
+	char *value = strchr(processed_line, '=');
+	if (!value || value == key || value[1] == '\0' || value[1] == '\n') {
 		mango_error(false, WLR_ERROR, "Invalid line format: %s", line);
 		return false;
 	}
+	*value++ = '\0';
 
 	trim_whitespace(key);
 	trim_whitespace(value);
+	if (strlen(key) > 255 || strlen(value) > 255) {
+		mango_error(false, WLR_ERROR,
+					"Configuration key or value exceeds 255 bytes\n");
+		return false;
+	}
 
 	return parse_option(config, key, value, line_number);
 }
@@ -3112,10 +3124,26 @@ bool parse_config_file(Config *config, const char *file_path, bool must_exist) {
 	uint32_t line_count = 0;
 	while (fgets(line, sizeof(line), file)) {
 		line_count++;
+		bool line_too_long = false;
+		if (!strchr(line, '\n')) {
+			int ch = fgetc(file);
+			line_too_long = ch != '\n' && ch != EOF;
+			/* Never interpret the remainder of a physical line as a new
+			 * directive, including when skipping a long comment. */
+			while (ch != '\n' && ch != EOF)
+				ch = fgetc(file);
+		}
 		if (line[0] == '#' || line[0] == '\n') {
 			continue;
 		}
-		parse_line_correct = parse_config_line(config, line, line_count);
+		if (line_too_long) {
+			mango_error(false, WLR_ERROR,
+						"Configuration line exceeds %zu bytes\n",
+						sizeof(line) - 1);
+			parse_line_correct = false;
+		} else {
+			parse_line_correct = parse_config_line(config, line, line_count);
+		}
 		if (!parse_line_correct) {
 			parse_correct = false;
 			mango_error(false, WLR_INFO,
@@ -4211,17 +4239,16 @@ bool parse_config(void) {
 	}
 
 	bool parse_correct = true;
-	bool keybindings_conflict = false;
 	set_value_default();
 	parse_correct = parse_config_file(&config, filename, true);
 	set_default_key_bindings(&config);
 	override_config();
 
-	keybindings_conflict = check_key_binding_conflicts(&config);
-	keybindings_conflict |= check_mouse_binding_conflicts(&config);
-	keybindings_conflict |= check_axis_binding_conflicts(&config);
-	keybindings_conflict |= check_switch_binding_conflicts(&config);
-	keybindings_conflict |= check_gesture_binding_conflicts(&config);
+	check_key_binding_conflicts(&config);
+	check_mouse_binding_conflicts(&config);
+	check_axis_binding_conflicts(&config);
+	check_switch_binding_conflicts(&config);
+	check_gesture_binding_conflicts(&config);
 
 	// Frees the file path list.
 	if (file_paths) {
@@ -4233,7 +4260,7 @@ bool parse_config(void) {
 		file_paths_count = 0;
 	}
 
-	return parse_correct || keybindings_conflict;
+	return parse_correct;
 }
 
 void reset_blur_params(void) {
