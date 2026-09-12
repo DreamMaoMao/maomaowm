@@ -192,6 +192,7 @@ struct Client {
 	float unfocused_opacity;
 	char oldmonname[128];
 	int32_t noblur;
+	int32_t confine_pointer;
 	float blur_opacity;
 	struct wlr_ext_foreign_toplevel_handle_v1 *ext_foreign_toplevel;
 	double master_mfact_per, master_inner_per, stack_inner_per;
