@@ -74,7 +74,7 @@ void handle_new_input_device(struct wl_listener *listener, void *data) {
 	}
 
 	/* We need to let the wlr_seat know what our capabilities are, which is
-	 * communiciated to the client. In dwl we always have a cursor, even if
+	 * communiciated to the client. In mango we always have a cursor, even if
 	 * there are no pointer devices, so we always include that capability.
 	 */
 	/* TODO do we actually require a cursor? */

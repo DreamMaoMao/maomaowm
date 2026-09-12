@@ -1205,24 +1205,27 @@ static DwindleNode *dwindle_node_lca(DwindleNode *a, DwindleNode *b) {
 	return a;
 }
 
-/* Dwindle keeps a binary split tree. Moving the focus from `fc` to `sc` enters
- * the branch of their lowest common ancestor that holds `sc`. All clients of
- * that entered branch form one focus block, so the most recently focused one
- * wins and the focus order is remembered for any tree shape. If the entered
- * branch is a single leaf there is nothing to remember. */
+/* Dwindle keeps a binary split tree. The focus memory may only kick in when the
+ * target `sc` lives in the branch that is directly attached to `fc`, i.e. the
+ * sibling subtree created when `fc` itself was split. If the target sits in a
+ * higher ancestor branch, it is not part of fc's own subtree and the move is
+ * left untouched. Within that directly attached branch the most recently
+ * focused client wins, so the focus order is remembered for any tree shape. */
 static DwindleNode *dwindle_focus_block_root(DwindleNode *root, Client *sc,
 											 Client *fc) {
 	DwindleNode *sc_leaf = dwindle_find_leaf(root, sc);
 	DwindleNode *fc_leaf = fc ? dwindle_find_leaf(root, fc) : NULL;
-	if (!sc_leaf || !fc_leaf || sc_leaf == fc_leaf)
+	if (!sc_leaf || !fc_leaf || sc_leaf == fc_leaf || !fc_leaf->parent)
 		return NULL;
 
+	/* sc must be inside the branch that is directly attached to fc, so the
+	 * lca of both leaves has to be fc's own parent. Anything above it is an
+	 * ancestor branch of fc and must not use the focus memory. */
 	DwindleNode *lca = dwindle_node_lca(sc_leaf, fc_leaf);
-	if (!lca)
+	if (lca != fc_leaf->parent)
 		return NULL;
 
-	DwindleNode *branch =
-		dwindle_find_leaf(lca->first, sc) ? lca->first : lca->second;
+	DwindleNode *branch = (lca->first == fc_leaf) ? lca->second : lca->first;
 	if (!branch || !branch->is_split)
 		return NULL;
 	return branch;
@@ -1317,6 +1320,7 @@ void apply_rule_properties(Client *c, const ConfigWinRule *r) {
 	APPLY_INT_PROP(c, r, activation_bypass);
 	APPLY_INT_PROP(c, r, isunglobal);
 	APPLY_INT_PROP(c, r, noblur);
+	APPLY_INT_PROP(c, r, confine_pointer);
 	APPLY_INT_PROP(c, r, allow_shortcuts_inhibit);
 
 	APPLY_FLOAT_PROP(c, r, scroller_proportion);
@@ -1815,7 +1819,6 @@ bool xwayland_scene_buffer_point_accepts_input(struct wlr_scene_buffer *buffer,
 	return wlr_surface_point_accepts_input(scene_surface->surface, tx, ty);
 }
 
-// fix for 0.5
 void handle_new_xdg_toplevel(struct wl_listener *listener, void *data) {
 	/* This event is raised when wlr_xdg_shell receives a new xdg surface from a
 	 * client, either a toplevel (application window) or popup,
@@ -1970,8 +1973,7 @@ void init_client_properties(Client *c) {
 	wl_list_init(&c->flink);
 }
 
-void // old fix to 0.5
-handle_client_map(struct wl_listener *listener, void *data) {
+void handle_client_map(struct wl_listener *listener, void *data) {
 	/* Called when the surface is mapped, or ready to display on-screen. */
 	Client *at_client = NULL;
 	Client *c = wl_container_of(listener, c, map);
@@ -2141,6 +2143,13 @@ handle_client_map(struct wl_listener *listener, void *data) {
 	printstatus(IPC_WATCH_ARRANGGE);
 }
 
+static bool client_xdg_size_pending(Client *c) {
+	struct wlr_xdg_toplevel_state *state = &c->surface.xdg->toplevel->current;
+
+	return state->width != (int32_t)(c->geom.width - 2 * (int32_t)c->bw) ||
+		   state->height != (int32_t)(c->geom.height - 2 * (int32_t)c->bw);
+}
+
 void handle_client_commit(struct wl_listener *listener, void *data) {
 	Client *c = wl_container_of(listener, c, commit);
 	struct wlr_box *new_geo;
@@ -2198,9 +2207,11 @@ void handle_client_commit(struct wl_listener *listener, void *data) {
 
 	if (!c->dirty) {
 		new_geo = &c->surface.xdg->geometry;
-		c->dirty = new_geo->width != c->geom.width - 2 * c->bw ||
-				   new_geo->height != c->geom.height - 2 * c->bw ||
-				   new_geo->x != 0 || new_geo->y != 0;
+		/* Only re-run resize() while the client has not adopted the size we
+		 * requested, or when its window geometry origin (what the clip shows)
+		 * moved. */
+		c->dirty = client_xdg_size_pending(c) || new_geo->x != c->xdg_geo_x ||
+				   new_geo->y != c->xdg_geo_y;
 	}
 
 	if (c == server.grab_client || !c->dirty)
@@ -2209,9 +2220,9 @@ void handle_client_commit(struct wl_listener *listener, void *data) {
 	resize(c, c->geom, 0);
 
 	new_geo = &c->surface.xdg->geometry;
-	c->dirty = new_geo->width != c->geom.width - 2 * c->bw ||
-			   new_geo->height != c->geom.height - 2 * c->bw ||
-			   new_geo->x != 0 || new_geo->y != 0;
+	c->xdg_geo_x = new_geo->x;
+	c->xdg_geo_y = new_geo->y;
+	c->dirty = client_xdg_size_pending(c);
 }
 
 void handle_client_unmap(struct wl_listener *listener, void *data) {
@@ -2378,8 +2389,7 @@ void handle_client_unmap(struct wl_listener *listener, void *data) {
 	pointer_process_motion(0, NULL, 0, 0, 0, 0);
 }
 
-void // 0.7 custom
-handle_client_destroy(struct wl_listener *listener, void *data) {
+void handle_client_destroy(struct wl_listener *listener, void *data) {
 	/* Called when the xdg_toplevel is destroyed. */
 	Client *c = wl_container_of(listener, c, destroy);
 	wl_list_remove(&c->destroy.link);
@@ -2411,11 +2421,12 @@ handle_client_destroy(struct wl_listener *listener, void *data) {
 		wl_list_remove(&c->set_decoration_mode.link);
 	}
 	switcher_remove_client(c);
+	pointer_client_destroyed(c);
 	free(c);
 }
 
-void // 0.6
-handle_client_request_fullscreen(struct wl_listener *listener, void *data) {
+void handle_client_request_fullscreen(struct wl_listener *listener,
+									  void *data) {
 	Client *c = wl_container_of(listener, c, fullscreen);
 
 	if (!c || c->iskilling || client_is_parked(c))
@@ -2484,8 +2495,8 @@ void handle_client_set_title(struct wl_listener *listener, void *data) {
 	if (c == client_focus_top(c->mon))
 		printstatus(IPC_WATCH_ARRANGGE);
 }
-void // 17 fix to 0.5
-handle_client_activation_request(struct wl_listener *listener, void *data) {
+void handle_client_activation_request(struct wl_listener *listener,
+									  void *data) {
 	struct wlr_xdg_activation_v1_request_activate_event *event = data;
 	Client *c = NULL;
 	toplevel_from_wlr_surface(event->surface, &c, NULL);
@@ -2548,6 +2559,20 @@ void client_set_opacity(Client *c, double opacity) {
 								   scene_buffer_apply_opacity, &opacity);
 }
 
+void client_ensure_constraint(Client *c) {
+	if (!c || !client_surface(c)) {
+		return;
+	}
+	struct wlr_pointer_constraint_v1 *constraint;
+	wl_list_for_each(constraint, &server.pointer_constraints->constraints,
+					 link) {
+		if (constraint->surface == client_surface(c)) {
+			pointer_constrain_cursor(constraint);
+			break;
+		}
+	}
+}
+
 void client_focus(Client *c, int32_t lift) {
 
 	Client *last_focus_client = NULL;
@@ -2577,8 +2602,10 @@ void client_focus(Client *c, int32_t lift) {
 	}
 
 	if (c && client_surface(c) == old_keyboard_focus_surface &&
-		server.selected_monitor && server.selected_monitor->sel)
+		server.selected_monitor && server.selected_monitor->sel) {
+		client_ensure_constraint(c);
 		return;
+	}
 
 	if (server.selected_monitor && server.selected_monitor->sel &&
 		server.selected_monitor->sel != c &&
@@ -2691,6 +2718,7 @@ void client_focus(Client *c, int32_t lift) {
 		if (server.active_constraint) {
 			pointer_constrain_cursor(NULL);
 		}
+		pointer_check_confine_client();
 		return;
 	}
 
@@ -2713,14 +2741,9 @@ void client_focus(Client *c, int32_t lift) {
 		pointer_constrain_cursor(NULL);
 	}
 
-	struct wlr_pointer_constraint_v1 *constraint;
-	wl_list_for_each(constraint, &server.pointer_constraints->constraints,
-					 link) {
-		if (constraint->surface == client_surface(c)) {
-			pointer_constrain_cursor(constraint);
-			break;
-		}
-	}
+	client_ensure_constraint(c);
+
+	pointer_check_confine_client();
 }
 
 void client_active(Client *c) {
@@ -2965,8 +2988,7 @@ void view_insert_shift_tags(Monitor *m, uint32_t target) {
 	}
 }
 
-void // 0.5
-client_set_floating(Client *c, int32_t floating) {
+void client_set_floating(Client *c, int32_t floating) {
 
 	Client *fc = NULL;
 	struct wlr_box target_box;

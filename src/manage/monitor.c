@@ -1011,7 +1011,7 @@ void handle_output_layout_change(struct wl_listener *listener, void *data) {
 	wlr_scene_rect_set_size(server.root_bg, server.scene_geometry.width,
 							server.scene_geometry.height);
 
-	/* Make sure the clients are hidden when dwl is locked */
+	/* Make sure the clients are hidden when mango is locked */
 	wlr_scene_node_set_position(&server.locked_bg->node,
 								server.scene_geometry.x,
 								server.scene_geometry.y);
@@ -1135,9 +1135,8 @@ void handle_output_manager_apply(struct wl_listener *listener, void *data) {
 	output_manager_apply_or_test(config, 0);
 }
 
-void // 0.7 custom
-output_manager_apply_or_test(struct wlr_output_configuration_v1 *config,
-							 int32_t test) {
+void output_manager_apply_or_test(struct wlr_output_configuration_v1 *config,
+								  int32_t test) {
 	/*
 	 * Called when a client such as wlr-randr requests a change in output
 	 * configuration. This is only one way that the layout can be changed,
@@ -1199,7 +1198,6 @@ output_manager_apply_or_test(struct wlr_output_configuration_v1 *config,
 		wlr_output_configuration_v1_send_failed(config);
 	wlr_output_configuration_v1_destroy(config);
 
-	/* https://codeberg.org/dwl/dwl/issues/577 */
 	handle_output_layout_change(NULL, NULL);
 }
 

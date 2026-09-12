@@ -30,14 +30,13 @@
 #include <wlr/types/wlr_relative_pointer_v1.h>
 #include <wlr/types/wlr_seat.h>
 #include <wlr/types/wlr_virtual_pointer_v1.h>
+#ifdef XWAYLAND
+#include <wlr/xwayland.h>
+#endif
 #include <wlr/util/region.h>
 
 static struct LastCursor last_cursor;
 
-/* X11 clients run with xwayland_ignore_scale render 1:1 physical pixels, so
- * their surface-local coordinates (and therefore any pointer constraint
- * region) are the layout coordinates multiplied by xwayland_scale. Other
- * surfaces have no such distinction. */
 static double pointer_surface_scale(Client *c) {
 #ifdef XWAYLAND
 	if (c && client_is_x11(c) && config.xwayland_ignore_scale &&
@@ -48,29 +47,21 @@ static double pointer_surface_scale(Client *c) {
 	return 1.0;
 }
 
-/* Region used to confine the pointer to a client, in surface coordinates.
- *
- * wlroots resolves a constraint request without a region to the surface input
- * region, but only refreshes it when the surface commits again, so an idle
- * client keeps an empty region and would not be confined at all. Fall back to
- * the client content box until a real region shows up. Clients without a
- * constraint (confine_pointer window rule) always use their content box. */
-static pixman_region32_t *
-pointer_constraint_region(struct wlr_pointer_constraint_v1 *constraint,
-						  Client *c, pixman_region32_t *fallback) {
-	if (constraint && !pixman_region32_empty(&constraint->region)) {
-		return &constraint->region;
+static void
+pointer_constraint_sync_region(struct wlr_pointer_constraint_v1 *constraint) {
+	if (!constraint) {
+		return;
 	}
-
-	double scale = pointer_surface_scale(c);
-	int32_t w = MANGO_MAX(c->geom.width - 2 * (int32_t)c->bw, 1);
-	int32_t h = MANGO_MAX(c->geom.height - 2 * (int32_t)c->bw, 1);
-	pixman_region32_init_rect(fallback, 0, 0, (unsigned)round(w * scale),
-							  (unsigned)round(h * scale));
-	return fallback;
+	if (pixman_region32_not_empty(&constraint->current.region)) {
+		pixman_region32_intersect(&constraint->region,
+								  &constraint->surface->input_region,
+								  &constraint->current.region);
+	} else {
+		pixman_region32_copy(&constraint->region,
+							 &constraint->surface->input_region);
+	}
 }
 
-/* Closest point inside the region, in surface coordinates. */
 static void pointer_region_closest_point(pixman_region32_t *region, double x,
 										 double y, double *cx, double *cy) {
 	int nrects = 0;
@@ -91,23 +82,37 @@ static void pointer_region_closest_point(pixman_region32_t *region, double x,
 	}
 }
 
-/* Logical position of the cursor hint the constraint asked for. */
-static bool pointer_constraint_hint_position(Client *c, double *lx,
-											 double *ly) {
-	struct wlr_pointer_constraint_v1 *constraint = server.active_constraint;
+static struct wlr_box pointer_client_warp_box(Client *c) {
+	struct wlr_box box = c->animation.current;
+	if (box.width <= 0 || box.height <= 0 || box.x < c->geom.x ||
+		box.y < c->geom.y || box.x + box.width > c->geom.x + c->geom.width ||
+		box.y + box.height > c->geom.y + c->geom.height) {
+		box = c->geom;
+	}
+	return box;
+}
+
+static bool
+pointer_constraint_hint_position(struct wlr_pointer_constraint_v1 *constraint,
+								 Client *c, double *lx, double *ly) {
 	if (!c || !constraint || !constraint->current.cursor_hint.enabled) {
 		return false;
 	}
 
+	struct wlr_box box = pointer_client_warp_box(c);
 	double scale = pointer_surface_scale(c);
-	*lx = c->geom.x + c->bw + constraint->current.cursor_hint.x / scale;
-	*ly = c->geom.y + c->bw + constraint->current.cursor_hint.y / scale;
+	*lx = box.x + c->bw + constraint->current.cursor_hint.x / scale;
+	*ly = box.y + c->bw + constraint->current.cursor_hint.y / scale;
 	return true;
 }
 
-/* Whether a scene node and all of its parents are enabled, i.e. the surface is
- * really on screen (not on a hidden tag, hidden scratchpad, overview card...).
- */
+static bool pointer_cursor_outside_client(Client *c) {
+	struct wlr_box box = pointer_client_warp_box(c);
+	return server.cursor->x < box.x || server.cursor->y < box.y ||
+		   server.cursor->x >= box.x + box.width ||
+		   server.cursor->y >= box.y + box.height;
+}
+
 static bool pointer_node_enabled(struct wlr_scene_node *node) {
 	for (; node; node = node->parent ? &node->parent->node : NULL) {
 		if (!node->enabled) {
@@ -117,16 +122,49 @@ static bool pointer_node_enabled(struct wlr_scene_node *node) {
 	return true;
 }
 
-/* Whether the surface a constraint belongs to is enabled in the scene tree. */
-static bool pointer_constraint_surface_enabled(
+static bool pointer_client_visible(Client *c) {
+	return c && c->mon && !c->mon->isoverview && client_surface(c)->mapped &&
+		   VISIBLEON(c, c->mon);
+}
+
+static Client *confine_pointer_last = NULL;
+
+static Client *pointer_confine_rule_client(void) {
+	Client *c = server.selected_monitor ? server.selected_monitor->sel : NULL;
+
+	if (!c || !c->confine_pointer || !client_surface(c)->mapped || !c->mon ||
+		c->mon->isoverview || c->isminimized || !VISIBLEON(c, c->mon) ||
+		!pointer_node_enabled(&c->scene->node)) {
+		return NULL;
+	}
+	return c;
+}
+
+void pointer_check_confine_client(void) {
+	Client *c = pointer_confine_rule_client();
+
+	if (c && c != confine_pointer_last && pointer_cursor_outside_client(c)) {
+		struct wlr_box box = pointer_client_warp_box(c);
+		wlr_cursor_warp(server.cursor, NULL, box.x + box.width / 2.0,
+						box.y + box.height / 2.0);
+	}
+	confine_pointer_last = c;
+}
+
+void pointer_client_destroyed(Client *c) {
+	if (confine_pointer_last == c) {
+		confine_pointer_last = NULL;
+	}
+}
+
+static bool pointer_constraint_surface_visible(
 	struct wlr_pointer_constraint_v1 *constraint) {
 	Client *c = NULL;
 	LayerSurface *l = NULL;
 
 	toplevel_from_wlr_surface(constraint->surface, &c, &l);
-	if (c && c->scene) {
-		return pointer_node_enabled(c->scene_surface ? &c->scene_surface->node
-													 : &c->scene->node);
+	if (c) {
+		return pointer_client_visible(c);
 	}
 	if (l && l->scene) {
 		return pointer_node_enabled(&l->scene->node);
@@ -134,52 +172,39 @@ static bool pointer_constraint_surface_enabled(
 	return false;
 }
 
-/* Warps the pointer into a constraint that was just activated while it was
- * outside (e.g. the client grabbed the pointer while it was on another
- * monitor). The protocol expects the pointer to be inside the region once the
- * constraint is active. */
 static void
 pointer_warp_into_constraint(struct wlr_pointer_constraint_v1 *constraint,
 							 Client *c) {
 	if (!c || !c->mon || c->mon->isoverview ||
-		!pointer_constraint_surface_enabled(constraint)) {
+		!pointer_constraint_surface_visible(constraint)) {
 		return;
 	}
 
-	if (constraint->type == WLR_POINTER_CONSTRAINT_V1_LOCKED) {
-		double lx, ly;
-		if (pointer_constraint_hint_position(c, &lx, &ly) &&
-			(server.cursor->x < c->geom.x || server.cursor->y < c->geom.y ||
-			 server.cursor->x >= c->geom.x + c->geom.width ||
-			 server.cursor->y >= c->geom.y + c->geom.height)) {
-			wlr_cursor_warp(server.cursor, NULL, lx, ly);
-		}
+	double lx, ly;
+	if (pointer_constraint_hint_position(constraint, c, &lx, &ly) &&
+		pointer_cursor_outside_client(c)) {
+
+		wlr_cursor_warp(server.cursor, NULL, lx, ly);
 		return;
 	}
 
 	double scale = pointer_surface_scale(c);
-	pixman_region32_t fallback;
-	pixman_region32_t *region =
-		pointer_constraint_region(constraint, c, &fallback);
-	double sx = (server.cursor->x - c->geom.x - c->bw) * scale;
-	double sy = (server.cursor->y - c->geom.y - c->bw) * scale;
-	if (!pixman_region32_contains_point(region, floor(sx), floor(sy), NULL)) {
-		double cx, cy;
-		pointer_region_closest_point(region, sx, sy, &cx, &cy);
-		wlr_cursor_warp(server.cursor, NULL, c->geom.x + c->bw + cx / scale,
-						c->geom.y + c->bw + cy / scale);
+	pixman_region32_t *region = &constraint->region;
+	struct wlr_box box = pointer_client_warp_box(c);
+	double sx = (server.cursor->x - box.x - c->bw) * scale;
+	double sy = (server.cursor->y - box.y - c->bw) * scale;
+	if (pixman_region32_empty(region) ||
+		pixman_region32_contains_point(region, floor(sx), floor(sy), NULL)) {
+		return;
 	}
-	if (region == &fallback) {
-		pixman_region32_fini(&fallback);
-	}
+
+	double cx, cy;
+	pointer_region_closest_point(region, sx, sy, &cx, &cy);
+
+	wlr_cursor_warp(server.cursor, NULL, box.x + c->bw + cx / scale,
+					box.y + c->bw + cy / scale);
 }
 
-/* Client the pointer is confined to, or NULL.
- *
- * The constraint belongs to the focused client (see focusclient()), so it is
- * honoured even when the pointer already left the client. Without a constraint
- * the confine_pointer window rule confines the pointer to the focused window,
- * which covers clients that never request a pointer constraint themselves. */
 static Client *
 pointer_confine_client(struct wlr_pointer_constraint_v1 **constraint_out) {
 	struct wlr_pointer_constraint_v1 *constraint = server.active_constraint;
@@ -187,43 +212,39 @@ pointer_confine_client(struct wlr_pointer_constraint_v1 **constraint_out) {
 
 	if (constraint) {
 		toplevel_from_wlr_surface(constraint->surface, &c, NULL);
-		/* Never confine in overview: the pointer must stay free there. A
-		 * disabled node (hidden tag, hidden scratchpad, ...) must not confine
-		 * either, the client is not on screen. */
-		if (c && c->mon && !c->mon->isoverview &&
-			pointer_constraint_surface_enabled(constraint)) {
+		if (c && pointer_constraint_surface_visible(constraint)) {
 			*constraint_out = constraint;
 			return c;
 		}
+
+		*constraint_out = NULL;
 		return NULL;
 	}
 
-	/* Nothing is active: the keyboard focused client may still own a
-	 * constraint (e.g. it was released when entering overview) or ask for
-	 * confinement with the confine_pointer rule. */
 	*constraint_out = NULL;
-	Client *fc = NULL;
+	Client *fc = NULL, *candidates[2] = {NULL, NULL};
 	struct wlr_surface *kbd_focus = server.seat->keyboard_state.focused_surface;
 	if (kbd_focus) {
 		toplevel_from_wlr_surface(kbd_focus, &fc, NULL);
 	}
-	if (!fc || !fc->mon || fc->mon->isoverview || !client_surface(fc)->mapped ||
-		!VISIBLEON(fc, fc->mon) ||
-		!pointer_node_enabled(fc->scene_surface ? &fc->scene_surface->node
-												: &fc->scene->node)) {
-		return NULL;
-	}
+	candidates[0] = fc;
+	candidates[1] =
+		server.selected_monitor ? server.selected_monitor->sel : NULL;
 
-	constraint = wlr_pointer_constraints_v1_constraint_for_surface(
-		server.pointer_constraints, client_surface(fc), server.seat);
-	if (constraint) {
-		pointer_constrain_cursor(constraint);
-		*constraint_out = constraint;
-		return fc;
-	}
+	for (int i = 0; i < 2; i++) {
+		Client *cc = candidates[i];
+		if (!cc || !pointer_client_visible(cc) ||
+			(i == 1 && cc == candidates[0])) {
+			continue;
+		}
 
-	if (fc->confine_pointer) {
-		return fc;
+		constraint = wlr_pointer_constraints_v1_constraint_for_surface(
+			server.pointer_constraints, client_surface(cc), server.seat);
+		if (constraint) {
+			pointer_constrain_cursor(constraint);
+			*constraint_out = constraint;
+			return cc;
+		}
 	}
 
 	return NULL;
@@ -241,6 +262,15 @@ void toggle_hotarea(int32_t x_root, int32_t y_root) {
 
 	if (server.grab_client)
 		return;
+
+	if (config.hotarea_disable_on_fullscreen == 1) {
+		Client *focused = server.selected_monitor->sel;
+		if (focused && focused->isfullscreen &&
+			VISIBLEON(focused, server.selected_monitor)) {
+			server.selected_monitor->is_in_hotarea = 0;
+			return;
+		}
+	}
 
 	// Computes different hot-area coordinates for each hot corner.
 	unsigned hx, hy;
@@ -551,40 +581,65 @@ void pointer_create(struct wlr_pointer *pointer) {
 	wlr_cursor_attach_input_device(server.cursor, &pointer->base);
 }
 
-void handle_new_pointer_constraint(struct wl_listener *listener, void *data) {
+void handle_pointer_constraint_commit(struct wl_listener *listener,
+									  void *data) {
 	PointerConstraint *pointer_constraint =
-		ecalloc(1, sizeof(*pointer_constraint));
-	pointer_constraint->constraint = data;
-	LISTEN(&pointer_constraint->constraint->events.destroy,
-		   &pointer_constraint->destroy, handle_pointer_constraint_destroy);
+		wl_container_of(listener, pointer_constraint, commit);
+	struct wlr_pointer_constraint_v1 *constraint =
+		pointer_constraint->constraint;
+	Client *c = NULL;
 
-	// layer surfaces are never selected_monitor->sel, so match pointer focus
-	// too (e.g. lan-mouse locks the pointer on a 1px layer surface)
-	if (server.seat->pointer_state.focused_surface ==
-		pointer_constraint->constraint->surface) {
-		pointer_constrain_cursor(pointer_constraint->constraint);
+	if (server.active_constraint != constraint) {
 		return;
 	}
 
-	/* Otherwise activate it when it belongs to the keyboard focused client: a
-	 * game may grab the pointer while it is still on another monitor (for
-	 * example when it was launched from a launcher there), so no pointer focus
-	 * is on it yet and the selected monitor is not even its monitor. */
-	Client *c = NULL, *cc = NULL;
+	pointer_constraint_sync_region(constraint);
+	toplevel_from_wlr_surface(constraint->surface, &c, NULL);
+	pointer_warp_into_constraint(constraint, c);
+}
+
+void handle_new_pointer_constraint(struct wl_listener *listener, void *data) {
+	struct wlr_pointer_constraint_v1 *constraint = data;
+	PointerConstraint *pointer_constraint =
+		ecalloc(1, sizeof(*pointer_constraint));
+	pointer_constraint->constraint = constraint;
+	LISTEN(&pointer_constraint->constraint->events.destroy,
+		   &pointer_constraint->destroy, handle_pointer_constraint_destroy);
+	LISTEN(&constraint->surface->events.commit, &pointer_constraint->commit,
+		   handle_pointer_constraint_commit);
+
+	// layer surfaces are never selected_monitor->sel, so match pointer focus
+	// too (e.g. lan-mouse locks the pointer on a 1px layer surface)
+	bool pointer_match =
+		server.seat->pointer_state.focused_surface == constraint->surface;
+
+	Client *c = NULL, *cc = NULL, *sel = NULL;
 	if (server.seat->keyboard_state.focused_surface) {
 		toplevel_from_wlr_surface(server.seat->keyboard_state.focused_surface,
 								  &c, NULL);
 	}
-	toplevel_from_wlr_surface(pointer_constraint->constraint->surface, &cc,
-							  NULL);
-	if (cc && cc == c) {
-		pointer_constrain_cursor(pointer_constraint->constraint);
+	sel = server.selected_monitor ? server.selected_monitor->sel : NULL;
+	toplevel_from_wlr_surface(constraint->surface, &cc, NULL);
+
+	bool activate = pointer_match || (cc && (cc == c || cc == sel));
+
+	if (activate) {
+		pointer_constrain_cursor(constraint);
 	}
 }
 
 void pointer_constrain_cursor(struct wlr_pointer_constraint_v1 *constraint) {
 	if (server.active_constraint == constraint)
 		return;
+
+	Client *old_client = NULL, *new_client = NULL;
+	if (server.active_constraint) {
+		toplevel_from_wlr_surface(server.active_constraint->surface,
+								  &old_client, NULL);
+	}
+	if (constraint) {
+		toplevel_from_wlr_surface(constraint->surface, &new_client, NULL);
+	}
 
 	if (server.active_constraint) {
 		if (constraint == NULL) {
@@ -596,10 +651,12 @@ void pointer_constrain_cursor(struct wlr_pointer_constraint_v1 *constraint) {
 	server.active_constraint = constraint;
 
 	if (constraint) {
+		pointer_constraint_sync_region(constraint);
 		wlr_pointer_constraint_v1_send_activated(constraint);
 
 		Client *c = NULL;
 		toplevel_from_wlr_surface(constraint->surface, &c, NULL);
+
 		pointer_warp_into_constraint(constraint, c);
 	}
 }
@@ -619,9 +676,9 @@ void pointer_warp_to_constraint_hint(void) {
 
 	toplevel_from_wlr_surface(server.active_constraint->surface, &c, NULL);
 	double lx, ly;
-	if (pointer_constraint_hint_position(c, &lx, &ly)) {
+	if (pointer_constraint_hint_position(server.active_constraint, c, &lx,
+										 &ly)) {
 		wlr_cursor_warp(server.cursor, NULL, lx, ly);
-		/* wlr_seat_pointer_warp() expects surface coordinates. */
 		wlr_seat_pointer_warp(server.active_constraint->seat,
 							  server.active_constraint->current.cursor_hint.x,
 							  server.active_constraint->current.cursor_hint.y);
@@ -641,12 +698,17 @@ void handle_pointer_constraint_destroy(struct wl_listener *listener,
 	PointerConstraint *pointer_constraint =
 		wl_container_of(listener, pointer_constraint, destroy);
 
+	Client *c = NULL;
+	toplevel_from_wlr_surface(pointer_constraint->constraint->surface, &c,
+							  NULL);
+
 	if (server.active_constraint == pointer_constraint->constraint) {
 		pointer_warp_to_constraint_hint();
 		server.active_constraint = NULL;
 	}
 
 	wl_list_remove(&pointer_constraint->destroy.link);
+	wl_list_remove(&pointer_constraint->commit.link);
 	free(pointer_constraint);
 }
 
@@ -859,18 +921,15 @@ void pointer_process_motion(uint32_t time, struct wlr_input_device *device,
 			struct wlr_pointer_constraint_v1 *active = server.active_constraint;
 
 			if (active && active->type == WLR_POINTER_CONSTRAINT_V1_LOCKED &&
-				pointer_constraint_surface_enabled(active) &&
+				pointer_constraint_surface_visible(active) &&
 				(constraint ||
 				 active->surface ==
 					 server.seat->pointer_state.focused_surface)) {
-				/* The client owns the pointer: keep it at the position the
-				 * client wants, so a cursor left outside comes back. */
 				double lx, ly;
-				if (cc && pointer_constraint_hint_position(cc, &lx, &ly) &&
-					(server.cursor->x < cc->geom.x ||
-					 server.cursor->y < cc->geom.y ||
-					 server.cursor->x >= cc->geom.x + cc->geom.width ||
-					 server.cursor->y >= cc->geom.y + cc->geom.height)) {
+
+				if (cc &&
+					pointer_constraint_hint_position(active, cc, &lx, &ly) &&
+					pointer_cursor_outside_client(cc)) {
 					wlr_cursor_warp(server.cursor, NULL, lx, ly);
 				}
 				return;
@@ -878,34 +937,40 @@ void pointer_process_motion(uint32_t time, struct wlr_input_device *device,
 
 			if (cc) {
 				double scale = pointer_surface_scale(cc);
-				pixman_region32_t fallback;
-				pixman_region32_t *region =
-					pointer_constraint_region(constraint, cc, &fallback);
-				/* The confinement region uses surface coordinates while the
-				 * cursor position and the delta are in layout coordinates. */
-				sx = (server.cursor->x - cc->geom.x - cc->bw) * scale;
-				sy = (server.cursor->y - cc->geom.y - cc->bw) * scale;
+				pixman_region32_t *region = &constraint->region;
+				struct wlr_box box = pointer_client_warp_box(cc);
+				sx = (server.cursor->x - box.x - cc->bw) * scale;
+				sy = (server.cursor->y - box.y - cc->bw) * scale;
 				if (wlr_region_confine(region, sx, sy, sx + dx * scale,
 									   sy + dy * scale, &sx_confined,
 									   &sy_confined)) {
 					dx = (sx_confined - sx) / scale;
 					dy = (sy_confined - sy) / scale;
 				} else {
-					/* The pointer is outside the region (e.g. the client warped
-					 * it away or it was left on another monitor). Warp it back
-					 * instead of letting it escape. */
-					pointer_region_closest_point(region, sx, sy, &sx_confined,
-												 &sy_confined);
-					wlr_cursor_warp(server.cursor, NULL,
-									cc->geom.x + cc->bw + sx_confined / scale,
-									cc->geom.y + cc->bw + sy_confined / scale);
 					dx = 0;
 					dy = 0;
 				}
-				if (region == &fallback) {
-					pixman_region32_fini(&fallback);
-				}
 			}
+		}
+
+		Client *rule_client = pointer_confine_rule_client();
+		if (!server.active_constraint && rule_client) {
+			struct wlr_box box = pointer_client_warp_box(rule_client);
+			double min_x = box.x + rule_client->bw;
+			double min_y = box.y + rule_client->bw;
+			double max_x = box.x + box.width - rule_client->bw;
+			double max_y = box.y + box.height - rule_client->bw;
+
+			if (max_x < min_x) {
+				max_x = min_x;
+			}
+			if (max_y < min_y) {
+				max_y = min_y;
+			}
+			dx = MANGO_MIN(MANGO_MAX(server.cursor->x + dx, min_x), max_x) -
+				 server.cursor->x;
+			dy = MANGO_MIN(MANGO_MAX(server.cursor->y + dy, min_y), max_y) -
+				 server.cursor->y;
 		}
 
 		wlr_cursor_move(server.cursor, device, dx, dy);
@@ -1048,6 +1113,9 @@ void pointer_focus(Client *c, struct wlr_surface *surface, double sx, double sy,
 				   uint32_t time) {
 	struct timespec now;
 
+	if (server.seat->pointer_state.focused_surface != surface) {
+	}
+
 	if (config.sloppyfocus && !server.start_drag_window && c && time &&
 		c->scene && c->scene->node.enabled &&
 		(!c->mon || !c->mon->isoverview) && !c->animation.tagining &&
@@ -1095,9 +1163,7 @@ void pointer_focus(Client *c, struct wlr_surface *surface, double sx, double sy,
 			server.seat->pointer_state.focused_surface;
 		wlr_seat_pointer_notify_enter(server.seat, surface, sx, sy);
 
-		// toplevel constraints are handled by focusclient, this picks up the
-		// ones focusclient can't see
-		if (!c && surface != old_focus) {
+		if (surface != old_focus) {
 			struct wlr_pointer_constraint_v1 *constraint;
 			wl_list_for_each(constraint,
 							 &server.pointer_constraints->constraints, link) {

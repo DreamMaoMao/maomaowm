@@ -72,6 +72,7 @@ windowrule-once=Parameter:Values,Parameter:Values,appid:Values,title:Values
 | `focused_opacity` | integer | `0` / `1` | Window focused opacity |
 | `unfocused_opacity` | integer | `0` / `1` | Window unfocused opacity |
 | `allow_csd` | integer | `0` / `1` | Allow client side decoration |
+| `confine_pointer` | integer | `0` / `1` | While this window is focused and visible, force the cursor to stay inside it (does not require the client to use the pointer constraints protocol) |
 
 > **Tip:** For detailed visual effects configuration, see the [Window Effects](/docs/visuals/effects) page for blur, shadows, and opacity settings.
 
