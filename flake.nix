@@ -21,7 +21,10 @@
 
       flake = {
         hmModules.mango = import ./nix/hm-modules.nix self;
+        hjemModules.mango = import ./nix/hjem-modules.nix self;
         nixosModules.mango = import ./nix/nixos-modules.nix self;
+
+        hjemModules.default = self.hjemModules.mango;
       };
 
       perSystem =
