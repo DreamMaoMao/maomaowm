@@ -818,6 +818,8 @@ bool parse_option(Config *config, char *key, char *value, int line_number) {
 		config->hotarea_corner = atoi(value);
 	} else if (strcmp(key, "enable_hotarea") == 0) {
 		config->enable_hotarea = atoi(value);
+	} else if (strcmp(key, "hotarea_disable_on_fullscreen") == 0) {
+		config->hotarea_disable_on_fullscreen = atoi(value);
 	} else if (strcmp(key, "overviewgappi") == 0) {
 		config->overviewgappi = atoi(value);
 	} else if (strcmp(key, "overviewgappo") == 0) {
@@ -1540,6 +1542,7 @@ bool parse_option(Config *config, char *key, char *value, int line_number) {
 		rule->confine_pointer = -1;
 		rule->force_render = -1;
 		rule->activation_bypass = -1;
+		rule->confine_pointer = -1;
 		rule->isterm = -1;
 		rule->allow_csd = -1;
 		rule->force_fakemaximize = -1;
@@ -1676,6 +1679,8 @@ bool parse_option(Config *config, char *key, char *value, int line_number) {
 					rule->noswallow = atoi(val);
 				} else if (strcmp(key, "noblur") == 0) {
 					rule->noblur = atoi(val);
+				} else if (strcmp(key, "confine_pointer") == 0) {
+					rule->confine_pointer = atoi(val);
 				} else if (strcmp(key, "scroller_proportion") == 0) {
 					rule->scroller_proportion = atof(val);
 				} else if (strcmp(key, "isfullscreen") == 0) {
@@ -3642,6 +3647,8 @@ void override_config(void) {
 	config.hotarea_size = CLAMP_INT(config.hotarea_size, 1, 1000);
 	config.hotarea_corner = CLAMP_INT(config.hotarea_corner, 0, 3);
 	config.enable_hotarea = CLAMP_INT(config.enable_hotarea, 0, 1);
+	config.hotarea_disable_on_fullscreen =
+		CLAMP_INT(config.hotarea_disable_on_fullscreen, 0, 1);
 	config.overviewgappi = CLAMP_INT(config.overviewgappi, 0, 1000);
 	config.overviewgappo = CLAMP_INT(config.overviewgappo, 0, 1000);
 	config.overcircle_center_ratio =
@@ -3856,6 +3863,7 @@ void set_value_default() {
 	config.hotarea_size = 10;
 	config.hotarea_corner = BOTTOM_LEFT;
 	config.enable_hotarea = 0;
+	config.hotarea_disable_on_fullscreen = 1;
 	config.smartgaps = 0;
 	config.sloppyfocus = 1;
 	config.gappih = 5;

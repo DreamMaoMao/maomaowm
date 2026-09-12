@@ -120,6 +120,7 @@ struct Client {
 	uint32_t bw;
 	uint32_t tags, oldtags, mini_restore_tag;
 	bool dirty;
+	int32_t xdg_geo_x, xdg_geo_y;
 	uint32_t configure_serial;
 	struct wlr_foreign_toplevel_handle_v1 *foreign_toplevel;
 	int32_t isfloating, isurgent, isfullscreen, isfakefullscreen,
@@ -192,6 +193,7 @@ struct Client {
 	float unfocused_opacity;
 	char oldmonname[128];
 	int32_t noblur;
+	int32_t confine_pointer;
 	float blur_opacity;
 	struct wlr_ext_foreign_toplevel_handle_v1 *ext_foreign_toplevel;
 	double master_mfact_per, master_inner_per, stack_inner_per;
@@ -358,6 +360,7 @@ void scene_buffer_apply_opacity(struct wlr_scene_buffer *buffer, int32_t sx,
 								int32_t sy, void *data);
 void client_set_opacity(Client *c, double opacity);
 void client_focus(Client *c, int32_t lift);
+void client_ensure_constraint(Client *c);
 void client_active(Client *c);
 void client_view_on_monitor(const Arg *arg, bool want_animation, Monitor *m,
 							bool changefocus);

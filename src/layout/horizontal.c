@@ -598,8 +598,7 @@ void deck(Monitor *m) {
 	}
 }
 
-void // 17
-monocle(Monitor *m) {
+void monocle(Monitor *m) {
 	Client *c = NULL;
 	struct wlr_box geom;
 

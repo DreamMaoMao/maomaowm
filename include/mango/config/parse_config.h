@@ -147,6 +147,7 @@ typedef struct {
 	int32_t force_tearing;
 	int32_t noswallow;
 	int32_t noblur;
+	int32_t confine_pointer;
 	float focused_opacity;
 	float unfocused_opacity;
 	float scroller_proportion_single;
@@ -374,6 +375,7 @@ typedef struct {
 	int32_t hotarea_size;
 	int32_t hotarea_corner;
 	int32_t enable_hotarea;
+	int32_t hotarea_disable_on_fullscreen;
 
 	int32_t overviewgappi;
 	int32_t overviewgappo;
