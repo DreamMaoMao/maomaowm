@@ -462,8 +462,7 @@ static bool swipe_drive_pan_flick_target(Monitor *m, double dir,
 	double best_offset = 0;
 	Client *c = NULL;
 	wl_list_for_each(c, &server.clients, link) {
-		if (c->mon != m || !VISIBLEON(c, m) || !ISSCROLLTILED(c) ||
-			c == m->sel)
+		if (c->mon != m || !VISIBLEON(c, m) || !ISSCROLLTILED(c) || c == m->sel)
 			continue;
 
 		double center = horizontal ? c->geom.x + c->geom.width / 2.0
@@ -756,8 +755,7 @@ static void swipe_drive_end(void) {
 			bool quick_hit =
 				swipe_drive.speed_points > 0 && dur <= SWIPE_FLICK_MAX_MS;
 
-			if (target == swipe_drive.start_sel &&
-				(speed_hit || quick_hit)) {
+			if (target == swipe_drive.start_sel && (speed_hit || quick_hit)) {
 				double dir = raw < 0 ? -1.0 : 1.0;
 				double flick_offset = offset;
 
@@ -810,13 +808,12 @@ static void swipe_drive_end(void) {
 			p = 1.0;
 
 		uint32_t dur = swipe_drive.last_time - swipe_drive.first_time;
-		bool commit =
-			swipe_func_is_overview(swipe_drive.func) ||
-			delta >= distance * config.gesture_swipe_cancel_ratio ||
-			(swipe_drive.speed_points > 0 &&
-			 (swipe_drive.avg_speed >=
-				  config.gesture_swipe_min_speed_to_force ||
-			  dur <= SWIPE_FLICK_MAX_MS));
+		bool commit = swipe_func_is_overview(swipe_drive.func) ||
+					  delta >= distance * config.gesture_swipe_cancel_ratio ||
+					  (swipe_drive.speed_points > 0 &&
+					   (swipe_drive.avg_speed >=
+							config.gesture_swipe_min_speed_to_force ||
+						dur <= SWIPE_FLICK_MAX_MS));
 
 		swipe_drive_unfreeze();
 

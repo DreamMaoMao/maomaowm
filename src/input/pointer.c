@@ -37,7 +37,6 @@
 
 static struct LastCursor last_cursor;
 
-
 static double pointer_surface_scale(Client *c) {
 #ifdef XWAYLAND
 	if (c && client_is_x11(c) && config.xwayland_ignore_scale &&
@@ -48,8 +47,8 @@ static double pointer_surface_scale(Client *c) {
 	return 1.0;
 }
 
-static void pointer_constraint_sync_region(
-	struct wlr_pointer_constraint_v1 *constraint) {
+static void
+pointer_constraint_sync_region(struct wlr_pointer_constraint_v1 *constraint) {
 	if (!constraint) {
 		return;
 	}
@@ -93,9 +92,9 @@ static struct wlr_box pointer_client_warp_box(Client *c) {
 	return box;
 }
 
-static bool pointer_constraint_hint_position(
-	struct wlr_pointer_constraint_v1 *constraint, Client *c, double *lx,
-	double *ly) {
+static bool
+pointer_constraint_hint_position(struct wlr_pointer_constraint_v1 *constraint,
+								 Client *c, double *lx, double *ly) {
 	if (!c || !constraint || !constraint->current.cursor_hint.enabled) {
 		return false;
 	}
@@ -173,10 +172,9 @@ static bool pointer_constraint_surface_visible(
 	return false;
 }
 
-
-
-static void pointer_warp_into_constraint(
-	struct wlr_pointer_constraint_v1 *constraint, Client *c) {
+static void
+pointer_warp_into_constraint(struct wlr_pointer_constraint_v1 *constraint,
+							 Client *c) {
 	if (!c || !c->mon || c->mon->isoverview ||
 		!pointer_constraint_surface_visible(constraint)) {
 		return;
@@ -230,8 +228,8 @@ pointer_confine_client(struct wlr_pointer_constraint_v1 **constraint_out) {
 		toplevel_from_wlr_surface(kbd_focus, &fc, NULL);
 	}
 	candidates[0] = fc;
-	candidates[1] = server.selected_monitor ? server.selected_monitor->sel
-											: NULL;
+	candidates[1] =
+		server.selected_monitor ? server.selected_monitor->sel : NULL;
 
 	for (int i = 0; i < 2; i++) {
 		Client *cc = candidates[i];
@@ -574,7 +572,8 @@ void pointer_create(struct wlr_pointer *pointer) {
 	wlr_cursor_attach_input_device(server.cursor, &pointer->base);
 }
 
-void handle_pointer_constraint_commit(struct wl_listener *listener, void *data) {
+void handle_pointer_constraint_commit(struct wl_listener *listener,
+									  void *data) {
 	PointerConstraint *pointer_constraint =
 		wl_container_of(listener, pointer_constraint, commit);
 	struct wlr_pointer_constraint_v1 *constraint =
@@ -602,8 +601,8 @@ void handle_new_pointer_constraint(struct wl_listener *listener, void *data) {
 
 	// layer surfaces are never selected_monitor->sel, so match pointer focus
 	// too (e.g. lan-mouse locks the pointer on a 1px layer surface)
-	bool pointer_match = server.seat->pointer_state.focused_surface ==
-						 constraint->surface;
+	bool pointer_match =
+		server.seat->pointer_state.focused_surface == constraint->surface;
 
 	Client *c = NULL, *cc = NULL, *sel = NULL;
 	if (server.seat->keyboard_state.focused_surface) {
@@ -632,7 +631,6 @@ void pointer_constrain_cursor(struct wlr_pointer_constraint_v1 *constraint) {
 	if (constraint) {
 		toplevel_from_wlr_surface(constraint->surface, &new_client, NULL);
 	}
-
 
 	if (server.active_constraint) {
 		if (constraint == NULL) {
@@ -694,7 +692,6 @@ void handle_pointer_constraint_destroy(struct wl_listener *listener,
 	Client *c = NULL;
 	toplevel_from_wlr_surface(pointer_constraint->constraint->surface, &c,
 							  NULL);
-
 
 	if (server.active_constraint == pointer_constraint->constraint) {
 		pointer_warp_to_constraint_hint();
@@ -1108,7 +1105,6 @@ void pointer_focus(Client *c, struct wlr_surface *surface, double sx, double sy,
 	struct timespec now;
 
 	if (server.seat->pointer_state.focused_surface != surface) {
-
 	}
 
 	if (config.sloppyfocus && !server.start_drag_window && c && time &&

@@ -1972,7 +1972,6 @@ handle_client_map(struct wl_listener *listener, void *data) {
 	Client *c = wl_container_of(listener, c, map);
 	int32_t i = 0;
 
-
 	c->id = generate_client_id();
 
 	/* Create scene tree for this client and its border */
