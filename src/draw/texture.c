@@ -556,6 +556,23 @@ static void texture_use_count(void) {
 		}
 	}
 }
+static bool texture_style_persists(TextureStyle style) {
+    switch (style) {
+    case TEXTURE_STORE_IMAGE:
+    case TEXTURE_SEGMENT_TILE_TOP:
+    case TEXTURE_SEGMENT_TILE_BOTTOM:
+    case TEXTURE_SEGMENT_TILE_LEFT:
+    case TEXTURE_SEGMENT_TILE_RIGHT:
+    case TEXTURE_SEGMENT_TILE_TL:
+    case TEXTURE_SEGMENT_TILE_TR:
+    case TEXTURE_SEGMENT_TILE_BL:
+    case TEXTURE_SEGMENT_TILE_BR:
+        return true;
+    default:
+        return false;
+    }
+}
+
 
 void texture_collect_garbage(bool clean_image_store) {
 	texture_use_count();
@@ -564,9 +581,9 @@ void texture_collect_garbage(bool clean_image_store) {
 	for (size_t read = 0; read < texture_cache_count; read++) {
 		struct TextureCacheEntry *entry = &texture_cache[read];
 
-		bool is_store_image = entry->key.style == TEXTURE_STORE_IMAGE;
+		bool persists = texture_style_persists(entry->key.style);
 		if (entry->generation != texture_generation &&
-			(!is_store_image || clean_image_store)) {
+			(!persists || clean_image_store)) {
 			texture_key_destroy(&entry->key);
 			wlr_buffer_drop(entry->canvas);
 			continue;
@@ -666,13 +683,6 @@ void init_texture_system(void) {
 		.key_destroy = string_key_destroy,
 		.bypass_cache = true,
 		.render = texture_render_linear,
-	};
-	struct TextureOps gradient_ops = {
-		.key_empty = gradient_key_empty,
-		.key_equal = gradient_key_equal,
-		.key_copy = gradient_key_copy,
-		.key_destroy = gradient_key_destroy,
-		.render = texture_render_gradient,
 	};
 	struct TextureOps radial_gradient_ops = {
 		.key_empty = string_key_empty,
@@ -776,7 +786,6 @@ void init_texture_system(void) {
 		.render = texture_render_store_image,
 	};
 
-	texture_style_register(TEXTURE_GRADIENT, gradient_ops);
 	texture_style_register(TEXTURE_LINEAR_GRADIENT, linear_gradient_ops);
 	texture_style_register(TEXTURE_RADIAL_GRADIENT, radial_gradient_ops);
 	texture_style_register(TEXTURE_TILED_IMAGE, tiled_image_ops);
@@ -790,4 +799,32 @@ void init_texture_system(void) {
 	texture_style_register(TEXTURE_COLOR_NOCLIP, solid_noclip_ops);
 	texture_style_register(TEXTURE_COLOR_SEGMENT, segment_color_ops);
 	texture_style_register(TEXTURE_STORE_IMAGE, store_image_ops);
+
+	 const struct {
+        TextureStyle style;
+        struct wlr_buffer *(*render)(const BorderTextureKey *, Client *);
+    } segment_tile_styles[] = {
+        { TEXTURE_SEGMENT_TILE_TOP, texture_render_segment_top },
+        { TEXTURE_SEGMENT_TILE_BOTTOM, texture_render_segment_bottom },
+        { TEXTURE_SEGMENT_TILE_LEFT, texture_render_segment_left },
+        { TEXTURE_SEGMENT_TILE_RIGHT, texture_render_segment_right },
+        { TEXTURE_SEGMENT_TILE_TL, texture_render_segment_tl },
+        { TEXTURE_SEGMENT_TILE_TR, texture_render_segment_tr },
+        { TEXTURE_SEGMENT_TILE_BL, texture_render_segment_bl },
+        { TEXTURE_SEGMENT_TILE_BR, texture_render_segment_br },
+    };
+
+    for (size_t index = 0;
+         index < sizeof(segment_tile_styles) / sizeof(segment_tile_styles[0]);
+         index++) {
+        struct TextureOps tile_ops = {
+            .key_empty = string_key_empty,
+            .key_equal = string_key_equal,
+            .key_copy = string_key_copy,
+            .key_destroy = string_key_destroy,
+            .skip_make_ring = true,
+            .render = segment_tile_styles[index].render,
+        };
+        texture_style_register(segment_tile_styles[index].style, tile_ops);
+    }
 }

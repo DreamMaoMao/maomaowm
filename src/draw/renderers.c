@@ -15,55 +15,6 @@
 #define M_PI 3.141592653589793238462643383279502884
 #endif
 
-// old gradient
-struct wlr_buffer *texture_render_gradient(const BorderTextureKey *key,
-												  Client *target) {
-	(void)target;
-
-	if (key == NULL || key->gradient.stopcount <= 0)
-		return NULL;
-	int width, height;
-	max_needed_canvas_size(&width, &height);
-	if (width <= 0 || height <= 0)
-		return NULL;
-
-	struct texture_image_buffer *buf = calloc(1, sizeof(*buf));
-	if (buf == NULL)
-		return NULL;
-
-	buf->surface =
-		cairo_image_surface_create(CAIRO_FORMAT_ARGB32, width, height);
-	wlr_buffer_init(&buf->base, &texture_buffer_impl, width, height);
-
-	cairo_t *create = cairo_create(buf->surface);
-
-	double center_x = width / 2.0;
-	double center_y = height / 2.0;
-	double radius = (width > height ? width : height) / 2.0;
-
-	cairo_pattern_t *pattern = cairo_pattern_create_radial(
-		center_x, center_y, 0.0, center_x, center_y, radius);
-
-	for (int index = 0; index < key->gradient.stopcount; index++) {
-		double degree = key->gradient.stops[index].degree;
-		double fraction = (degree / 360.0) + 0.25;
-		if (fraction >= 1.0)
-			fraction -= 1.0;
-		cairo_pattern_add_color_stop_rgba(pattern, fraction,
-										  key->gradient.stops[index].color[0],
-										  key->gradient.stops[index].color[1],
-										  key->gradient.stops[index].color[2],
-										  key->gradient.stops[index].color[3]);
-	}
-	cairo_rectangle(create, 0, 0, width, height);
-	cairo_set_source(create, pattern);
-	cairo_fill(create);
-
-	cairo_pattern_destroy(pattern);
-	cairo_destroy(create);
-
-	return &buf->base;
-}
 
 // linear gradient
 struct wlr_buffer *texture_render_linear(const BorderTextureKey *key,
@@ -159,9 +110,7 @@ struct wlr_buffer *texture_render_radial(const BorderTextureKey *key,
 	return &buf->base;
 }
 
-// store_image renderer: decodes the PNG once and hands it to the texture cache,
-// where it is keyed by {TEXTURE_STORE_IMAGE, path} and shared by all image
-// renderers. The style is never exposed to the user.
+// store_image renderer: used for storing PNG files for other renderers, never called directly. avoids heavy disk use. 
 struct wlr_buffer *texture_render_store_image(const BorderTextureKey *key,
 											  Client *target) {
 	(void)target;
@@ -188,9 +137,7 @@ struct wlr_buffer *texture_render_store_image(const BorderTextureKey *key,
 	return &buf->base;
 }
 
-// fetch the decoded image for this key's path from the store_image cache entry.
-// Returns the cairo surface and a locked buffer that the caller must release
-// with wlr_buffer_unlock() once done painting.
+
 static cairo_surface_t *texture_acquire_store_image(const BorderTextureKey *key,
 													struct wlr_buffer **ref) {
 	if (key == NULL || key->string == NULL)
@@ -408,17 +355,6 @@ struct wlr_buffer *texture_render_tile_opacity(const BorderTextureKey *key,
 
 // segment renderer
 
-// segment cut-out helper
-static cairo_surface_t *texture_slice(cairo_surface_t *source, int x, int y,
-									  int width, int height) {
-	cairo_surface_t *slice =
-		cairo_image_surface_create(CAIRO_FORMAT_ARGB32, width, height);
-	cairo_t *copy = cairo_create(slice);
-	cairo_set_source_surface(copy, source, -x, -y);
-	cairo_paint(copy);
-	cairo_destroy(copy);
-	return slice;
-}
 // segment tile helper
 static void texture_tile(cairo_t *render, cairo_surface_t *slice, int x, int y,
 						 int width, int height, int ox, int oy) {
@@ -428,101 +364,168 @@ static void texture_tile(cairo_t *render, cairo_surface_t *slice, int x, int y,
 	cairo_fill(render);
 }
 
+static struct wlr_buffer *
+texture_render_segment_tile_core(const BorderTextureKey *key, int col, int row) {
+    if (key == NULL || key->string == NULL)
+        return NULL;
+
+    struct wlr_buffer *ref;
+    cairo_surface_t *image = texture_acquire_store_image(key, &ref);
+    if (image == NULL)
+        return NULL;
+
+    int tile_width = cairo_image_surface_get_width(image) / 3;
+    int tile_height = cairo_image_surface_get_height(image) / 3;
+    if (tile_width <= 0 || tile_height <= 0) {
+        wlr_buffer_unlock(ref);
+        return NULL;
+    }
+
+    struct wlr_buffer *tile = texture_create_buffer(tile_width, tile_height);
+    if (tile == NULL) {
+        wlr_buffer_unlock(ref);
+        return NULL;
+    }
+
+    struct texture_image_buffer *tile_buf = wl_container_of(tile, tile_buf, base);
+    cairo_t *copy = cairo_create(tile_buf->surface);
+    cairo_set_source_surface(copy, image, -col * tile_width, -row * tile_height);
+    cairo_paint(copy);
+    cairo_destroy(copy);
+    wlr_buffer_unlock(ref);
+
+    return tile;
+}
+struct wlr_buffer *texture_render_segment_top(const BorderTextureKey *key, Client *target) { (void)target;
+    return texture_render_segment_tile_core(key, 1, 0);
+}
+struct wlr_buffer *texture_render_segment_bottom(const BorderTextureKey *key, Client *target) { (void)target;
+    return texture_render_segment_tile_core(key, 1, 2);
+}
+struct wlr_buffer *texture_render_segment_left(const BorderTextureKey *key, Client *target) { (void)target;
+    return texture_render_segment_tile_core(key, 0, 1);
+}
+struct wlr_buffer *texture_render_segment_right(const BorderTextureKey *key, Client *target) { (void)target;
+    return texture_render_segment_tile_core(key, 2, 1);
+}
+struct wlr_buffer *texture_render_segment_tl(const BorderTextureKey *key, Client *target) { (void)target;
+    return texture_render_segment_tile_core(key, 0, 0);
+}
+struct wlr_buffer *texture_render_segment_tr(const BorderTextureKey *key, Client *target) { (void)target;
+    return texture_render_segment_tile_core(key, 2, 0);
+}
+struct wlr_buffer *texture_render_segment_bl(const BorderTextureKey *key, Client *target) { (void)target;
+    return texture_render_segment_tile_core(key, 0, 2);
+}
+struct wlr_buffer *texture_render_segment_br(const BorderTextureKey *key, Client *target) { (void)target;
+    return texture_render_segment_tile_core(key, 2, 2);
+}
+
 struct wlr_buffer *texture_render_segment(const BorderTextureKey *key,
-												 Client *target) {
-	if (key == NULL || key->string == NULL || target == NULL)
-		return NULL;
+                                          Client *target) {
+    if (key == NULL || key->string == NULL || target == NULL)
+        return NULL;
 
-	struct wlr_buffer *ref;
-	cairo_surface_t *image = texture_acquire_store_image(key, &ref);
-	if (image == NULL)
-		return NULL;
+    struct wlr_buffer *ref;
+    cairo_surface_t *image = texture_acquire_store_image(key, &ref);
+    if (image == NULL)
+        return NULL;
 
-	int32_t width = target->animation.current.width;
-	int32_t height = target->animation.current.height;
-	if (width <= 0 || height <= 0) {
-		wlr_buffer_unlock(ref);
-		return NULL;
-	}
+    int32_t width = target->animation.current.width;
+    int32_t height = target->animation.current.height;
+    if (width <= 0 || height <= 0) {
+        wlr_buffer_unlock(ref);
+        return NULL;
+    }
 
-	struct texture_image_buffer *buf = calloc(1, sizeof(*buf));
-	if (buf == NULL) {
-		wlr_buffer_unlock(ref);
-		return NULL;
-	}
-	buf->surface =
-		cairo_image_surface_create(CAIRO_FORMAT_ARGB32, width, height);
-	wlr_buffer_init(&buf->base, &texture_buffer_impl, width, height);
+    int tile_width = cairo_image_surface_get_width(image) / 3;
+    int tile_height = cairo_image_surface_get_height(image) / 3;
+    if (tile_width <= 0 || tile_height <= 0) {
+        wlr_buffer_unlock(ref);
+        return NULL;
+    }
 
-	int tile_width = cairo_image_surface_get_width(image) / 3;
-	int tile_height = cairo_image_surface_get_height(image) / 3;
+    struct wlr_buffer *out = texture_create_buffer(width, height);
+    if (out == NULL) {
+        wlr_buffer_unlock(ref);
+        return NULL;
+    }
+    struct texture_image_buffer *buf = wl_container_of(out, buf, base);
 
-	// slice map:
-	// 0 - top edge
-	// 1 - bottom edge
-	// 2 - left edge
-	// 3 - right edge
-	// 4 - topleft corner
-	// 5 - topright corner
-	// 6 - bottomleft corner
-	// 7 - bottomright corner
-	cairo_surface_t *slices[8];
-	slices[0] = texture_slice(image, tile_width, 0, tile_width, tile_height);
-	slices[1] = texture_slice(image, tile_width, tile_height * 2, tile_width,
-							  tile_height);
-	slices[2] = texture_slice(image, 0, tile_height, tile_width, tile_height);
-	slices[3] = texture_slice(image, tile_width * 2, tile_height, tile_width,
-							  tile_height);
-	slices[4] = texture_slice(image, 0, 0, tile_width, tile_height);
-	slices[5] =
-		texture_slice(image, tile_width * 2, 0, tile_width, tile_height);
-	slices[6] =
-		texture_slice(image, 0, tile_height * 2, tile_width, tile_height);
-	slices[7] = texture_slice(image, tile_width * 2, tile_height * 2,
-							  tile_width, tile_height);
+    const TextureStyle tile_styles[] = {
+        TEXTURE_SEGMENT_TILE_TOP,
+        TEXTURE_SEGMENT_TILE_BOTTOM,
+        TEXTURE_SEGMENT_TILE_LEFT,
+        TEXTURE_SEGMENT_TILE_RIGHT,
+        TEXTURE_SEGMENT_TILE_TL,
+        TEXTURE_SEGMENT_TILE_TR,
+        TEXTURE_SEGMENT_TILE_BL,
+        TEXTURE_SEGMENT_TILE_BR,
+    };
 
-	cairo_t *render = cairo_create(buf->surface);
+	//fetch/cache individual tiles
+    struct wlr_buffer *tiles[8];
+    cairo_surface_t *tile_surfaces[8];
+    for (size_t index = 0; index < 8; index++) {
+        BorderTextureKey tile_key = {
+            .style = tile_styles[index],
+            .string = key->string,
+        };
+        bool from_cache;
+        tiles[index] = texture_cache_get(&tile_key, target, &from_cache);
+        if (tiles[index] == NULL) {
+            for (size_t drop = 0; drop < index; drop++)
+                wlr_buffer_unlock(tiles[drop]);
+            wlr_buffer_unlock(ref);
+            wlr_buffer_drop(out);
+            return NULL;
+        }
+        struct texture_image_buffer *tile_buf =
+            wl_container_of(tiles[index], tile_buf, base);
+        tile_surfaces[index] = tile_buf->surface;
+    }
 
-	// tile edge pieces along the edges
-	texture_tile(render, slices[0], 0, 0, width, tile_height, 0, 0);
-	texture_tile(render, slices[1], 0, height - tile_height, width, tile_height,
-				 0, height - tile_height);
-	texture_tile(render, slices[2], 0, 0, tile_width, height, 0, 0);
-	texture_tile(render, slices[3], width - tile_width, 0, tile_width, height,
-				 width - tile_width, 0);
+    cairo_t *render = cairo_create(buf->surface);
 
-	// clear the corner sections
-	cairo_set_operator(render, CAIRO_OPERATOR_CLEAR);
-	cairo_rectangle(render, 0, 0, tile_width, tile_height);
-	cairo_fill(render);
-	cairo_rectangle(render, width - tile_width, 0, tile_width, tile_height);
-	cairo_fill(render);
-	cairo_rectangle(render, 0, height - tile_height, tile_width, tile_height);
-	cairo_fill(render);
-	cairo_rectangle(render, width - tile_width, height - tile_height,
-					tile_width, tile_height);
-	cairo_fill(render);
+	//tile edges
+    texture_tile(render, tile_surfaces[0], 0, 0, width, tile_height, 0, 0);
+    texture_tile(render, tile_surfaces[1], 0, height - tile_height, width,
+                 tile_height, 0, height - tile_height);
+    texture_tile(render, tile_surfaces[2], 0, 0, tile_width, height, 0, 0);
+    texture_tile(render, tile_surfaces[3], width - tile_width, 0, tile_width,
+                 height, width - tile_width, 0);
 
-	// render the corner sections
-	cairo_set_operator(render, CAIRO_OPERATOR_OVER);
-	cairo_set_source_surface(render, slices[4], 0, 0);
-	cairo_paint(render);
-	cairo_set_source_surface(render, slices[5], width - tile_width, 0);
-	cairo_paint(render);
-	cairo_set_source_surface(render, slices[6], 0, height - tile_height);
-	cairo_paint(render);
-	cairo_set_source_surface(render, slices[7], width - tile_width,
-							 height - tile_height);
-	cairo_paint(render);
+	//clear corners
+    cairo_set_operator(render, CAIRO_OPERATOR_CLEAR);
+    cairo_rectangle(render, 0, 0, tile_width, tile_height);
+    cairo_fill(render);
+    cairo_rectangle(render, width - tile_width, 0, tile_width, tile_height);
+    cairo_fill(render);
+    cairo_rectangle(render, 0, height - tile_height, tile_width, tile_height);
+    cairo_fill(render);
+    cairo_rectangle(render, width - tile_width, height - tile_height,
+                    tile_width, tile_height);
+    cairo_fill(render);
+	
+	//tile corners
+    cairo_set_operator(render, CAIRO_OPERATOR_OVER);
+    cairo_set_source_surface(render, tile_surfaces[4], 0, 0);
+    cairo_paint(render);
+    cairo_set_source_surface(render, tile_surfaces[5], width - tile_width, 0);
+    cairo_paint(render);
+    cairo_set_source_surface(render, tile_surfaces[6], 0, height - tile_height);
+    cairo_paint(render);
+    cairo_set_source_surface(render, tile_surfaces[7], width - tile_width,
+                             height - tile_height);
+    cairo_paint(render);
 
-	// render is done, destroy cairo renderers
-	cairo_destroy(render);
+    cairo_destroy(render);
 
-	for (size_t index = 0; index < sizeof(slices) / sizeof(slices[0]); index++)
-		cairo_surface_destroy(slices[index]);
-	wlr_buffer_unlock(ref);
+    for (size_t index = 0; index < 8; index++)
+        wlr_buffer_unlock(tiles[index]);
+    wlr_buffer_unlock(ref);
 
-	return &buf->base;
+    return out;
 }
 
 // conic renderer

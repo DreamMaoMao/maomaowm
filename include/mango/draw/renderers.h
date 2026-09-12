@@ -48,6 +48,23 @@ struct wlr_buffer *texture_render_color_segments(const BorderTextureKey *key,
 struct wlr_buffer *texture_render_store_image(const BorderTextureKey *key,
 					      Client *target);
 
+struct wlr_buffer *texture_render_segment_top(const BorderTextureKey *key,
+                                              Client *target);
+struct wlr_buffer *texture_render_segment_bottom(const BorderTextureKey *key,
+                                                 Client *target);
+struct wlr_buffer *texture_render_segment_left(const BorderTextureKey *key,
+                                               Client *target);
+struct wlr_buffer *texture_render_segment_right(const BorderTextureKey *key,
+                                                Client *target);
+struct wlr_buffer *texture_render_segment_tl(const BorderTextureKey *key,
+                                             Client *target);
+struct wlr_buffer *texture_render_segment_tr(const BorderTextureKey *key,
+                                             Client *target);
+struct wlr_buffer *texture_render_segment_bl(const BorderTextureKey *key,
+                                             Client *target);
+struct wlr_buffer *texture_render_segment_br(const BorderTextureKey *key,
+                                             Client *target);
+
 void cairo_rounded_rect(cairo_t *render, double x, double y, double w,
                         double h, double r);
 bool texture_rgba_from_hex(const char *hex, float rgba[4]);
