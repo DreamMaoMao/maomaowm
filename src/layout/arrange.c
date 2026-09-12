@@ -1435,6 +1435,9 @@ arrange(Monitor *m, bool want_animation, bool from_view) {
 	if (!m || m->iscleanuping)
 		return;
 
+	if (server.group_capture_inhibit_arrange)
+		return;
+
 	if (!m->wlr_output->enabled)
 		return;
 

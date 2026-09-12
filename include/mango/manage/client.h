@@ -220,6 +220,7 @@ struct Client {
 	Client *group_prev;
 	Client *group_next;
 	bool isgroupfocusing;
+	char *grouptitle;
 };
 
 void client_update_geometry(Client *c);
@@ -261,6 +262,8 @@ void client_get_geometry(Client *c, struct wlr_box *geom);
 Client *client_get_parent(Client *c);
 int32_t client_has_children(Client *c);
 const char *client_get_title(Client *c);
+const char *client_get_display_title(Client *c);
+void client_set_grouptitle(Client *c, const char *name);
 int32_t client_is_float_type(Client *c);
 int32_t client_is_rendered_on_mon(Client *c, Monitor *m);
 int32_t client_is_unmanaged(Client *c);

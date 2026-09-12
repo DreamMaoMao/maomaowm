@@ -34,6 +34,7 @@ void focus_direction(const Arg *arg);
 void focus_window_or_workspace(const Arg *arg);
 void group_join(const Arg *arg);
 void group_leave(const Arg *arg);
+void set_grouptitle(const Arg *arg);
 void toggle_overview(const Arg *arg);
 void enter_overview(const Arg *arg);
 void leave_overview(const Arg *arg);
