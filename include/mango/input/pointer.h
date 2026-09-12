@@ -23,6 +23,7 @@ enum { AxisUp, AxisDown, AxisLeft, AxisRight };
 typedef struct PointerConstraint {
 	struct wlr_pointer_constraint_v1 *constraint;
 	struct wl_listener destroy;
+	struct wl_listener commit;
 } PointerConstraint;
 
 struct LastCursor {
@@ -50,6 +51,7 @@ void configure_pointer(struct wlr_input_device *wlr_device,
 					   struct libinput_device *device);
 void pointer_create(struct wlr_pointer *pointer);
 void handle_new_pointer_constraint(struct wl_listener *listener, void *data);
+void handle_pointer_constraint_commit(struct wl_listener *listener, void *data);
 void pointer_constrain_cursor(struct wlr_pointer_constraint_v1 *constraint);
 void handle_cursor_frame(struct wl_listener *listener, void *data);
 void pointer_warp_to_constraint_hint(void);
