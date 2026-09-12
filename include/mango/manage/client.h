@@ -358,6 +358,7 @@ void scene_buffer_apply_opacity(struct wlr_scene_buffer *buffer, int32_t sx,
 								int32_t sy, void *data);
 void client_set_opacity(Client *c, double opacity);
 void client_focus(Client *c, int32_t lift);
+void client_ensure_constraint(Client *c);
 void client_active(Client *c);
 void client_view_on_monitor(const Arg *arg, bool want_animation, Monitor *m,
 							bool changefocus);
