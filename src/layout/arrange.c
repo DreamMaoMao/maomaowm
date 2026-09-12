@@ -1429,8 +1429,7 @@ bool special_handle_empty_view(Monitor *m, bool from_view) {
 	}
 	return false;
 }
-void // 17
-arrange(Monitor *m, bool want_animation, bool from_view) {
+void arrange(Monitor *m, bool want_animation, bool from_view) {
 
 	if (!m || m->iscleanuping)
 		return;
