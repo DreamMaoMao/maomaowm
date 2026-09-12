@@ -1205,24 +1205,27 @@ static DwindleNode *dwindle_node_lca(DwindleNode *a, DwindleNode *b) {
 	return a;
 }
 
-/* Dwindle keeps a binary split tree. Moving the focus from `fc` to `sc` enters
- * the branch of their lowest common ancestor that holds `sc`. All clients of
- * that entered branch form one focus block, so the most recently focused one
- * wins and the focus order is remembered for any tree shape. If the entered
- * branch is a single leaf there is nothing to remember. */
+/* Dwindle keeps a binary split tree. The focus memory may only kick in when the
+ * target `sc` lives in the branch that is directly attached to `fc`, i.e. the
+ * sibling subtree created when `fc` itself was split. If the target sits in a
+ * higher ancestor branch, it is not part of fc's own subtree and the move is
+ * left untouched. Within that directly attached branch the most recently
+ * focused client wins, so the focus order is remembered for any tree shape. */
 static DwindleNode *dwindle_focus_block_root(DwindleNode *root, Client *sc,
 											 Client *fc) {
 	DwindleNode *sc_leaf = dwindle_find_leaf(root, sc);
 	DwindleNode *fc_leaf = fc ? dwindle_find_leaf(root, fc) : NULL;
-	if (!sc_leaf || !fc_leaf || sc_leaf == fc_leaf)
+	if (!sc_leaf || !fc_leaf || sc_leaf == fc_leaf || !fc_leaf->parent)
 		return NULL;
 
+	/* sc must be inside the branch that is directly attached to fc, so the
+	 * lca of both leaves has to be fc's own parent. Anything above it is an
+	 * ancestor branch of fc and must not use the focus memory. */
 	DwindleNode *lca = dwindle_node_lca(sc_leaf, fc_leaf);
-	if (!lca)
+	if (lca != fc_leaf->parent)
 		return NULL;
 
-	DwindleNode *branch =
-		dwindle_find_leaf(lca->first, sc) ? lca->first : lca->second;
+	DwindleNode *branch = (lca->first == fc_leaf) ? lca->second : lca->first;
 	if (!branch || !branch->is_split)
 		return NULL;
 	return branch;
