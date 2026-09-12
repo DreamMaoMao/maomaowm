@@ -546,9 +546,8 @@ void keyboard_group_destroy(struct wl_listener *listener, void *data) {
 	free(group);
 }
 
-int32_t // 17
-keyboard_check_keybinding(uint32_t state, bool is_locked, uint32_t mods,
-						  xkb_keysym_t sym, uint32_t keycode) {
+int32_t keyboard_check_keybinding(uint32_t state, bool is_locked, uint32_t mods,
+								  xkb_keysym_t sym, uint32_t keycode) {
 	/*
 	 * Here we handle compositor keybindings. This is when the compositor is
 	 * processing keys, rather than passing them on to the client for its

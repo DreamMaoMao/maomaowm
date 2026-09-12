@@ -601,7 +601,7 @@ void handle_request_set_primary_selection(struct wl_listener *listener,
 										  void *data) {
 	/* This event is raised by the seat when a client wants to set the
 	 * selection, usually when the user copies something. wlroots allows
-	 * compositors to ignore such requests if they so choose, but in dwl we
+	 * compositors to ignore such requests if they so choose, but in mango we
 	 * always honor
 	 */
 	struct wlr_seat_request_set_primary_selection_event *event = data;
@@ -611,7 +611,7 @@ void handle_request_set_primary_selection(struct wl_listener *listener,
 void handle_request_set_selection(struct wl_listener *listener, void *data) {
 	/* This event is raised by the seat when a client wants to set the
 	 * selection, usually when the user copies something. wlroots allows
-	 * compositors to ignore such requests if they so choose, but in dwl we
+	 * compositors to ignore such requests if they so choose, but in mango we
 	 * always honor
 	 */
 	struct wlr_seat_request_set_selection_event *event = data;

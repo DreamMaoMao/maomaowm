@@ -1815,7 +1815,6 @@ bool xwayland_scene_buffer_point_accepts_input(struct wlr_scene_buffer *buffer,
 	return wlr_surface_point_accepts_input(scene_surface->surface, tx, ty);
 }
 
-// fix for 0.5
 void handle_new_xdg_toplevel(struct wl_listener *listener, void *data) {
 	/* This event is raised when wlr_xdg_shell receives a new xdg surface from a
 	 * client, either a toplevel (application window) or popup,
@@ -1965,8 +1964,7 @@ void init_client_properties(Client *c) {
 	wl_list_init(&c->flink);
 }
 
-void // old fix to 0.5
-handle_client_map(struct wl_listener *listener, void *data) {
+void handle_client_map(struct wl_listener *listener, void *data) {
 	/* Called when the surface is mapped, or ready to display on-screen. */
 	Client *at_client = NULL;
 	Client *c = wl_container_of(listener, c, map);
@@ -2368,8 +2366,7 @@ void handle_client_unmap(struct wl_listener *listener, void *data) {
 	pointer_process_motion(0, NULL, 0, 0, 0, 0);
 }
 
-void // 0.7 custom
-handle_client_destroy(struct wl_listener *listener, void *data) {
+void handle_client_destroy(struct wl_listener *listener, void *data) {
 	/* Called when the xdg_toplevel is destroyed. */
 	Client *c = wl_container_of(listener, c, destroy);
 	wl_list_remove(&c->destroy.link);
@@ -2405,8 +2402,8 @@ handle_client_destroy(struct wl_listener *listener, void *data) {
 	free(c);
 }
 
-void // 0.6
-handle_client_request_fullscreen(struct wl_listener *listener, void *data) {
+void handle_client_request_fullscreen(struct wl_listener *listener,
+									  void *data) {
 	Client *c = wl_container_of(listener, c, fullscreen);
 
 	if (!c || c->iskilling || client_is_parked(c))
@@ -2475,8 +2472,8 @@ void handle_client_set_title(struct wl_listener *listener, void *data) {
 	if (c == client_focus_top(c->mon))
 		printstatus(IPC_WATCH_ARRANGGE);
 }
-void // 17 fix to 0.5
-handle_client_activation_request(struct wl_listener *listener, void *data) {
+void handle_client_activation_request(struct wl_listener *listener,
+									  void *data) {
 	struct wlr_xdg_activation_v1_request_activate_event *event = data;
 	Client *c = NULL;
 	toplevel_from_wlr_surface(event->surface, &c, NULL);
@@ -2944,8 +2941,7 @@ void view_insert_shift_tags(Monitor *m, uint32_t target) {
 	}
 }
 
-void // 0.5
-client_set_floating(Client *c, int32_t floating) {
+void client_set_floating(Client *c, int32_t floating) {
 
 	Client *fc = NULL;
 	struct wlr_box target_box;
