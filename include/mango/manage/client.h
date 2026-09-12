@@ -120,6 +120,7 @@ struct Client {
 	uint32_t bw;
 	uint32_t tags, oldtags, mini_restore_tag;
 	bool dirty;
+	int32_t xdg_geo_x, xdg_geo_y;
 	uint32_t configure_serial;
 	struct wlr_foreign_toplevel_handle_v1 *foreign_toplevel;
 	int32_t isfloating, isurgent, isfullscreen, isfakefullscreen,
