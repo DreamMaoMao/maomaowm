@@ -1177,66 +1177,6 @@ bool client_is_in_same_stack(Client *sc, Client *tc, Client *fc) {
 	return false;
 }
 
-static int32_t dwindle_node_depth(DwindleNode *node) {
-	int32_t depth = 0;
-	for (; node && node->parent; node = node->parent)
-		depth++;
-	return depth;
-}
-
-static DwindleNode *dwindle_node_lca(DwindleNode *a, DwindleNode *b) {
-	if (!a || !b)
-		return NULL;
-
-	int32_t da = dwindle_node_depth(a);
-	int32_t db = dwindle_node_depth(b);
-	while (da > db) {
-		a = a->parent;
-		da--;
-	}
-	while (db > da) {
-		b = b->parent;
-		db--;
-	}
-	while (a && b && a != b) {
-		a = a->parent;
-		b = b->parent;
-	}
-	return a;
-}
-
-/* Dwindle keeps a binary split tree. Moving the focus from `fc` to `sc` enters
- * the branch of their lowest common ancestor that holds `sc`. All clients of
- * that entered branch form one focus block, so the most recently focused one
- * wins and the focus order is remembered for any tree shape. If the entered
- * branch is a single leaf there is nothing to remember. */
-static DwindleNode *dwindle_focus_block_root(DwindleNode *root, Client *sc,
-											 Client *fc) {
-	DwindleNode *sc_leaf = dwindle_find_leaf(root, sc);
-	DwindleNode *fc_leaf = fc ? dwindle_find_leaf(root, fc) : NULL;
-	if (!sc_leaf || !fc_leaf || sc_leaf == fc_leaf)
-		return NULL;
-
-	DwindleNode *lca = dwindle_node_lca(sc_leaf, fc_leaf);
-	if (!lca)
-		return NULL;
-
-	DwindleNode *branch =
-		dwindle_find_leaf(lca->first, sc) ? lca->first : lca->second;
-	if (!branch || !branch->is_split)
-		return NULL;
-	return branch;
-}
-
-static bool dwindle_focus_block_has_client(DwindleNode *node, Client *c) {
-	if (!node)
-		return false;
-	if (!node->is_split)
-		return node->client == c;
-	return dwindle_focus_block_has_client(node->first, c) ||
-		   dwindle_focus_block_has_client(node->second, c);
-}
-
 Client *get_focused_stack_client(Client *sc, Client *custom_focus_client) {
 	if (!sc || sc->isfloating || !server.selected_monitor)
 		return sc;
@@ -1248,19 +1188,6 @@ Client *get_focused_stack_client(Client *sc, Client *custom_focus_client) {
 	if (fc->isfloating || sc->isfloating)
 		return sc;
 
-	bool is_dwindle = false;
-	DwindleNode *dwindle_block = NULL;
-
-	if (sc->mon && sc->mon->pertag) {
-		uint32_t tag = get_client_tag_idx(sc);
-		const Layout *layout = sc->mon->pertag->ltidxs[tag];
-		if (layout && layout->id == DWINDLE) {
-			is_dwindle = true;
-			dwindle_block = dwindle_focus_block_root(
-				sc->mon->pertag->dwindle_root[tag], sc, fc);
-		}
-	}
-
 	wl_list_for_each(tc, &server.focus_stack, flink) {
 		if (tc->iskilling || tc->isunglobal)
 			continue;
@@ -1268,13 +1195,6 @@ Client *get_focused_stack_client(Client *sc, Client *custom_focus_client) {
 			continue;
 		if (tc == fc)
 			continue;
-
-		if (is_dwindle) {
-			if (dwindle_block &&
-				dwindle_focus_block_has_client(dwindle_block, tc))
-				return tc;
-			continue;
-		}
 
 		if (client_is_in_same_stack(sc, tc, fc)) {
 			return tc;
