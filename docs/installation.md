@@ -257,6 +257,18 @@ pikman install mangowm
 
 ---
 
+### Void Linux
+
+MangoWM is available as `mangowc` in the standard **Void Repository**.
+
+You can install it using the `xbps` package manager:
+
+```bash
+xbps-install mangowc
+```
+
+---
+
 ## Building from Source
 
 If your distribution isn't listed above, or you want the latest unreleased changes, you can build mangowm from source.
