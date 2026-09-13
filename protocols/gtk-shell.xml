@@ -1,0 +1,89 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<protocol name="gtk">
+  <copyright><![CDATA[
+    SPDX-FileCopyrightText: GTK contributors
+
+    SPDX-License-Identifier: LGPL-2.1-or-later
+  ]]></copyright>
+
+  <!--
+    Trimmed subset of GTK's gtk-shell.xml, vendored from:
+      https://gitlab.gnome.org/GNOME/gtk
+      gdk/wayland/protocol/gtk-shell.xml
+    Upstream declares both interfaces at version 7. This copy is
+    pruned to version 1, retaining only the requests and events that
+    mango handles. The motivating use is set_dbus_properties, which
+    publishes the per-surface DBus app-menu metadata that mango
+    re-broadcasts to external panels (mangowm/mango#832).
+
+    Removed relative to upstream (none of these affect menu publication):
+      gtk_shell1: notify_launch (since 3)
+      gtk_surface1: configure_edges, edge_constraint enum (since 2),
+                    request_focus (since 3), release (since 4),
+                    titlebar_gesture, gesture/error enums (since 5),
+                    set_a11y_properties (since 7),
+                    tiled_top/right/bottom/left state values (since 2)
+
+    Kept-but-unimplemented vtable slots (no-ops in the compositor):
+      gtk_shell1.set_startup_id, gtk_shell1.system_bell,
+      gtk_surface1.set_modal, gtk_surface1.unset_modal,
+      gtk_surface1.present
+  -->
+
+  <interface name="gtk_shell1" version="1">
+    <description summary="gtk specific extensions">
+      gtk_shell is a protocol extension providing additional features for
+      clients implementing it.
+    </description>
+
+    <enum name="capability">
+      <entry name="global_app_menu" value="1"/>
+      <entry name="global_menu_bar" value="2"/>
+      <entry name="desktop_icons" value="3"/>
+    </enum>
+
+    <event name="capabilities">
+      <arg name="capabilities" type="uint"/>
+    </event>
+
+    <request name="get_gtk_surface">
+      <arg name="gtk_surface" type="new_id" interface="gtk_surface1"/>
+      <arg name="surface" type="object" interface="wl_surface"/>
+    </request>
+
+    <request name="set_startup_id">
+      <arg name="startup_id" type="string" allow-null="true"/>
+    </request>
+
+    <request name="system_bell">
+      <arg name="surface" type="object" interface="gtk_surface1" allow-null="true"/>
+    </request>
+  </interface>
+
+  <interface name="gtk_surface1" version="1">
+    <request name="set_dbus_properties">
+      <arg name="application_id" type="string" allow-null="true"/>
+      <arg name="app_menu_path" type="string" allow-null="true"/>
+      <arg name="menubar_path" type="string" allow-null="true"/>
+      <arg name="window_object_path" type="string" allow-null="true"/>
+      <arg name="application_object_path" type="string" allow-null="true"/>
+      <arg name="unique_bus_name" type="string" allow-null="true"/>
+    </request>
+
+    <request name="set_modal"/>
+    <request name="unset_modal"/>
+
+    <request name="present">
+      <arg name="time" type="uint"/>
+    </request>
+
+    <enum name="state">
+      <entry name="tiled" value="1"/>
+    </enum>
+
+    <event name="configure">
+      <arg name="states" type="array"/>
+    </event>
+  </interface>
+
+</protocol>
